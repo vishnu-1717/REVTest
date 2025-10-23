@@ -1,14 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/lib/prisma'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
-    // Get the raw webhook payload
+    // Get company ID and secret from URL params
+    const searchParams = request.nextUrl.searchParams
+    const companyId = searchParams.get('company')
+    const secret = searchParams.get('secret')
+    
+    if (!companyId || !secret) {
+      return NextResponse.json(
+        { error: 'Missing company ID or secret' },
+        { status: 401 }
+      )
+    }
+    
+    // Verify the company exists and secret matches
+    const company = await prisma.company.findFirst({
+      where: {
+        id: companyId,
+        processorAccountId: secret,
+      }
+    })
+    
+    if (!company) {
+      return NextResponse.json(
+        { error: 'Invalid company or secret' },
+        { status: 401 }
+      )
+    }
+    
+    // Get webhook payload
     const payload = await request.json()
     
-    console.log('Received Whop webhook:', payload)
-    
-    // Store the raw webhook event first (audit trail)
+    // Store webhook event with company association
     const webhookEvent = await prisma.webhookEvent.create({
       data: {
         processor: 'whop',
@@ -18,22 +45,12 @@ export async function POST(request: NextRequest) {
       },
     })
     
-    // Handle different event types
-    switch (payload.type) {
-      case 'payment.succeeded':
-      case 'payment_intent.succeeded':
-        await handlePaymentSuccess(payload, webhookEvent.id)
-        break
-        
-      case 'payment.refunded':
-        await handlePaymentRefund(payload, webhookEvent.id)
-        break
-        
-      default:
-        console.log('Unhandled event type:', payload.type)
+    // Process payment
+    if (payload.type === 'payment.succeeded') {
+      await handlePaymentSuccess(payload, webhookEvent.id, company.id)
     }
     
-    // Mark webhook as processed
+    // Mark as processed
     await prisma.webhookEvent.update({
       where: { id: webhookEvent.id },
       data: { 
@@ -46,7 +63,6 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('Webhook error:', error)
-    
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }
@@ -54,9 +70,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handlePaymentSuccess(payload: any, webhookEventId: string) {
-  // Extract payment data from Whop's payload
-  // Note: This is a template - we'll adjust based on Whop's actual structure
+async function handlePaymentSuccess(payload: any, webhookEventId: string, companyId: string) {
   const {
     id: externalId,
     amount,
@@ -66,10 +80,7 @@ async function handlePaymentSuccess(payload: any, webhookEventId: string) {
     metadata = {},
   } = payload.data || payload
   
-  // For now, we'll create sales without a company association
-  // In production, you'd determine the company from the webhook or metadata
-  
-  // Check if this sale already exists (prevent duplicates)
+  // Check for duplicates
   const existingSale = await prisma.sale.findUnique({
     where: { externalId: externalId },
   })
@@ -79,11 +90,10 @@ async function handlePaymentSuccess(payload: any, webhookEventId: string) {
     return existingSale
   }
   
-  // Create the sale
-  // TODO: Associate with correct company and rep
+  // Create sale associated with this company
   const sale = await prisma.sale.create({
     data: {
-      amount: amount / 100, // Whop sends amounts in cents
+      amount: amount / 100,
       currency: currency,
       status: 'paid',
       processor: 'whop',
@@ -93,84 +103,59 @@ async function handlePaymentSuccess(payload: any, webhookEventId: string) {
       source: metadata.source || null,
       rawData: payload,
       paidAt: new Date(),
-      
-      // TEMPORARY: We'll fix company/rep association later
-      // For now, we need to create a test company
-      company: {
-        connectOrCreate: {
-          where: { email: 'test@example.com' },
-          create: {
-            name: 'Test Company',
-            email: 'test@example.com',
-            processor: 'whop',
-          },
-        },
-      },
+      companyId: companyId, // Associate with the right company!
     },
   })
   
-  console.log('Created sale:', sale.id)
-  
-  // Calculate commission (simple 10% for now)
-  await calculateCommission(sale)
+  // Calculate commission
+  await calculateCommission(sale, companyId)
   
   return sale
 }
 
-async function handlePaymentRefund(payload: any, webhookEventId: string) {
-  const { id: externalId } = payload.data || payload
-  
-  // Find the original sale
-  const sale = await prisma.sale.findUnique({
-    where: { externalId: externalId },
-  })
-  
-  if (!sale) {
-    console.log('Sale not found for refund:', externalId)
-    return
-  }
-  
-  // Update sale status
-  await prisma.sale.update({
-    where: { id: sale.id },
-    data: { status: 'refunded' },
-  })
-  
-  // TODO: Handle commission clawback
-  
-  console.log('Processed refund for sale:', sale.id)
-}
-
-async function calculateCommission(sale: any) {
-  // Simple 10% commission for now
+async function calculateCommission(sale: any, companyId: string) {
   const commissionRate = 0.10
   const commissionAmount = sale.amount * commissionRate
   
-  // Create or find a test rep for now
-  const rep = await prisma.user.upsert({
-    where: { email: 'rep@example.com' },
-    update: {},
-    create: {
-      name: 'Test Rep',
-      email: 'rep@example.com',
-      role: 'rep',
-      companyId: sale.companyId,
+  // Get or create a default rep for this company
+  const rep = await prisma.user.findFirst({
+    where: { 
+      companyId: companyId,
+      role: 'rep'
     },
   })
   
-  // Create commission record
-  const commission = await prisma.commission.create({
-    data: {
-      amount: commissionAmount,
-      percentage: commissionRate * 100,
-      status: 'pending',
-      saleId: sale.id,
-      companyId: sale.companyId,
-      repId: rep.id,
-    },
-  })
-  
-  console.log('Created commission:', commission.id, `$${commissionAmount}`)
-  
-  return commission
+  if (!rep) {
+    // Create a default rep if none exists
+    const newRep = await prisma.user.create({
+      data: {
+        name: 'Unassigned Rep',
+        email: `rep@company-${companyId.slice(0, 8)}.com`,
+        role: 'rep',
+        companyId: companyId,
+      },
+    })
+    
+    await prisma.commission.create({
+      data: {
+        amount: commissionAmount,
+        percentage: commissionRate * 100,
+        status: 'pending',
+        saleId: sale.id,
+        companyId: companyId,
+        repId: newRep.id,
+      },
+    })
+  } else {
+    await prisma.commission.create({
+      data: {
+        amount: commissionAmount,
+        percentage: commissionRate * 100,
+        status: 'pending',
+        saleId: sale.id,
+        companyId: companyId,
+        repId: rep.id,
+      },
+    })
+  }
 }
