@@ -1,0 +1,3 @@
+# Don't ignore Prisma generated files
+!node_modules/.prisma
+!node_modules/@prisma
