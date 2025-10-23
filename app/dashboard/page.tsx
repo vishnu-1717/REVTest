@@ -6,38 +6,50 @@ import { Badge } from '@/components/ui/badge'
 export const dynamic = 'force-dynamic'
 
 async function getDashboardData() {
-  // Get all sales
-  const sales = await prisma.sale.findMany({
-    include: {
-      rep: true,
-      commission: true,
-    },
-    orderBy: {
-      paidAt: 'desc',
-    },
-  })
-  
-  // Calculate totals
-  const totalSales = sales.reduce((sum: number, sale: any) => {
-    return sum + Number(sale.amount)
-  }, 0)
-  
-  const totalCommissions = sales.reduce((sum: number, sale: any) => {
-    return sum + (sale.commission ? Number(sale.commission.amount) : 0)
-  }, 0)
-  
-  const pendingCommissions = sales
-    .filter((sale: any) => sale.commission?.status === 'pending')
-    .reduce((sum: number, sale: any) => {
+  try {
+    // Get all sales
+    const sales = await prisma.sale.findMany({
+      include: {
+        rep: true,
+        commission: true,
+      },
+      orderBy: {
+        paidAt: 'desc',
+      },
+    })
+    
+    // Calculate totals
+    const totalSales = sales.reduce((sum: number, sale: any) => {
+      return sum + Number(sale.amount)
+    }, 0)
+    
+    const totalCommissions = sales.reduce((sum: number, sale: any) => {
       return sum + (sale.commission ? Number(sale.commission.amount) : 0)
     }, 0)
-  
-  return {
-    sales,
-    totalSales,
-    totalCommissions,
-    pendingCommissions,
-    salesCount: sales.length,
+    
+    const pendingCommissions = sales
+      .filter((sale: any) => sale.commission?.status === 'pending')
+      .reduce((sum: number, sale: any) => {
+        return sum + (sale.commission ? Number(sale.commission.amount) : 0)
+      }, 0)
+    
+    return {
+      sales,
+      totalSales,
+      totalCommissions,
+      pendingCommissions,
+      salesCount: sales.length,
+    }
+  } catch (error) {
+    console.error('Dashboard data error:', error)
+    // Return empty data if database query fails
+    return {
+      sales: [],
+      totalSales: 0,
+      totalCommissions: 0,
+      pendingCommissions: 0,
+      salesCount: 0,
+    }
   }
 }
 

@@ -34,11 +34,6 @@ export default function OnboardPage() {
       
       // Show them their unique webhook URL
       setWebhookUrl(data.webhookUrl)
-      
-      // Redirect to dashboard after a short delay
-      setTimeout(() => {
-        window.location.href = '/dashboard'
-      }, 3000)
     } catch (error) {
       console.error('Onboard error:', error)
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -124,9 +119,22 @@ export default function OnboardPage() {
                 </ol>
               </div>
               
-              <Button onClick={() => window.location.href = '/dashboard'} className="w-full">
-                Go to Dashboard
-              </Button>
+                <div className="flex gap-2">
+                  <Button onClick={() => window.location.href = '/dashboard'} className="flex-1">
+                    Go to Dashboard
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      setWebhookUrl('')
+                      setCompanyName('')
+                      setEmail('')
+                    }} 
+                    variant="outline" 
+                    className="flex-1"
+                  >
+                    Create Another
+                  </Button>
+                </div>
             </div>
           )}
         </CardContent>
