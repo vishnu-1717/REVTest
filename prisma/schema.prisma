@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Companies (your agency clients)
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  
+  // Payment processor they use
+  processor String   // "whop", "nmi", "stripe"
+  processorAccountId String? // Their account ID with the processor
+  processorConnectedAt DateTime?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  users     User[]
+  sales     Sale[]
+  commissions Commission[]
+  
+  @@index([email])
+}
+
+// Users (sales reps + admins)
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   // "admin", "manager", "rep"
+  
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  sales     Sale[]
+  commissions Commission[]
+  
+  @@index([companyId])
+  @@index([email])
+}
+
+// Sales transactions (captured from payment processors)
+model Sale {
+  id              String   @id @default(uuid())
+  
+  // Money
+  amount          Decimal  @db.Decimal(10, 2)
+  currency        String   @default("USD")
+  
+  // Status
+  status          String   // "paid", "refunded", "pending", "failed"
+  
+  // Payment processor data
+  processor       String   // "whop", "nmi", "stripe"
+  externalId      String   @unique // Payment processor's transaction ID
+  processorFees   Decimal? @db.Decimal(10, 2)
+  netAmount       Decimal? @db.Decimal(10, 2)
+  
+  // Attribution (where did this sale come from?)
+  source          String?  // "organic", "paid", "dm_setter", "phone", etc.
+  
+  // Customer info (minimal, for reporting)
+  customerEmail   String?
+  customerName    String?
+  
+  // Complete raw data from processor (for future use)
+  rawData         Json?
+  
+  // Timestamps
+  paidAt          DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  repId           String?
+  rep             User?    @relation(fields: [repId], references: [id], onDelete: SetNull)
+  
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  commission      Commission?
+  
+  @@index([companyId])
+  @@index([repId])
+  @@index([status])
+  @@index([paidAt])
+  @@index([externalId])
+}
+
+// Calculated commissions
+model Commission {
+  id              String   @id @default(uuid())
+  
+  amount          Decimal  @db.Decimal(10, 2)
+  percentage      Decimal? @db.Decimal(5, 2) // e.g., 10.00 for 10%
+  
+  status          String   @default("pending") // "pending", "approved", "paid"
+  
+  // Audit trail (who calculated this, when, why)
+  calculatedAt    DateTime @default(now())
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  
+  // Relations
+  saleId          String   @unique
+  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  
+  repId           String
+  rep             User     @relation(fields: [repId], references: [id], onDelete: Cascade)
+  
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId])
+  @@index([repId])
+  @@index([status])
+}
+
+// Webhook events (audit log of all incoming data)
+model WebhookEvent {
+  id              String   @id @default(uuid())
+  
+  processor       String   // "whop", "nmi", "stripe"
+  eventType       String   // "payment.succeeded", "payment.refunded", etc.
+  
+  payload         Json     // Complete webhook payload
+  
+  processed       Boolean  @default(false)
+  processedAt     DateTime?
+  
+  error           String?  // If processing failed, why?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([processor, eventType])
+  @@index([processed])
+  @@index([createdAt])
+}
