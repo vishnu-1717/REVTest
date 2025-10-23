@@ -9,21 +9,32 @@ export async function POST(request: Request) {
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     
-    // Create or update company in database
-    const company = await prisma.company.upsert({
-      where: { email: email },
-      update: {
-        name: companyName,
-        processor: processor,
-        processorAccountId: webhookSecret,
-      },
-      create: {
-        name: companyName,
-        email: email,
-        processor: processor,
-        processorAccountId: webhookSecret,
-      }
+    // Try to find existing company first
+    let company = await prisma.company.findUnique({
+      where: { email: email }
     })
+    
+    if (company) {
+      // Update existing company
+      company = await prisma.company.update({
+        where: { email: email },
+        data: {
+          name: companyName,
+          processor: processor,
+          processorAccountId: webhookSecret,
+        }
+      })
+    } else {
+      // Create new company
+      company = await prisma.company.create({
+        data: {
+          name: companyName,
+          email: email,
+          processor: processor,
+          processorAccountId: webhookSecret,
+        }
+      })
+    }
     
     // Generate their unique webhook URL
     const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/${processor}?company=${company.id}&secret=${webhookSecret}`
