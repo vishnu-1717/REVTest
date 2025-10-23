@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Onboard error:', error)
     return NextResponse.json(
-      { error: 'Failed to create company', details: error.message },
+      { error: 'Failed to create company', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }
