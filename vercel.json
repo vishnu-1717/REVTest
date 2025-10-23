@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "app/**/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "buildCommand": "prisma generate && next build",
+  "installCommand": "npm install && prisma generate"
+}
