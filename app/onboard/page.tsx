@@ -14,21 +14,30 @@ export default function OnboardPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Create company in database
-    const res = await fetch('/api/onboard', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        companyName,
-        email,
-        processor,
+    try {
+      // Create company in database
+      const res = await fetch('/api/onboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName,
+          email,
+          processor,
+        })
       })
-    })
-    
-    const data = await res.json()
-    
-    // Show them their unique webhook URL
-    setWebhookUrl(data.webhookUrl)
+      
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create company')
+      }
+      
+      // Show them their unique webhook URL
+      setWebhookUrl(data.webhookUrl)
+    } catch (error) {
+      console.error('Onboard error:', error)
+      alert(`Error: ${error.message}`)
+    }
   }
   
   return (
