@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', '@prisma/engines']
+  serverExternalPackages: ['@prisma/client', '@prisma/engines'],
+  outputFileTracingIncludes: {
+    '/api/**/*': ['./node_modules/.prisma/client/*.node'],
+    '/dashboard': ['./node_modules/.prisma/client/*.node']
   }
 }
 
