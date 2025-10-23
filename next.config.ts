@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   serverExternalPackages: ['@prisma/client', '@prisma/engines'],
   outputFileTracingIncludes: {
-    '/api/**/*': ['./node_modules/.prisma/client/*.node'],
-    '/dashboard': ['./node_modules/.prisma/client/*.node']
+    '/': ['./node_modules/.prisma/client/libquery_engine-rhel-openssl-3.0.x.so.node']
   }
 }
 
