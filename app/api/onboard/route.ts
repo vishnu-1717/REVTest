@@ -9,13 +9,19 @@ export async function POST(request: Request) {
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     
-    // Create company in database
-    const company = await prisma.company.create({
-      data: {
+    // Create or update company in database
+    const company = await prisma.company.upsert({
+      where: { email: email },
+      update: {
+        name: companyName,
+        processor: processor,
+        processorAccountId: webhookSecret,
+      },
+      create: {
         name: companyName,
         email: email,
         processor: processor,
-        processorAccountId: webhookSecret, // We'll use this as their unique identifier
+        processorAccountId: webhookSecret,
       }
     })
     

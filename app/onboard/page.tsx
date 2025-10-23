@@ -34,6 +34,11 @@ export default function OnboardPage() {
       
       // Show them their unique webhook URL
       setWebhookUrl(data.webhookUrl)
+      
+      // Redirect to dashboard after a short delay
+      setTimeout(() => {
+        window.location.href = '/dashboard'
+      }, 3000)
     } catch (error) {
       console.error('Onboard error:', error)
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
