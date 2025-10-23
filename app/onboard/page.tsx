@@ -36,7 +36,7 @@ export default function OnboardPage() {
       setWebhookUrl(data.webhookUrl)
     } catch (error) {
       console.error('Onboard error:', error)
-      alert(`Error: ${error.message}`)
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
   
