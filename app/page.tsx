@@ -15,15 +15,15 @@ export default function Home() {
         </p>
         
         <div className="flex gap-4">
-          <Link href="/dashboard">
+          <Link href="/onboard">
             <Button size="lg">
-              View Dashboard
+              Get Started
             </Button>
           </Link>
           
-          <Link href="/api/webhooks/whop" target="_blank">
+          <Link href="/dashboard">
             <Button size="lg" variant="outline">
-              Webhook Endpoint
+              View Dashboard
             </Button>
           </Link>
         </div>
