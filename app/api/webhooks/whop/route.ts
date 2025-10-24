@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/lib/prisma'
+import { createPrismaClient } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
+  const prisma = createPrismaClient()
+  
   try {
     // Get company ID and secret from URL params
     const searchParams = request.nextUrl.searchParams
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
     
     // Process payment
     if (payload.type === 'payment.succeeded') {
-      await handlePaymentSuccess(payload, webhookEvent.id, company.id)
+      await handlePaymentSuccess(payload, webhookEvent.id, company.id, prisma)
     }
     
     // Mark as processed
@@ -67,10 +69,13 @@ export async function POST(request: NextRequest) {
       { error: 'Webhook processing failed' },
       { status: 500 }
     )
+  } finally {
+    // Always disconnect the client to prevent connection leaks
+    await prisma.$disconnect()
   }
 }
 
-async function handlePaymentSuccess(payload: any, webhookEventId: string, companyId: string) {
+async function handlePaymentSuccess(payload: any, webhookEventId: string, companyId: string, prisma: any) {
   const {
     id: externalId,
     amount,
@@ -108,12 +113,12 @@ async function handlePaymentSuccess(payload: any, webhookEventId: string, compan
   })
   
   // Calculate commission
-  await calculateCommission(sale, companyId)
+  await calculateCommission(sale, companyId, prisma)
   
   return sale
 }
 
-async function calculateCommission(sale: any, companyId: string) {
+async function calculateCommission(sale: any, companyId: string, prisma: any) {
   const commissionRate = 0.10
   const commissionAmount = sale.amount * commissionRate
   

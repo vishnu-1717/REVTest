@@ -1,4 +1,4 @@
-import { prisma, disconnectPrisma } from '@/lib/lib/prisma'
+import { createPrismaClient } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge'
 export const dynamic = 'force-dynamic'
 
 async function getDashboardData() {
+  const prisma = createPrismaClient()
+  
   try {
     // Use raw SQL to get sales data and avoid prepared statement issues
     const sales = await prisma.$queryRaw`
@@ -60,6 +62,9 @@ async function getDashboardData() {
       pendingCommissions: 0,
       salesCount: 0,
     }
+  } finally {
+    // Always disconnect the client to prevent connection leaks
+    await prisma.$disconnect()
   }
 }
 

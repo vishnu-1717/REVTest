@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/lib/prisma'
+import { createPrismaClient } from '@/lib/db'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
+  const prisma = createPrismaClient()
+  
   try {
     const { companyName, email, processor } = await request.json()
     
@@ -39,5 +41,8 @@ export async function POST(request: Request) {
       { error: 'Failed to create company', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
+  } finally {
+    // Always disconnect the client to prevent connection leaks
+    await prisma.$disconnect()
   }
 }

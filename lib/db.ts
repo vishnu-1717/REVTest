@@ -5,20 +5,23 @@ declare global {
   var __prisma: PrismaClient | undefined
 }
 
-// Create a singleton Prisma client optimized for Supabase transaction pooler
-export const prisma = globalThis.__prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
+// Create a new Prisma client for each request to avoid prepared statement conflicts
+// This is required for Supabase transaction pooler which doesn't support prepared statements
+export const createPrismaClient = () => {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
     },
-  },
-})
-
-// Store the client globally to prevent multiple instances
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.__prisma = prisma
+  })
 }
+
+// For development, use singleton to avoid too many connections
+export const prisma = process.env.NODE_ENV === 'production' 
+  ? createPrismaClient() 
+  : (globalThis.__prisma ??= createPrismaClient())
 
 // Graceful shutdown
 export const disconnectPrisma = async () => {
