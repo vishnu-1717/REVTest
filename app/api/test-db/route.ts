@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { withPrisma } from '@/lib/db'
 
 export async function GET() {
   try {
-    // Test basic connection
-    await prisma.$connect()
-    
-    // Test a simple query (avoiding prepared statements)
-    const result = await prisma.$queryRaw`SELECT 1 as test`
+    // Test basic connection using withPrisma pattern
+    const result = await withPrisma(async (prisma) => {
+      // Test a simple query (avoiding prepared statements)
+      return await prisma.$queryRaw`SELECT 1 as test`
+    })
     
     return NextResponse.json({ 
       success: true, 
