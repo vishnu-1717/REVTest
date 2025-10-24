@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma, disconnectPrisma } from '@/lib/lib/prisma'
+import { prisma } from '@/lib/lib/prisma'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
@@ -9,32 +9,20 @@ export async function POST(request: Request) {
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     
-    // Try to find existing company first
-    let company = await prisma.company.findUnique({
-      where: { email: email }
-    })
+    // Use raw SQL to bypass prepared statement issues
+    const result = await prisma.$queryRaw`
+      INSERT INTO "Company" (id, name, email, processor, "processorAccountId", "createdAt", "updatedAt")
+      VALUES (gen_random_uuid(), ${companyName}, ${email}, ${processor}, ${webhookSecret}, NOW(), NOW())
+      ON CONFLICT (email) 
+      DO UPDATE SET 
+        name = EXCLUDED.name,
+        processor = EXCLUDED.processor,
+        "processorAccountId" = EXCLUDED."processorAccountId",
+        "updatedAt" = NOW()
+      RETURNING id, name, email, processor, "processorAccountId"
+    `
     
-    if (company) {
-      // Update existing company
-      company = await prisma.company.update({
-        where: { email: email },
-        data: {
-          name: companyName,
-          processor: processor,
-          processorAccountId: webhookSecret,
-        }
-      })
-    } else {
-      // Create new company
-      company = await prisma.company.create({
-        data: {
-          name: companyName,
-          email: email,
-          processor: processor,
-          processorAccountId: webhookSecret,
-        }
-      })
-    }
+    const company = Array.isArray(result) ? result[0] : result
     
     // Generate their unique webhook URL
     const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/${processor}?company=${company.id}&secret=${webhookSecret}`
@@ -51,10 +39,5 @@ export async function POST(request: Request) {
       { error: 'Failed to create company', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
-  } finally {
-    // Disconnect Prisma after each request to prevent prepared statement conflicts
-    if (process.env.NODE_ENV === 'production' && disconnectPrisma) {
-      await disconnectPrisma()
-    }
   }
 }

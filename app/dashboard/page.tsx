@@ -7,38 +7,48 @@ export const dynamic = 'force-dynamic'
 
 async function getDashboardData() {
   try {
-    // Get all sales
-    const sales = await prisma.sale.findMany({
-      include: {
-        rep: true,
-        commission: true,
-      },
-      orderBy: {
-        paidAt: 'desc',
-      },
-    })
+    // Use raw SQL to get sales data and avoid prepared statement issues
+    const sales = await prisma.$queryRaw`
+      SELECT 
+        s.id,
+        s.amount,
+        s.currency,
+        s.status,
+        s."customerEmail",
+        s."customerName",
+        s."paidAt",
+        u.name as rep_name,
+        c.amount as commission_amount,
+        c.status as commission_status
+      FROM "Sale" s
+      LEFT JOIN "User" u ON s."repId" = u.id
+      LEFT JOIN "Commission" c ON s.id = c."saleId"
+      ORDER BY s."paidAt" DESC
+    `
+    
+    const salesArray = Array.isArray(sales) ? sales : []
     
     // Calculate totals
-    const totalSales = sales.reduce((sum: number, sale: any) => {
-      return sum + Number(sale.amount)
+    const totalSales = salesArray.reduce((sum: number, sale: any) => {
+      return sum + Number(sale.amount || 0)
     }, 0)
     
-    const totalCommissions = sales.reduce((sum: number, sale: any) => {
-      return sum + (sale.commission ? Number(sale.commission.amount) : 0)
+    const totalCommissions = salesArray.reduce((sum: number, sale: any) => {
+      return sum + (sale.commission_amount ? Number(sale.commission_amount) : 0)
     }, 0)
     
-    const pendingCommissions = sales
-      .filter((sale: any) => sale.commission?.status === 'pending')
+    const pendingCommissions = salesArray
+      .filter((sale: any) => sale.commission_status === 'pending')
       .reduce((sum: number, sale: any) => {
-        return sum + (sale.commission ? Number(sale.commission.amount) : 0)
+        return sum + (sale.commission_amount ? Number(sale.commission_amount) : 0)
       }, 0)
     
     return {
-      sales,
+      sales: salesArray,
       totalSales,
       totalCommissions,
       pendingCommissions,
-      salesCount: sales.length,
+      salesCount: salesArray.length,
     }
   } catch (error) {
     console.error('Dashboard data error:', error)
@@ -49,11 +59,6 @@ async function getDashboardData() {
       totalCommissions: 0,
       pendingCommissions: 0,
       salesCount: 0,
-    }
-  } finally {
-    // Disconnect Prisma after each request to prevent prepared statement conflicts
-    if (process.env.NODE_ENV === 'production' && disconnectPrisma) {
-      await disconnectPrisma()
     }
   }
 }
@@ -229,14 +234,14 @@ export default async function DashboardPage() {
                           {sale.customerEmail || 'No email'}
                         </div>
                       </TableCell>
-                      <TableCell>{sale.rep?.name || 'Unassigned'}</TableCell>
+                      <TableCell>{sale.rep_name || 'Unassigned'}</TableCell>
                       <TableCell className="font-medium">
                         ${Number(sale.amount).toFixed(2)}
                       </TableCell>
                       <TableCell>
-                        {sale.commission ? (
+                        {sale.commission_amount ? (
                           <span className="text-sm">
-                            ${Number(sale.commission.amount).toFixed(2)}
+                            ${Number(sale.commission_amount).toFixed(2)}
                           </span>
                         ) : (
                           <span className="text-sm text-muted-foreground">N/A</span>
