@@ -10,14 +10,11 @@ export const prisma = new PrismaClient({
   },
 })
 
-// Disconnect after each request in production
-if (process.env.NODE_ENV === 'production') {
-  // Add a cleanup function that can be called after each request
-  export const disconnectPrisma = async () => {
-    try {
-      await prisma.$disconnect()
-    } catch (error) {
-      console.error('Error disconnecting Prisma:', error)
-    }
+// Add a cleanup function that can be called after each request
+export const disconnectPrisma = async () => {
+  try {
+    await prisma.$disconnect()
+  } catch (error) {
+    console.error('Error disconnecting Prisma:', error)
   }
 }
