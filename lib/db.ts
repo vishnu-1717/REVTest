@@ -14,12 +14,6 @@ export const createPrismaClient = () => {
         url: process.env.DATABASE_URL,
       },
     },
-    // Disable prepared statements for Supabase compatibility
-    __internal: {
-      engine: {
-        binaryTargets: ['native', 'rhel-openssl-3.0.x'],
-      },
-    },
   })
 }
 
