@@ -1,20 +1,21 @@
 import { PrismaClient } from '@prisma/client'
 
-// Create a new Prisma client for each request to avoid prepared statement conflicts
-// This is REQUIRED for Supabase transaction pooler which doesn't support prepared statements
+// Create a Prisma client that uses DIRECT connection for Prisma operations
+// This bypasses the transaction pooler that doesn't support prepared statements
 export const createPrismaClient = () => {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
+        // Use DIRECT_URL for Prisma operations to avoid prepared statement conflicts
+        url: process.env.DIRECT_URL || process.env.DATABASE_URL,
       },
     },
   })
 }
 
-// For Supabase transaction pooler, we need to create a fresh client for each request
-// and disconnect it immediately to avoid prepared statement conflicts
+// For Supabase, we need to use direct connection for Prisma operations
+// and disconnect immediately to avoid prepared statement conflicts
 export const withPrisma = async <T>(callback: (prisma: PrismaClient) => Promise<T>): Promise<T> => {
   const prisma = createPrismaClient()
   try {
