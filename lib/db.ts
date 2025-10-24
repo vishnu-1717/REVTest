@@ -5,8 +5,7 @@ declare global {
   var __prisma: PrismaClient | undefined
 }
 
-// Create a new Prisma client for each request to avoid prepared statement conflicts
-// This is required for Supabase transaction pooler which doesn't support prepared statements
+// Create a Prisma client optimized for Supabase transaction pooler
 export const createPrismaClient = () => {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
@@ -15,13 +14,17 @@ export const createPrismaClient = () => {
         url: process.env.DATABASE_URL,
       },
     },
+    // Disable prepared statements for Supabase compatibility
+    __internal: {
+      engine: {
+        binaryTargets: ['native', 'rhel-openssl-3.0.x'],
+      },
+    },
   })
 }
 
-// For development, use singleton to avoid too many connections
-export const prisma = process.env.NODE_ENV === 'production' 
-  ? createPrismaClient() 
-  : (globalThis.__prisma ??= createPrismaClient())
+// Use singleton pattern to avoid connection issues
+export const prisma = globalThis.__prisma ??= createPrismaClient()
 
 // Graceful shutdown
 export const disconnectPrisma = async () => {

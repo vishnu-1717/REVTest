@@ -1,4 +1,4 @@
-import { createPrismaClient } from '@/lib/db'
+import { prisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -6,29 +6,29 @@ import { Badge } from '@/components/ui/badge'
 export const dynamic = 'force-dynamic'
 
 async function getDashboardData() {
-  const prisma = createPrismaClient()
   
   try {
-    // Use raw SQL to get sales data and avoid prepared statement issues
-    const sales = await prisma.$queryRaw`
-      SELECT 
-        s.id,
-        s.amount,
-        s.currency,
-        s.status,
-        s."customerEmail",
-        s."customerName",
-        s."paidAt",
-        u.name as rep_name,
-        c.amount as commission_amount,
-        c.status as commission_status
-      FROM "Sale" s
-      LEFT JOIN "User" u ON s."repId" = u.id
-      LEFT JOIN "Commission" c ON s.id = c."saleId"
-      ORDER BY s."paidAt" DESC
-    `
+    // Use regular Prisma queries to avoid prepared statement issues
+    const sales = await prisma.sale.findMany({
+      include: {
+        rep: {
+          select: {
+            name: true,
+          },
+        },
+        commission: {
+          select: {
+            amount: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: {
+        paidAt: 'desc',
+      },
+    })
     
-    const salesArray = Array.isArray(sales) ? sales : []
+    const salesArray = sales
     
     // Calculate totals
     const totalSales = salesArray.reduce((sum: number, sale: any) => {
@@ -36,13 +36,13 @@ async function getDashboardData() {
     }, 0)
     
     const totalCommissions = salesArray.reduce((sum: number, sale: any) => {
-      return sum + (sale.commission_amount ? Number(sale.commission_amount) : 0)
+      return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
     }, 0)
     
     const pendingCommissions = salesArray
-      .filter((sale: any) => sale.commission_status === 'pending')
+      .filter((sale: any) => sale.commission?.status === 'pending')
       .reduce((sum: number, sale: any) => {
-        return sum + (sale.commission_amount ? Number(sale.commission_amount) : 0)
+        return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
       }, 0)
     
     return {
@@ -62,9 +62,6 @@ async function getDashboardData() {
       pendingCommissions: 0,
       salesCount: 0,
     }
-  } finally {
-    // Always disconnect the client to prevent connection leaks
-    await prisma.$disconnect()
   }
 }
 
@@ -239,14 +236,14 @@ export default async function DashboardPage() {
                           {sale.customerEmail || 'No email'}
                         </div>
                       </TableCell>
-                      <TableCell>{sale.rep_name || 'Unassigned'}</TableCell>
+                      <TableCell>{sale.rep?.name || 'Unassigned'}</TableCell>
                       <TableCell className="font-medium">
                         ${Number(sale.amount).toFixed(2)}
                       </TableCell>
                       <TableCell>
-                        {sale.commission_amount ? (
+                        {sale.commission?.amount ? (
                           <span className="text-sm">
-                            ${Number(sale.commission_amount).toFixed(2)}
+                            ${Number(sale.commission.amount).toFixed(2)}
                           </span>
                         ) : (
                           <span className="text-sm text-muted-foreground">N/A</span>

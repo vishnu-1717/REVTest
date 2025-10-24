@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createPrismaClient } from '@/lib/db'
+import { prisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  const prisma = createPrismaClient()
   
   try {
     // Get company ID and secret from URL params
@@ -69,9 +68,6 @@ export async function POST(request: NextRequest) {
       { error: 'Webhook processing failed' },
       { status: 500 }
     )
-  } finally {
-    // Always disconnect the client to prevent connection leaks
-    await prisma.$disconnect()
   }
 }
 
