@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/lib/prisma'
+import { prisma, disconnectPrisma } from '@/lib/lib/prisma'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -49,6 +49,11 @@ async function getDashboardData() {
       totalCommissions: 0,
       pendingCommissions: 0,
       salesCount: 0,
+    }
+  } finally {
+    // Disconnect Prisma after each request to prevent prepared statement conflicts
+    if (process.env.NODE_ENV === 'production' && disconnectPrisma) {
+      await disconnectPrisma()
     }
   }
 }

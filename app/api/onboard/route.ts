@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/lib/prisma'
+import { prisma, disconnectPrisma } from '@/lib/lib/prisma'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
@@ -51,5 +51,10 @@ export async function POST(request: Request) {
       { error: 'Failed to create company', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
+  } finally {
+    // Disconnect Prisma after each request to prevent prepared statement conflicts
+    if (process.env.NODE_ENV === 'production' && disconnectPrisma) {
+      await disconnectPrisma()
+    }
   }
 }
