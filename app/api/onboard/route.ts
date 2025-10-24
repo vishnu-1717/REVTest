@@ -9,23 +9,35 @@ export async function POST(request: Request) {
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     
-    // Use withPrisma to avoid prepared statement conflicts
+    // Use raw SQL to avoid prepared statement conflicts with Supabase transaction pooler
     const company = await withPrisma(async (prisma) => {
-      return await prisma.company.upsert({
-        where: { email },
-        update: {
-          name: companyName,
-          processor: processor,
-          processorAccountId: webhookSecret,
-          updatedAt: new Date(),
-        },
-        create: {
-          name: companyName,
-          email: email,
-          processor: processor,
-          processorAccountId: webhookSecret,
-        },
-      })
+      // First try to find existing company
+      const existing = await prisma.$queryRaw`
+        SELECT id, name, email, processor, "processorAccountId" 
+        FROM "Company" 
+        WHERE email = ${email}
+      `
+      
+      if (Array.isArray(existing) && existing.length > 0) {
+        // Update existing company
+        await prisma.$queryRaw`
+          UPDATE "Company" 
+          SET name = ${companyName}, 
+              processor = ${processor}, 
+              "processorAccountId" = ${webhookSecret},
+              "updatedAt" = NOW()
+          WHERE email = ${email}
+        `
+        return existing[0]
+      } else {
+        // Create new company
+        const result = await prisma.$queryRaw`
+          INSERT INTO "Company" (id, name, email, processor, "processorAccountId", "createdAt", "updatedAt")
+          VALUES (gen_random_uuid(), ${companyName}, ${email}, ${processor}, ${webhookSecret}, NOW(), NOW())
+          RETURNING id, name, email, processor, "processorAccountId"
+        `
+        return Array.isArray(result) ? result[0] : result
+      }
     })
     
     // Generate their unique webhook URL

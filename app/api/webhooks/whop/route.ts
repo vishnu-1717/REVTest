@@ -19,14 +19,14 @@ export async function POST(request: NextRequest) {
     
     // Use withPrisma to avoid prepared statement conflicts
     const result = await withPrisma(async (prisma) => {
-      // Verify the company exists and secret matches
-      const company = await prisma.company.findFirst({
-        where: {
-          id: companyId,
-          processorAccountId: secret,
-        }
-      })
+      // Verify the company exists and secret matches using raw SQL
+      const companyResult = await prisma.$queryRaw`
+        SELECT id, name, email, processor, "processorAccountId"
+        FROM "Company"
+        WHERE id = ${companyId} AND "processorAccountId" = ${secret}
+      `
       
+      const company = Array.isArray(companyResult) ? companyResult[0] : companyResult
       if (!company) {
         throw new Error('Invalid company or secret')
       }
@@ -34,29 +34,25 @@ export async function POST(request: NextRequest) {
       // Get webhook payload
       const payload = await request.json()
       
-      // Store webhook event with company association
-      const webhookEvent = await prisma.webhookEvent.create({
-        data: {
-          processor: 'whop',
-          eventType: payload.type || 'unknown',
-          payload: payload,
-          processed: false,
-        },
-      })
+      // Store webhook event using raw SQL
+      const webhookEventResult = await prisma.$queryRaw`
+        INSERT INTO "WebhookEvent" (id, processor, "eventType", payload, processed, "createdAt")
+        VALUES (gen_random_uuid(), 'whop', ${payload.type || 'unknown'}, ${JSON.stringify(payload)}, false, NOW())
+        RETURNING id
+      `
+      const webhookEvent = Array.isArray(webhookEventResult) ? webhookEventResult[0] : webhookEventResult
       
       // Process payment
       if (payload.type === 'payment.succeeded') {
         await handlePaymentSuccess(payload, webhookEvent.id, company.id, prisma)
       }
       
-      // Mark as processed
-      await prisma.webhookEvent.update({
-        where: { id: webhookEvent.id },
-        data: { 
-          processed: true,
-          processedAt: new Date(),
-        },
-      })
+      // Mark as processed using raw SQL
+      await prisma.$queryRaw`
+        UPDATE "WebhookEvent"
+        SET processed = true, "processedAt" = NOW()
+        WHERE id = ${webhookEvent.id}
+      `
       
       return { received: true }
     })
@@ -88,32 +84,24 @@ async function handlePaymentSuccess(payload: any, webhookEventId: string, compan
     metadata = {},
   } = payload.data || payload
   
-  // Check for duplicates
-  const existingSale = await prisma.sale.findUnique({
-    where: { externalId: externalId },
-  })
+  // Check for duplicates using raw SQL
+  const existingSaleResult = await prisma.$queryRaw`
+    SELECT id FROM "Sale" WHERE "externalId" = ${externalId}
+  `
   
-  if (existingSale) {
+  if (Array.isArray(existingSaleResult) && existingSaleResult.length > 0) {
     console.log('Sale already exists:', externalId)
-    return existingSale
+    return existingSaleResult[0]
   }
   
-  // Create sale associated with this company
-  const sale = await prisma.sale.create({
-    data: {
-      amount: amount / 100,
-      currency: currency,
-      status: 'paid',
-      processor: 'whop',
-      externalId: externalId,
-      customerEmail: customer_email,
-      customerName: customer_name,
-      source: metadata.source || null,
-      rawData: payload,
-      paidAt: new Date(),
-      companyId: companyId, // Associate with the right company!
-    },
-  })
+  // Create sale using raw SQL
+  const saleResult = await prisma.$queryRaw`
+    INSERT INTO "Sale" (id, amount, currency, status, processor, "externalId", "customerEmail", "customerName", source, "rawData", "paidAt", "companyId", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid(), ${amount / 100}, ${currency}, 'paid', 'whop', ${externalId}, ${customer_email}, ${customer_name}, ${metadata.source || null}, ${JSON.stringify(payload)}, NOW(), ${companyId}, NOW(), NOW())
+    RETURNING id, amount, currency, status, processor, "externalId", "customerEmail", "customerName", source, "rawData", "paidAt", "companyId"
+  `
+  
+  const sale = Array.isArray(saleResult) ? saleResult[0] : saleResult
   
   // Calculate commission
   await calculateCommission(sale, companyId, prisma)
@@ -125,45 +113,29 @@ async function calculateCommission(sale: any, companyId: string, prisma: any) {
   const commissionRate = 0.10
   const commissionAmount = sale.amount * commissionRate
   
-  // Get or create a default rep for this company
-  const rep = await prisma.user.findFirst({
-    where: { 
-      companyId: companyId,
-      role: 'rep'
-    },
-  })
+  // Get or create a default rep for this company using raw SQL
+  const repResult = await prisma.$queryRaw`
+    SELECT id FROM "User" 
+    WHERE "companyId" = ${companyId} AND role = 'rep'
+    LIMIT 1
+  `
   
-  if (!rep) {
-    // Create a default rep if none exists
-    const newRep = await prisma.user.create({
-      data: {
-        name: 'Unassigned Rep',
-        email: `rep@company-${companyId.slice(0, 8)}.com`,
-        role: 'rep',
-        companyId: companyId,
-      },
-    })
-    
-    await prisma.commission.create({
-      data: {
-        amount: commissionAmount,
-        percentage: commissionRate * 100,
-        status: 'pending',
-        saleId: sale.id,
-        companyId: companyId,
-        repId: newRep.id,
-      },
-    })
+  let repId
+  if (Array.isArray(repResult) && repResult.length > 0) {
+    repId = repResult[0].id
   } else {
-    await prisma.commission.create({
-      data: {
-        amount: commissionAmount,
-        percentage: commissionRate * 100,
-        status: 'pending',
-        saleId: sale.id,
-        companyId: companyId,
-        repId: rep.id,
-      },
-    })
+    // Create a default rep if none exists
+    const newRepResult = await prisma.$queryRaw`
+      INSERT INTO "User" (id, name, email, role, "companyId", "createdAt", "updatedAt")
+      VALUES (gen_random_uuid(), 'Unassigned Rep', ${`rep@company-${companyId.slice(0, 8)}.com`}, 'rep', ${companyId}, NOW(), NOW())
+      RETURNING id
+    `
+    repId = Array.isArray(newRepResult) ? newRepResult[0].id : newRepResult.id
   }
+  
+  // Create commission using raw SQL
+  await prisma.$queryRaw`
+    INSERT INTO "Commission" (id, amount, percentage, status, "calculatedAt", "saleId", "companyId", "repId", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid(), ${commissionAmount}, ${commissionRate * 100}, 'pending', NOW(), ${sale.id}, ${companyId}, ${repId}, NOW(), NOW())
+  `
 }
