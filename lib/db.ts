@@ -1,11 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 
-// Global variable to store the Prisma client
-declare global {
-  var __prisma: PrismaClient | undefined
-}
-
-// Create a Prisma client optimized for Supabase transaction pooler
+// Create a new Prisma client for each request to avoid prepared statement conflicts
+// This is REQUIRED for Supabase transaction pooler which doesn't support prepared statements
 export const createPrismaClient = () => {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
@@ -17,19 +13,13 @@ export const createPrismaClient = () => {
   })
 }
 
-// Use singleton pattern to avoid connection issues
-export const prisma = globalThis.__prisma ??= createPrismaClient()
-
-// Graceful shutdown
-export const disconnectPrisma = async () => {
+// For Supabase transaction pooler, we need to create a fresh client for each request
+// and disconnect it immediately to avoid prepared statement conflicts
+export const withPrisma = async <T>(callback: (prisma: PrismaClient) => Promise<T>): Promise<T> => {
+  const prisma = createPrismaClient()
   try {
+    return await callback(prisma)
+  } finally {
     await prisma.$disconnect()
-  } catch (error) {
-    console.error('Error disconnecting Prisma:', error)
   }
 }
-
-// Handle process termination
-process.on('beforeExit', disconnectPrisma)
-process.on('SIGINT', disconnectPrisma)
-process.on('SIGTERM', disconnectPrisma)

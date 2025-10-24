@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { withPrisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: NextRequest) {
-  
   try {
     // Get company ID and secret from URL params
     const searchParams = request.nextUrl.searchParams
@@ -18,52 +17,60 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Verify the company exists and secret matches
-    const company = await prisma.company.findFirst({
-      where: {
-        id: companyId,
-        processorAccountId: secret,
+    // Use withPrisma to avoid prepared statement conflicts
+    const result = await withPrisma(async (prisma) => {
+      // Verify the company exists and secret matches
+      const company = await prisma.company.findFirst({
+        where: {
+          id: companyId,
+          processorAccountId: secret,
+        }
+      })
+      
+      if (!company) {
+        throw new Error('Invalid company or secret')
       }
+      
+      // Get webhook payload
+      const payload = await request.json()
+      
+      // Store webhook event with company association
+      const webhookEvent = await prisma.webhookEvent.create({
+        data: {
+          processor: 'whop',
+          eventType: payload.type || 'unknown',
+          payload: payload,
+          processed: false,
+        },
+      })
+      
+      // Process payment
+      if (payload.type === 'payment.succeeded') {
+        await handlePaymentSuccess(payload, webhookEvent.id, company.id, prisma)
+      }
+      
+      // Mark as processed
+      await prisma.webhookEvent.update({
+        where: { id: webhookEvent.id },
+        data: { 
+          processed: true,
+          processedAt: new Date(),
+        },
+      })
+      
+      return { received: true }
     })
     
-    if (!company) {
+    return NextResponse.json(result)
+    
+  } catch (error) {
+    console.error('Webhook error:', error)
+    if (error instanceof Error && error.message === 'Invalid company or secret') {
       return NextResponse.json(
         { error: 'Invalid company or secret' },
         { status: 401 }
       )
     }
-    
-    // Get webhook payload
-    const payload = await request.json()
-    
-    // Store webhook event with company association
-    const webhookEvent = await prisma.webhookEvent.create({
-      data: {
-        processor: 'whop',
-        eventType: payload.type || 'unknown',
-        payload: payload,
-        processed: false,
-      },
-    })
-    
-    // Process payment
-    if (payload.type === 'payment.succeeded') {
-      await handlePaymentSuccess(payload, webhookEvent.id, company.id, prisma)
-    }
-    
-    // Mark as processed
-    await prisma.webhookEvent.update({
-      where: { id: webhookEvent.id },
-      data: { 
-        processed: true,
-        processedAt: new Date(),
-      },
-    })
-    
-    return NextResponse.json({ received: true })
-    
-  } catch (error) {
-    console.error('Webhook error:', error)
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }

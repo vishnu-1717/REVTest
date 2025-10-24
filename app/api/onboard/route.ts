@@ -1,30 +1,31 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { withPrisma } from '@/lib/db'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
-  
   try {
     const { companyName, email, processor } = await request.json()
     
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     
-    // Use upsert to avoid prepared statement issues
-    const company = await prisma.company.upsert({
-      where: { email },
-      update: {
-        name: companyName,
-        processor: processor,
-        processorAccountId: webhookSecret,
-        updatedAt: new Date(),
-      },
-      create: {
-        name: companyName,
-        email: email,
-        processor: processor,
-        processorAccountId: webhookSecret,
-      },
+    // Use withPrisma to avoid prepared statement conflicts
+    const company = await withPrisma(async (prisma) => {
+      return await prisma.company.upsert({
+        where: { email },
+        update: {
+          name: companyName,
+          processor: processor,
+          processorAccountId: webhookSecret,
+          updatedAt: new Date(),
+        },
+        create: {
+          name: companyName,
+          email: email,
+          processor: processor,
+          processorAccountId: webhookSecret,
+        },
+      })
     })
     
     // Generate their unique webhook URL

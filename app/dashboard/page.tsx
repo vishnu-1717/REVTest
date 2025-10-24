@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/db'
+import { withPrisma } from '@/lib/db'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -6,52 +6,54 @@ import { Badge } from '@/components/ui/badge'
 export const dynamic = 'force-dynamic'
 
 async function getDashboardData() {
-  
   try {
-    // Use regular Prisma queries to avoid prepared statement issues
-    const sales = await prisma.sale.findMany({
-      include: {
-        rep: {
-          select: {
-            name: true,
+    // Use withPrisma to avoid prepared statement conflicts
+    const data = await withPrisma(async (prisma) => {
+      // Use regular Prisma queries to avoid prepared statement issues
+      const sales = await prisma.sale.findMany({
+        include: {
+          rep: {
+            select: {
+              name: true,
+            },
+          },
+          commission: {
+            select: {
+              amount: true,
+              status: true,
+            },
           },
         },
-        commission: {
-          select: {
-            amount: true,
-            status: true,
-          },
+        orderBy: {
+          paidAt: 'desc',
         },
-      },
-      orderBy: {
-        paidAt: 'desc',
-      },
-    })
-    
-    const salesArray = sales
-    
-    // Calculate totals
-    const totalSales = salesArray.reduce((sum: number, sale: any) => {
-      return sum + Number(sale.amount || 0)
-    }, 0)
-    
-    const totalCommissions = salesArray.reduce((sum: number, sale: any) => {
-      return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
-    }, 0)
-    
-    const pendingCommissions = salesArray
-      .filter((sale: any) => sale.commission?.status === 'pending')
-      .reduce((sum: number, sale: any) => {
+      })
+      
+      // Calculate totals
+      const totalSales = sales.reduce((sum: number, sale: any) => {
+        return sum + Number(sale.amount || 0)
+      }, 0)
+      
+      const totalCommissions = sales.reduce((sum: number, sale: any) => {
         return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
       }, 0)
+      
+      const pendingCommissions = sales
+        .filter((sale: any) => sale.commission?.status === 'pending')
+        .reduce((sum: number, sale: any) => {
+          return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
+        }, 0)
+      
+      return {
+        sales,
+        totalSales,
+        totalCommissions,
+        pendingCommissions,
+        salesCount: sales.length,
+      }
+    })
     
-    return {
-      sales: salesArray,
-      totalSales,
-      totalCommissions,
-      pendingCommissions,
-      salesCount: salesArray.length,
-    }
+    return data
   } catch (error) {
     console.error('Dashboard data error:', error)
     // Return empty data if database query fails
