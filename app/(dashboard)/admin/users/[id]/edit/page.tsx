@@ -11,6 +11,7 @@ interface User {
   name: string
   email: string
   role: string
+  isActive: boolean
   commissionRoleId: string | null
   customCommissionRate: number | null
   canViewTeamMetrics: boolean
@@ -34,7 +35,8 @@ export default function EditUserPage() {
     role: 'rep',
     commissionRoleId: '',
     customCommissionRate: '',
-    canViewTeamMetrics: false
+    canViewTeamMetrics: false,
+    isActive: true
   })
   
   useEffect(() => {
@@ -56,7 +58,8 @@ export default function EditUserPage() {
         customCommissionRate: user.customCommissionRate 
           ? (user.customCommissionRate * 100).toString()
           : '',
-        canViewTeamMetrics: user.canViewTeamMetrics
+        canViewTeamMetrics: user.canViewTeamMetrics,
+        isActive: user.isActive
       })
     } catch (error) {
       console.error('Failed to fetch user:', error)
@@ -204,17 +207,32 @@ export default function EditUserPage() {
               </p>
             </div>
             
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="canViewTeamMetrics"
-                checked={formData.canViewTeamMetrics}
-                onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
-                className="mr-2"
-              />
-              <label htmlFor="canViewTeamMetrics" className="text-sm">
-                Can view team-wide metrics
-              </label>
+            <div className="space-y-3">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="canViewTeamMetrics"
+                  checked={formData.canViewTeamMetrics}
+                  onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
+                  className="mr-2"
+                />
+                <label htmlFor="canViewTeamMetrics" className="text-sm">
+                  Can view team-wide metrics
+                </label>
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isActive"
+                  checked={formData.isActive}
+                  onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                  className="mr-2"
+                />
+                <label htmlFor="isActive" className="text-sm">
+                  Account is active
+                </label>
+              </div>
             </div>
             
             <div className="flex gap-2 pt-4 border-t">

@@ -58,7 +58,8 @@ export async function POST(request: Request) {
           companyId: user.companyId,
           commissionRoleId: commissionRoleId || null,
           customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
-          canViewTeamMetrics: canViewTeamMetrics || false
+          canViewTeamMetrics: canViewTeamMetrics || false,
+          isActive: true
         },
         include: {
           commissionRole: true
