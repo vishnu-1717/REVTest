@@ -32,6 +32,12 @@ export default function CompanySwitcher({
   const router = useRouter()
   const searchParams = useSearchParams()
   
+  // Determine which company is currently being viewed
+  const viewAsParam = searchParams.get('viewAs')
+  const viewingCompanyId = viewAsParam || currentCompanyId
+  const viewingCompany = companies.find(c => c.id === viewingCompanyId)
+  const viewingCompanyName = viewingCompany?.name || currentCompanyName || 'My Company'
+  
   useEffect(() => {
     if (isSuperAdmin) {
       fetch('/api/super-admin/companies')
@@ -53,21 +59,24 @@ export default function CompanySwitcher({
     }
     
     // Build new URL with viewAs param
-    const params = new URLSearchParams(searchParams.toString())
+    const params = new URLSearchParams()
     params.set('viewAs', companyId)
     
     setIsOpen(false)
     setSearchQuery('')
-    router.push(`?${params.toString()}`)
+    
+    // Get current path and navigate with viewAs param
+    const currentPath = window.location.pathname
+    router.push(`${currentPath}?${params.toString()}`)
     router.refresh()
   }
   
   const handleClear = () => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete('viewAs')
+    const currentPath = window.location.pathname
+    
     setIsOpen(false)
     setSearchQuery('')
-    router.push(`?${params.toString()}`)
+    router.push(currentPath)
     router.refresh()
   }
   
@@ -80,9 +89,9 @@ export default function CompanySwitcher({
         variant="outline"
         className="text-sm"
       >
-        {currentCompanyName ? (
+{viewingCompanyId !== currentCompanyId ? (
           <>
-            <span className="text-purple-600">Viewing:</span> {currentCompanyName}
+            <span className="text-purple-600">Viewing:</span> {viewingCompanyName}
           </>
         ) : (
           'Switch Company'
@@ -108,21 +117,23 @@ export default function CompanySwitcher({
             </div>
             
             <div className="max-h-96 overflow-y-auto">
-              {/* Current Company */}
-              <div
-                onClick={handleClear}
-                className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-purple-100 bg-purple-50"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {currentCompanyName || 'My Company'}
-                    </p>
-                    <p className="text-xs text-gray-500">Current view</p>
+              {/* Your Company (Clear View) */}
+              {viewingCompanyId !== currentCompanyId && (
+                <div
+                  onClick={handleClear}
+                  className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-purple-100 bg-purple-50"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        My Company
+                      </p>
+                      <p className="text-xs text-gray-500">Return to your view</p>
+                    </div>
+                    <span className="text-xs text-purple-600 font-medium">Click to switch</span>
                   </div>
-                  <span className="text-xs text-purple-600 font-medium">Active</span>
                 </div>
-              </div>
+              )}
               
               {/* Company List */}
               {filteredCompanies.length === 0 ? (
@@ -135,7 +146,7 @@ export default function CompanySwitcher({
                     key={company.id}
                     onClick={() => handleSwitch(company.id, company.name)}
                     className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b ${
-                      company.id === currentCompanyId ? 'bg-purple-50 border-purple-100' : ''
+                      company.id === viewingCompanyId ? 'bg-purple-50 border-purple-100' : ''
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -145,8 +156,8 @@ export default function CompanySwitcher({
                           {company._count.User} users · {company._count.Appointment} appointments
                         </p>
                       </div>
-                      {company.id === currentCompanyId && (
-                        <span className="text-xs text-purple-600 font-medium">Active</span>
+                      {company.id === viewingCompanyId && (
+                        <span className="text-xs text-purple-600 font-medium">Viewing</span>
                       )}
                     </div>
                   </div>

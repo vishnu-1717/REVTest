@@ -18,6 +18,13 @@ export default async function DashboardLayout({
   const isAdmin = user?.role === 'admin' || user?.superAdmin
   const isSuperAdmin = user?.superAdmin
   
+  // Get company name if available
+  let currentCompanyName: string | null = null
+  if (isSuperAdmin && user.companyId) {
+    // This will be filled in client-side by CompanySwitcher
+    currentCompanyName = null
+  }
+  
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Top Navigation */}
