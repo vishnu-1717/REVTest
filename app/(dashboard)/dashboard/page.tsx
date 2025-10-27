@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import Leaderboard from '@/components/Leaderboard'
 
 interface Stats {
   totalAppointments: number
@@ -295,6 +296,11 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      </div>
+      
+      {/* Leaderboard */}
+      <div className="mt-8">
+        <Leaderboard />
       </div>
     </div>
   )
