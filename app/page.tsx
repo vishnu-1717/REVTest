@@ -1,52 +1,39 @@
-import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { redirect } from 'next/navigation'
+import { getCurrentUser } from '@/lib/auth'
 
-export default function Home() {
+export default async function HomePage() {
+  const user = await getCurrentUser()
+  
+  if (user) {
+    redirect('/dashboard')
+  }
+  
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-center font-mono text-sm flex flex-col gap-8">
-        <h1 className="text-4xl font-bold text-center">
-          Commission Tracking SaaS
-        </h1>
-        
-        <p className="text-center text-muted-foreground max-w-2xl">
-          Automatically track sales and calculate commissions from your payment processor.
-          No more spreadsheets.
-        </p>
-        
-        <div className="flex gap-4">
-          <Link href="/onboard">
-            <Button size="lg">
-              Get Started
-            </Button>
-          </Link>
-          
-          <Link href="/dashboard">
-            <Button size="lg" variant="outline">
-              View Dashboard
-            </Button>
-          </Link>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8 text-center">
+        <div>
+          <h1 className="text-4xl font-bold text-gray-900">PayMaestro</h1>
+          <p className="mt-2 text-gray-600">
+            Sales and commission management platform
+          </p>
         </div>
         
-        <div className="mt-8 p-4 border rounded-lg bg-muted/50 max-w-2xl">
-          <h2 className="font-semibold mb-2">Test the webhook:</h2>
-          <code className="text-xs block whitespace-pre-wrap">
-{`curl -X POST http://localhost:3000/api/webhooks/whop \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "type": "payment.succeeded",
-    "data": {
-      "id": "test_payment_'${Date.now()}'",
-      "amount": 15000,
-      "currency": "USD",
-      "customer_email": "customer@example.com",
-      "customer_name": "Jane Smith",
-      "metadata": { "source": "paid" }
-    }
-  }'`}
-          </code>
+        <div className="space-y-4">
+          <a
+            href="/sign-in"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Sign In
+          </a>
+          
+          <a
+            href="/sign-up"
+            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Sign Up
+          </a>
         </div>
       </div>
-    </main>
+    </div>
   )
 }

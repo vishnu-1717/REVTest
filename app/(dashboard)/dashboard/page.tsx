@@ -12,12 +12,12 @@ async function getDashboardData() {
       // Use regular Prisma queries to avoid prepared statement issues
       const sales = await prisma.sale.findMany({
         include: {
-          rep: {
+          User: {
             select: {
               name: true,
             },
           },
-          commission: {
+          Commission: {
             select: {
               amount: true,
               status: true,
@@ -35,13 +35,13 @@ async function getDashboardData() {
       }, 0)
       
       const totalCommissions = sales.reduce((sum: number, sale: any) => {
-        return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
+        return sum + (sale.Commission?.amount ? Number(sale.Commission.amount) : 0)
       }, 0)
       
       const pendingCommissions = sales
-        .filter((sale: any) => sale.commission?.status === 'pending')
+        .filter((sale: any) => sale.Commission?.status === 'pending')
         .reduce((sum: number, sale: any) => {
-          return sum + (sale.commission?.amount ? Number(sale.commission.amount) : 0)
+          return sum + (sale.Commission?.amount ? Number(sale.Commission.amount) : 0)
         }, 0)
       
       return {
@@ -238,14 +238,14 @@ export default async function DashboardPage() {
                           {sale.customerEmail || 'No email'}
                         </div>
                       </TableCell>
-                      <TableCell>{sale.rep?.name || 'Unassigned'}</TableCell>
+                      <TableCell>{sale.User?.name || 'Unassigned'}</TableCell>
                       <TableCell className="font-medium">
                         ${Number(sale.amount).toFixed(2)}
                       </TableCell>
                       <TableCell>
-                        {sale.commission?.amount ? (
+                        {sale.Commission?.amount ? (
                           <span className="text-sm">
-                            ${Number(sale.commission.amount).toFixed(2)}
+                            ${Number(sale.Commission.amount).toFixed(2)}
                           </span>
                         ) : (
                           <span className="text-sm text-muted-foreground">N/A</span>

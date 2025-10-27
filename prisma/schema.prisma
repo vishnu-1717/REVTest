@@ -9,40 +9,57 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model Commission {
+  id           String    @id @default(cuid())
+  amount       Decimal   @db.Decimal(10, 2)
+  percentage   Decimal?  @db.Decimal(5, 2)
+  status       String    @default("pending")
+  releasedAmount Decimal @db.Decimal(10, 2) @default(0)
+  totalAmount  Decimal   @db.Decimal(10, 2) @default(0)
+  releaseStatus String   @default("pending")
+  overrideAmount Decimal? @db.Decimal(10, 2)
+  overrideReason String?
+  overrideByUserId String?
+  calculatedAt DateTime  @default(now())
+  approvedAt   DateTime?
+  paidAt       DateTime?
+  saleId       String    @unique
+  repId        String
+  companyId    String
+  Company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  User         User      @relation(fields: [repId], references: [id], onDelete: Cascade)
+  Sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([repId])
+  @@index([status])
+}
+
 model Company {
-  id                   String       @id @default(uuid())
+  id                   String       @id
   name                 String
   email                String       @unique
   processor            String
   processorAccountId   String?
   processorConnectedAt DateTime?
   createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  commissions          Commission[]
-  sales                Sale[]
-  users                User[]
+  updatedAt            DateTime
+  Commission           Commission[]
+  Sale                 Sale[]
+  User                 User[]
+  Contact              Contact[]
+  TrafficSource        TrafficSource[]
+  Appointment          Appointment[]
+  WebhookEvent         WebhookEvent[]
+  CommissionRole       CommissionRole[]
+  PaymentLink          PaymentLink[]
+  UnmatchedPayment     UnmatchedPayment[]
 
-  @@index([email])
-}
-
-model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
-  name        String
-  role        String
-  companyId   String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  commissions Commission[]
-  sales       Sale[]
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
-  @@index([companyId])
   @@index([email])
 }
 
 model Sale {
-  id            String      @id @default(uuid())
+  id            String      @id
   amount        Decimal     @db.Decimal(10, 2)
   currency      String      @default("USD")
   status        String
@@ -55,52 +72,209 @@ model Sale {
   customerName  String?
   rawData       Json?
   paidAt        DateTime?
+  paymentType   String?
+  totalAmount   Float?
+  remainingAmount Float?
+  matchedBy     String?
+  matchConfidence Float?
+  manuallyMatched Boolean   @default(false)
+  matchedByUserId String?
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  updatedAt     DateTime
   repId         String?
+  contactId     String?
   companyId     String
-  commission    Commission?
-  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  rep           User?       @relation(fields: [repId], references: [id])
+  paymentLinkId String?
+  Commission    Commission?
+  Company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  User          User?       @relation(fields: [repId], references: [id])
+  Contact       Contact?    @relation(fields: [contactId], references: [id])
+  PaymentLink   PaymentLink? @relation(fields: [paymentLinkId], references: [id])
+  UnmatchedPayment UnmatchedPayment?
+  Appointment   Appointment?
 
   @@index([companyId])
+  @@index([externalId])
+  @@index([paidAt])
   @@index([repId])
   @@index([status])
-  @@index([paidAt])
-  @@index([externalId])
 }
 
-model Commission {
-  id           String    @id @default(uuid())
-  amount       Decimal   @db.Decimal(10, 2)
-  percentage   Decimal?  @db.Decimal(5, 2)
-  status       String    @default("pending")
-  calculatedAt DateTime  @default(now())
-  approvedAt   DateTime?
-  paidAt       DateTime?
-  saleId       String    @unique
-  repId        String
-  companyId    String
-  company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  rep          User      @relation(fields: [repId], references: [id], onDelete: Cascade)
-  sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+model User {
+  id                        String       @id @default(cuid())
+  email                     String       @unique
+  name                      String
+  role                      String
+  companyId                 String
+  commissionRoleId          String?
+  customCommissionRate      Float?
+  canViewTeamMetrics        Boolean      @default(false)
+  canViewLeaderboard        Boolean      @default(true)
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+  Commission                Commission[]
+  Sale                      Sale[]
+  Company                   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  commissionRole            CommissionRole? @relation(fields: [commissionRoleId], references: [id])
+  AppointmentsAsCloser      Appointment[] @relation("CloserAppointments")
+  AppointmentsAsSetter      Appointment[] @relation("SetterAppointments")
 
   @@index([companyId])
-  @@index([repId])
-  @@index([status])
+  @@index([email])
 }
 
 model WebhookEvent {
-  id          String    @id @default(uuid())
+  id          String    @id
   processor   String
   eventType   String
+  companyId   String?
   payload     Json
   processed   Boolean   @default(false)
   processedAt DateTime?
   error       String?
   createdAt   DateTime  @default(now())
+  Company     Company?  @relation(fields: [companyId], references: [id])
 
-  @@index([processor, eventType])
-  @@index([processed])
   @@index([createdAt])
+  @@index([processed])
+  @@index([processor, eventType])
+  @@index([companyId])
+}
+
+model Contact {
+  id        String    @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  companyId String
+  ghlContactId String?
+  customFields Json?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime @updatedAt
+  
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
+  
+  trafficSourceId String?
+  Appointment      Appointment[]
+  Sale             Sale[]
+
+  @@index([companyId, email])
+  @@index([ghlContactId])
+}
+
+model TrafficSource {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  companyId String
+  monthlyCost Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  Contact      Contact[]
+  Appointment  Appointment[]
+
+  @@index([companyId])
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  scheduledAt DateTime
+  startTime   DateTime?
+  endTime     DateTime?
+  companyId String
+  contactId String
+  closerId  String?
+  setterId  String?
+  trafficSourceId String?
+  calendar  String?
+  status    String
+  outcome   String?
+  objectionType String?
+  objectionNotes String? @db.Text
+  notes     String? @db.Text
+  isFirstCall  Boolean @default(true)
+  duration     Int?
+  recordingUrl String?
+  followUpScheduled Boolean @default(false)
+  followUpDate      DateTime?
+  nurtureType       String?
+  qualificationStatus String?
+  disqualificationReason String?
+  cashCollected Float?
+  saleId        String? @unique
+  ghlAppointmentId String?
+  customFields     Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact       Contact       @relation(fields: [contactId], references: [id])
+  closer        User?         @relation("CloserAppointments", fields: [closerId], references: [id])
+  setter        User?         @relation("SetterAppointments", fields: [setterId], references: [id])
+  trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
+  sale          Sale?        @relation(fields: [saleId], references: [id])
+  paymentLinks  PaymentLink[]
+
+  @@index([companyId])
+  @@index([closerId])
+  @@index([setterId])
+  @@index([status])
+  @@index([ghlAppointmentId])
+}
+
+model CommissionRole {
+  id          String   @id @default(cuid())
+  name        String
+  defaultRate Float
+  description String?
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model PaymentLink {
+  id        String   @id @default(cuid())
+  appointmentId String
+  companyId String
+  token     String   @unique
+  expiresAt DateTime?
+  opens     Int      @default(0)
+  lastOpenedAt DateTime?
+  amount    Float
+  paymentType String
+  status    String   @default("pending")
+  paidAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+
+  @@index([token])
+  @@index([appointmentId])
+}
+
+model UnmatchedPayment {
+  id        String   @id @default(cuid())
+  saleId    String   @unique
+  companyId String
+  suggestedMatches Json?
+  status    String   @default("pending")
+  reviewedAt DateTime?
+  reviewedByUserId String?
+  createdAt DateTime @default(now())
+  
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
 }
