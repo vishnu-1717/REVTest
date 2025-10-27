@@ -52,32 +52,42 @@ export default function CompanySwitcher({
     c.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
   
-  const handleSwitch = async (companyId: string, companyName: string) => {
+  const handleSwitch = (companyId: string, companyName: string) => {
     if (companyId === currentCompanyId) {
       setIsOpen(false)
       return
     }
     
-    // Build new URL with viewAs param
-    const params = new URLSearchParams()
+    setIsOpen(false)
+    setSearchQuery('')
+    
+    // Get current path and navigate with viewAs param using window.location
+    const currentPath = window.location.pathname
+    
+    // Keep existing params but update viewAs
+    const params = new URLSearchParams(window.location.search)
     params.set('viewAs', companyId)
     
-    setIsOpen(false)
-    setSearchQuery('')
+    const newUrl = `${currentPath}?${params.toString()}`
     
-    // Get current path and navigate with viewAs param
-    const currentPath = window.location.pathname
-    await router.push(`${currentPath}?${params.toString()}`)
-    window.location.reload() // Force reload to get new data
+    // Use window.location for full navigation (will reload with the param)
+    window.location.href = newUrl
   }
   
-  const handleClear = async () => {
-    const currentPath = window.location.pathname
-    
+  const handleClear = () => {
     setIsOpen(false)
     setSearchQuery('')
-    await router.push(currentPath)
-    window.location.reload() // Force reload to get new data
+    
+    // Remove viewAs param but keep other params
+    const currentPath = window.location.pathname
+    const params = new URLSearchParams(window.location.search)
+    params.delete('viewAs')
+    
+    const newUrl = params.toString() 
+      ? `${currentPath}?${params.toString()}`
+      : currentPath
+    
+    window.location.href = newUrl
   }
   
   if (!isSuperAdmin) return null
