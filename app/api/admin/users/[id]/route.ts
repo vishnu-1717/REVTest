@@ -23,7 +23,7 @@ export async function GET(
               Sale: true
             },
             orderBy: {
-              createdAt: 'desc'
+              calculatedAt: 'desc'
             },
             take: 10
           },

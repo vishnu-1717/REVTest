@@ -20,8 +20,8 @@ interface User {
   customCommissionRate: number | null
   canViewTeamMetrics: boolean
   _count: {
-    appointmentsAsCloser: number
-    commissions: number
+    AppointmentsAsCloser: number
+    Commission: number
   }
   createdAt: string
 }
@@ -305,8 +305,8 @@ export default function UsersPage() {
                       {getCommissionRate(user)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user._count.appointmentsAsCloser} appts<br/>
-                      {user._count.commissions} commissions
+                      {user._count.AppointmentsAsCloser} appts<br/>
+                      {user._count.Commission} commissions
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {user.isActive ? (

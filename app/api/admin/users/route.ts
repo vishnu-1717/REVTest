@@ -15,8 +15,8 @@ export async function GET() {
           commissionRole: true,
           _count: {
             select: {
-              appointmentsAsCloser: true,
-              commissions: true
+              AppointmentsAsCloser: true,
+              Commission: true
             }
           }
         },
