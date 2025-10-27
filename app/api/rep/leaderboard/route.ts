@@ -54,7 +54,7 @@ export async function GET(request: Request) {
           const commissions = await prisma.commission.findMany({
             where: {
               repId: rep.id,
-              createdAt: {
+              calculatedAt: {
                 gte: new Date(dateFrom),
                 lte: new Date(dateTo)
               }
