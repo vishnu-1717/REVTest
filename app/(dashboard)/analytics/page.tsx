@@ -70,6 +70,14 @@ export default function AnalyticsPage() {
         if (value) params.append(key, value)
       })
       
+      // Add viewAs param from URL if it exists
+      const viewAsParam = window.location.search.includes('viewAs=')
+        ? new URLSearchParams(window.location.search).get('viewAs')
+        : null
+      if (viewAsParam) {
+        params.append('viewAs', viewAsParam)
+      }
+      
       const res = await fetch(`/api/analytics?${params}`)
       const data = await res.json()
       setAnalytics(data)

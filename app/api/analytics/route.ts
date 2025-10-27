@@ -11,14 +11,23 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams
     
+    // Check if super admin is viewing as another company
+    const viewAsCompanyId = searchParams.get('viewAs')
+    
     // Build where clause based on filters
     const where: any = {
-      companyId: user.companyId
+      companyId: viewAsCompanyId || user.companyId
     }
     
     // If not admin, only show their appointments
     if (!canViewAllData(user)) {
       where.closerId = user.id
+    }
+    
+    // For super admins viewing as another company, show all appointments for that company
+    if (viewAsCompanyId && user.superAdmin) {
+      // Don't filter by closerId for super admin viewing another company
+      delete where.closerId
     }
     
     // Date filters

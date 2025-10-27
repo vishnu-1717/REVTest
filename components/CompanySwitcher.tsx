@@ -52,7 +52,7 @@ export default function CompanySwitcher({
     c.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
   
-  const handleSwitch = (companyId: string, companyName: string) => {
+  const handleSwitch = async (companyId: string, companyName: string) => {
     if (companyId === currentCompanyId) {
       setIsOpen(false)
       return
@@ -67,17 +67,17 @@ export default function CompanySwitcher({
     
     // Get current path and navigate with viewAs param
     const currentPath = window.location.pathname
-    router.push(`${currentPath}?${params.toString()}`)
-    router.refresh()
+    await router.push(`${currentPath}?${params.toString()}`)
+    window.location.reload() // Force reload to get new data
   }
   
-  const handleClear = () => {
+  const handleClear = async () => {
     const currentPath = window.location.pathname
     
     setIsOpen(false)
     setSearchQuery('')
-    router.push(currentPath)
-    router.refresh()
+    await router.push(currentPath)
+    window.location.reload() // Force reload to get new data
   }
   
   if (!isSuperAdmin) return null
