@@ -11,6 +11,9 @@ export async function POST(
 ) {
   try {
     const user = await requireAuth()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const { id } = await params
     const { amount, paymentType, expiresInDays } = await request.json()
     
@@ -79,6 +82,9 @@ export async function GET(
 ) {
   try {
     const user = await requireAuth()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const { id } = await params
     
     const links = await withPrisma(async (prisma) => {
