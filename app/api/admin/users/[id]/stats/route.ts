@@ -48,8 +48,8 @@ export async function GET(
       const showed = appointments.filter(a => a.status === 'showed' || a.status === 'signed').length
       const signed = appointments.filter(a => a.status === 'signed').length
       
-      const showRate = scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : 0
-      const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : 0
+      const showRate = scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0'
+      const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
       
       const totalRevenue = appointments
         .reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
