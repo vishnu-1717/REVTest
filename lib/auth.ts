@@ -73,12 +73,18 @@ export async function getCurrentUser() {
       
       if (existingByEmail) {
         // Update with clerkId and superAdmin if applicable
+        const updateData: any = {
+          clerkId: userId
+        }
+        
+        if (isSuperAdminEmail) {
+          updateData.superAdmin = true
+          updateData.role = 'admin'
+        }
+        
         const updatedUser = await prisma.user.update({
           where: { id: existingByEmail.id },
-          data: {
-            clerkId: userId,
-            ...(isSuperAdminEmail && { superAdmin: true, role: 'admin' })
-          },
+          data: updateData,
           include: {
             Company: true,
             commissionRole: true
