@@ -47,16 +47,16 @@ export default function CommissionsPage() {
     return com.releaseStatus === filter
   })
   
-  const totalEarned = commissions.reduce((sum, com) => sum + com.totalAmount, 0)
+  const totalEarned = commissions.reduce((sum, com) => sum + Number(com.totalAmount), 0)
   const pending = commissions
     .filter(c => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
-    .reduce((sum, com) => sum + (com.totalAmount - com.releasedAmount), 0)
+    .reduce((sum, com) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
   const released = commissions
     .filter(c => c.releaseStatus === 'released')
-    .reduce((sum, com) => sum + com.releasedAmount, 0)
+    .reduce((sum, com) => sum + Number(com.releasedAmount), 0)
   const paid = commissions
     .filter(c => c.releaseStatus === 'paid')
-    .reduce((sum, com) => sum + com.totalAmount, 0)
+    .reduce((sum, com) => sum + Number(com.totalAmount), 0)
   
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>

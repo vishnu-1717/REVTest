@@ -63,16 +63,16 @@ export async function GET(request: Request) {
       
       const totalRevenue = appointments.reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
       
-      const totalCommissions = commissions.reduce((sum, com) => sum + com.totalAmount, 0)
+      const totalCommissions = commissions.reduce((sum, com) => sum + Number(com.totalAmount), 0)
       const pendingCommissions = commissions
         .filter(c => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
-        .reduce((sum, com) => sum + (com.totalAmount - com.releasedAmount), 0)
+        .reduce((sum, com) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
       const releasedCommissions = commissions
         .filter(c => c.releaseStatus === 'released')
-        .reduce((sum, com) => sum + com.releasedAmount, 0)
+        .reduce((sum, com) => sum + Number(com.releasedAmount), 0)
       const paidCommissions = commissions
         .filter(c => c.releaseStatus === 'paid')
-        .reduce((sum, com) => sum + com.totalAmount, 0)
+        .reduce((sum, com) => sum + Number(com.totalAmount), 0)
       
       // Follow-ups needed
       const followUpsNeeded = appointments.filter(a => 

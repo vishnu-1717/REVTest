@@ -61,7 +61,7 @@ export async function GET(request: Request) {
             }
           })
           
-          const totalCommissions = commissions.reduce((sum, com) => sum + com.totalAmount, 0)
+          const totalCommissions = commissions.reduce((sum, com) => sum + Number(com.totalAmount), 0)
           
           return {
             id: rep.id,
