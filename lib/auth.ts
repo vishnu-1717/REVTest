@@ -7,9 +7,18 @@ export async function getCurrentUser() {
   
   if (!userId) return null
   
-  // For now, return null until we set up proper user sync
+  // For now, return a mock user until we set up proper user sync
   // In production, you'd look up the user in your database by Clerk ID
-  return null
+  return {
+    id: userId,
+    email: 'user@example.com',
+    name: 'User',
+    role: 'user',
+    companyId: 'default',
+    customFields: {},
+    Company: null,
+    commissionRole: null
+  }
 }
 
 export async function requireAuth() {
