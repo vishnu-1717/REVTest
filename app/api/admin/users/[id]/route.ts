@@ -2,6 +2,87 @@ import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const currentUser = await requireAdmin()
+    
+    const user = await withPrisma(async (prisma) => {
+      return await prisma.user.findFirst({
+        where: {
+          id: params.id,
+          companyId: currentUser.companyId
+        },
+        include: {
+          commissionRole: true,
+          Commission: {
+            include: {
+              Sale: true
+            },
+            orderBy: {
+              createdAt: 'desc'
+            },
+            take: 10
+          },
+          AppointmentsAsCloser: {
+            include: {
+              contact: true
+            },
+            orderBy: {
+              scheduledAt: 'desc'
+            },
+            take: 10
+          }
+        }
+      })
+    })
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    
+    return NextResponse.json(user)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const currentUser = await requireAdmin()
+    const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
+    
+    const user = await withPrisma(async (prisma) => {
+      return await prisma.user.update({
+        where: {
+          id: params.id,
+          companyId: currentUser.companyId
+        },
+        data: {
+          name,
+          role,
+          commissionRoleId: commissionRoleId || null,
+          customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
+          canViewTeamMetrics,
+          isActive
+        },
+        include: {
+          commissionRole: true
+        }
+      })
+    })
+    
+    return NextResponse.json(user)
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -70,42 +151,66 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await requireAdmin()
+    const currentUser = await requireAdmin()
     
-    await withPrisma(async (prisma) => {
+    // Don't allow deleting yourself
+    if (params.id === currentUser.id) {
+      return NextResponse.json(
+        { error: 'Cannot delete your own account' },
+        { status: 400 }
+      )
+    }
+    
+    const result = await withPrisma(async (prisma) => {
       // Check if user belongs to the same company
-      const existing = await prisma.user.findFirst({
+      const user = await prisma.user.findFirst({
         where: {
           id: params.id,
-          companyId: user.companyId
+          companyId: currentUser.companyId
+        },
+        include: {
+          _count: {
+            select: {
+              Commission: true,
+              AppointmentsAsCloser: true
+            }
+          }
         }
       })
       
-      if (!existing) {
+      if (!user) {
         throw new Error('User not found')
       }
       
-      // Don't allow deleting yourself - check by email since user.id is clerkId
-      if (existing.email === user.email) {
-        throw new Error('Cannot delete your own account')
+      if (user._count.Commission > 0 || user._count.AppointmentsAsCloser > 0) {
+        // Instead of deleting, deactivate
+        await prisma.user.update({
+          where: { id: params.id },
+          data: { isActive: false }
+        })
+        
+        return { deactivated: true, hasData: true }
       }
       
-      // Soft delete by setting isActive to false
-      // In a production system, you might want to actually delete
-      await prisma.user.update({
-        where: {
-          id: params.id
-        },
-        data: {
-          isActive: false
-        }
+      // If no data, can safely delete
+      await prisma.user.delete({
+        where: { id: params.id }
       })
+      
+      return { deleted: true, hasData: false }
     })
     
-    return NextResponse.json({ message: 'User deactivated successfully' })
+    if (result.deactivated) {
+      return NextResponse.json({
+        success: true,
+        message: 'User deactivated (has historical data)'
+      })
+    }
+    
+    return NextResponse.json({ success: true })
   } catch (error: any) {
-    if (error.message.includes('not found') || error.message.includes('your own')) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error.message.includes('not found')) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
