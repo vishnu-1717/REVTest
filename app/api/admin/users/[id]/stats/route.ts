@@ -4,10 +4,11 @@ import { withPrisma } from '@/lib/db'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await requireAdmin()
+    const { id } = await params
     
     // Get date range from query params (default to all time)
     const url = new URL(request.url)
@@ -22,7 +23,7 @@ export async function GET(
       // Get appointments
       const appointments = await prisma.appointment.findMany({
         where: {
-          closerId: params.id,
+          closerId: id,
           companyId: currentUser.companyId,
           ...(Object.keys(dateFilter).length > 0 && {
             scheduledAt: dateFilter
@@ -33,7 +34,7 @@ export async function GET(
       // Get commissions
       const commissions = await prisma.commission.findMany({
         where: {
-          repId: params.id,
+          repId: id,
           companyId: currentUser.companyId
         },
         include: {

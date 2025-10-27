@@ -4,15 +4,16 @@ import { withPrisma } from '@/lib/db'
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await requireAdmin()
+    const { id } = await params
     
     const user = await withPrisma(async (prisma) => {
       return await prisma.user.findFirst({
         where: {
-          id: params.id,
+          id,
           companyId: currentUser.companyId
         },
         include: {
@@ -51,16 +52,17 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await requireAdmin()
+    const { id } = await params
     const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
     
     const user = await withPrisma(async (prisma) => {
       return await prisma.user.update({
         where: {
-          id: params.id,
+          id,
           companyId: currentUser.companyId
         },
         data: {
@@ -85,17 +87,18 @@ export async function PUT(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAdmin()
+    const { id } = await params
     const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
     
     const updatedUser = await withPrisma(async (prisma) => {
       // Check if user belongs to the same company
       const existing = await prisma.user.findFirst({
         where: {
-          id: params.id,
+          id,
           companyId: user.companyId
         }
       })
@@ -120,7 +123,7 @@ export async function PATCH(
       
       return await prisma.user.update({
         where: {
-          id: params.id
+          id
         },
         data: {
           ...(name && { name }),
@@ -148,13 +151,14 @@ export async function PATCH(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const currentUser = await requireAdmin()
+    const { id } = await params
     
     // Don't allow deleting yourself
-    if (params.id === currentUser.id) {
+    if (id === currentUser.id) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
@@ -165,7 +169,7 @@ export async function DELETE(
       // Check if user belongs to the same company
       const user = await prisma.user.findFirst({
         where: {
-          id: params.id,
+          id,
           companyId: currentUser.companyId
         },
         include: {
@@ -185,7 +189,7 @@ export async function DELETE(
       if (user._count.Commission > 0 || user._count.AppointmentsAsCloser > 0) {
         // Instead of deleting, deactivate
         await prisma.user.update({
-          where: { id: params.id },
+          where: { id },
           data: { isActive: false }
         })
         
@@ -194,7 +198,7 @@ export async function DELETE(
       
       // If no data, can safely delete
       await prisma.user.delete({
-        where: { id: params.id }
+        where: { id }
       })
       
       return { deleted: true, hasData: false }
