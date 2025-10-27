@@ -1,19 +1,20 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAdmin()
     const { name, defaultRate, description } = await request.json()
+    const { id } = await params
     
     const role = await withPrisma(async (prisma) => {
       return await prisma.commissionRole.update({
         where: {
-          id: params.id,
+          id,
           companyId: user.companyId
         },
         data: {
@@ -31,17 +32,18 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAdmin()
+    const { id } = await params
     
     const result = await withPrisma(async (prisma) => {
       // Check if role has users
       const role = await prisma.commissionRole.findUnique({
         where: {
-          id: params.id,
+          id,
           companyId: user.companyId
         },
         include: {
@@ -60,7 +62,7 @@ export async function DELETE(
       }
       
       await prisma.commissionRole.delete({
-        where: { id: params.id }
+        where: { id }
       })
       
       return { success: true }
