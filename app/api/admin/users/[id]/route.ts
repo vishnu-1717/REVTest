@@ -57,7 +57,7 @@ export async function PUT(
   try {
     const currentUser = await requireAdmin()
     const { id } = await params
-    const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
+    const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics } = await request.json()
     
     const user = await withPrisma(async (prisma) => {
       return await prisma.user.update({
@@ -70,8 +70,7 @@ export async function PUT(
           role,
           commissionRoleId: commissionRoleId || null,
           customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
-          canViewTeamMetrics,
-          isActive
+          canViewTeamMetrics
         },
         include: {
           commissionRole: true
@@ -92,7 +91,7 @@ export async function PATCH(
   try {
     const user = await requireAdmin()
     const { id } = await params
-    const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
+    const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics } = await request.json()
     
     const updatedUser = await withPrisma(async (prisma) => {
       // Check if user belongs to the same company
@@ -131,8 +130,7 @@ export async function PATCH(
           ...(role && { role }),
           ...(commissionRoleId !== undefined && { commissionRoleId: commissionRoleId || null }),
           ...(customCommissionRate !== undefined && { customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null }),
-          ...(canViewTeamMetrics !== undefined && { canViewTeamMetrics }),
-          ...(isActive !== undefined && { isActive })
+          ...(canViewTeamMetrics !== undefined && { canViewTeamMetrics })
         },
         include: {
           commissionRole: true
@@ -187,12 +185,8 @@ export async function DELETE(
       }
       
       if (user._count.Commission > 0 || user._count.AppointmentsAsCloser > 0) {
-        // Instead of deleting, deactivate
-        await prisma.user.update({
-          where: { id },
-          data: { isActive: false }
-        })
-        
+        // Instead of deleting, just don't delete (keep the user)
+        // In production, you might want to add a deletedAt timestamp field
         return { deactivated: true, hasData: true }
       }
       

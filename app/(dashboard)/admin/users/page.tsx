@@ -11,7 +11,6 @@ interface User {
   name: string
   email: string
   role: string
-  isActive: boolean
   commissionRole: {
     id: string
     name: string
@@ -309,15 +308,9 @@ export default function UsersPage() {
                       {user._count.Commission} commissions
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {user.isActive ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                          Inactive
-                        </span>
-                      )}
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <Link

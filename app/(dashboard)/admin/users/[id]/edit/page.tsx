@@ -11,7 +11,6 @@ interface User {
   name: string
   email: string
   role: string
-  isActive: boolean
   commissionRoleId: string | null
   customCommissionRate: number | null
   canViewTeamMetrics: boolean
@@ -35,8 +34,7 @@ export default function EditUserPage() {
     role: 'rep',
     commissionRoleId: '',
     customCommissionRate: '',
-    canViewTeamMetrics: false,
-    isActive: true
+    canViewTeamMetrics: false
   })
   
   useEffect(() => {
@@ -58,8 +56,7 @@ export default function EditUserPage() {
         customCommissionRate: user.customCommissionRate 
           ? (user.customCommissionRate * 100).toString()
           : '',
-        canViewTeamMetrics: user.canViewTeamMetrics,
-        isActive: user.isActive
+        canViewTeamMetrics: user.canViewTeamMetrics
       })
     } catch (error) {
       console.error('Failed to fetch user:', error)
