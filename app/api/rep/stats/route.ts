@@ -44,10 +44,10 @@ export async function GET(request: Request) {
           repId: user.id
         },
         include: {
-          sale: true
+          Sale: true
         },
         orderBy: {
-          createdAt: 'desc'
+          calculatedAt: 'desc'
         }
       })
       

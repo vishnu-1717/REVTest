@@ -11,7 +11,7 @@ interface Commission {
   releaseStatus: string
   status: string
   createdAt: string
-  sale: {
+  Sale: {
     amount: number
     customerName: string | null
     paidAt: string | null
@@ -211,10 +211,10 @@ export default function CommissionsPage() {
                         {new Date(commission.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        {commission.sale.customerName || 'Unknown'}
+                        {commission.Sale.customerName || 'Unknown'}
                       </td>
                       <td className="px-4 py-4 text-sm text-right">
-                        ${commission.sale.amount.toLocaleString()}
+                        ${commission.Sale.amount.toLocaleString()}
                       </td>
                       <td className="px-4 py-4 text-sm text-right">
                         {(commission.percentage * 100).toFixed(1)}%
