@@ -204,32 +204,17 @@ export default function EditUserPage() {
               </p>
             </div>
             
-            <div className="space-y-3">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="canViewTeamMetrics"
-                  checked={formData.canViewTeamMetrics}
-                  onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
-                  className="mr-2"
-                />
-                <label htmlFor="canViewTeamMetrics" className="text-sm">
-                  Can view team-wide metrics
-                </label>
-              </div>
-              
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.isActive}
-                  onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
-                  className="mr-2"
-                />
-                <label htmlFor="isActive" className="text-sm">
-                  Account is active
-                </label>
-              </div>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="canViewTeamMetrics"
+                checked={formData.canViewTeamMetrics}
+                onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
+                className="mr-2"
+              />
+              <label htmlFor="canViewTeamMetrics" className="text-sm">
+                Can view team-wide metrics
+              </label>
             </div>
             
             <div className="flex gap-2 pt-4 border-t">
