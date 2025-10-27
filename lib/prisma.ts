@@ -11,5 +11,3 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
-// Re-export from the optimized database configuration
-export { withPrisma, createPrismaClient } from '../db'
