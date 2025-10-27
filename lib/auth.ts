@@ -33,6 +33,21 @@ export async function getCurrentUser() {
       
       // Auto-create user as super admin if this is the first user OR super admin email
       if (isFirstUser || isSuperAdminEmail) {
+        // Get or create a default company
+        let defaultCompany = await prisma.company.findFirst({
+          where: { email: 'default@paymaestro.com' }
+        })
+        
+        if (!defaultCompany) {
+          defaultCompany = await prisma.company.create({
+            data: {
+              name: 'Default Company',
+              email: 'default@paymaestro.com',
+              processor: 'manual'
+            }
+          })
+        }
+        
         const newUser = await prisma.user.create({
           data: {
             clerkId: userId,
@@ -40,7 +55,7 @@ export async function getCurrentUser() {
             name: clerkUser?.fullName || 'User',
             role: 'admin',
             superAdmin: true,
-            companyId: 'default', // Will need to be updated when they create a company
+            companyId: defaultCompany.id,
             isActive: true
           },
           include: {
@@ -109,13 +124,28 @@ export async function getCurrentUser() {
       }
       
       // Not first user, return temporary user
+      // Get or create default company
+      let defaultCompany = await prisma.company.findFirst({
+        where: { email: 'default@paymaestro.com' }
+      })
+      
+      if (!defaultCompany) {
+        defaultCompany = await prisma.company.create({
+          data: {
+            name: 'Default Company',
+            email: 'default@paymaestro.com',
+            processor: 'manual'
+          }
+        })
+      }
+      
       return {
         id: userId,
         email: email,
         name: clerkUser?.fullName || 'User',
         role: 'user',
         superAdmin: false,
-        companyId: 'default',
+        companyId: defaultCompany.id,
         customFields: {},
         Company: null,
         commissionRole: null
