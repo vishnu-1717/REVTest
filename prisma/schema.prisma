@@ -86,13 +86,15 @@ model Sale {
   contactId     String?
   companyId     String
   paymentLinkId String?
+  appointmentId String?
   Commission    Commission?
   Company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
   User          User?       @relation(fields: [repId], references: [id])
   Contact       Contact?    @relation(fields: [contactId], references: [id])
   PaymentLink   PaymentLink? @relation(fields: [paymentLinkId], references: [id])
+  appointmentForSale Appointment? @relation("AppointmentSale")
+  Appointment   Appointment? @relation("AppointmentMatches", fields: [appointmentId], references: [id])
   UnmatchedPayment UnmatchedPayment?
-  Appointment   Appointment?
 
   @@index([companyId])
   @@index([externalId])
@@ -220,7 +222,8 @@ model Appointment {
   closer        User?         @relation("CloserAppointments", fields: [closerId], references: [id])
   setter        User?         @relation("SetterAppointments", fields: [setterId], references: [id])
   trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
-  sale          Sale?        @relation(fields: [saleId], references: [id])
+  sale          Sale?        @relation("AppointmentSale", fields: [saleId], references: [id])
+  matchedSales  Sale[]       @relation("AppointmentMatches")
   paymentLinks  PaymentLink[]
 
   @@index([companyId])
