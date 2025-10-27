@@ -17,7 +17,6 @@ export async function POST(request: Request) {
           name: companyName,
           processor: processor,
           processorAccountId: webhookSecret,
-          updatedAt: new Date(),
         },
         create: {
           name: companyName,
