@@ -58,8 +58,8 @@ export async function GET(request: Request) {
       const signed = appointments.filter(a => a.status === 'signed').length
       const noShows = appointments.filter(a => a.status === 'no_show').length
       
-      const showRate = scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : 0
-      const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : 0
+      const showRate = scheduled > 0 ? (showed / scheduled) * 100 : 0
+      const closeRate = showed > 0 ? (signed / showed) * 100 : 0
       
       const totalRevenue = appointments.reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
       
@@ -89,8 +89,8 @@ export async function GET(request: Request) {
         showed,
         signed,
         noShows,
-        showRate: parseFloat(showRate),
-        closeRate: parseFloat(closeRate),
+        showRate: Number(showRate.toFixed(1)),
+        closeRate: Number(closeRate.toFixed(1)),
         totalRevenue,
         totalCommissions,
         pendingCommissions,
