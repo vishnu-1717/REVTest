@@ -122,6 +122,10 @@ export async function requireAdmin() {
 export async function requireRep() {
   const user = await requireAuth()
   
+  if (!user) {
+    redirect('/sign-in')
+  }
+  
   if (user.role !== 'rep' && user.role !== 'closer') {
     redirect('/dashboard')
   }
