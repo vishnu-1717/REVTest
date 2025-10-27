@@ -65,13 +65,28 @@ export async function POST(req: Request) {
             }
           })
         } else {
+          // Find or create a default company
+          let defaultCompany = await prisma.company.findFirst({
+            where: { email: 'default@paymaestro.com' }
+          })
+          
+          if (!defaultCompany) {
+            defaultCompany = await prisma.company.create({
+              data: {
+                name: 'Default Company',
+                email: 'default@paymaestro.com',
+                processor: 'whop'
+              }
+            })
+          }
+          
           // Create new user record
           await prisma.user.create({
             data: {
               email,
               name: `${first_name || ''} ${last_name || ''}`.trim() || email.split('@')[0],
               role: 'user',
-              companyId: 'default-company-id', // You'll need to handle this properly
+              companyId: defaultCompany.id,
               customFields: {
                 clerkId: id
               }
