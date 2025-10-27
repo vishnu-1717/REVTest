@@ -21,17 +21,22 @@ export async function getCurrentUser() {
     if (!dbUser) {
       // Get Clerk user details
       const clerkUser = await currentUser()
+      const email = clerkUser?.emailAddresses[0]?.emailAddress || 'unknown@example.com'
+      
+      // Check if this is a super admin email
+      const superAdminEmails = ['ben@systemizedsales.com']
+      const isSuperAdminEmail = superAdminEmails.includes(email)
       
       // Check if there are any users in the database
       const userCount = await prisma.user.count()
       const isFirstUser = userCount === 0
       
-      // Auto-create user as super admin if this is the first user
-      if (isFirstUser) {
+      // Auto-create user as super admin if this is the first user OR super admin email
+      if (isFirstUser || isSuperAdminEmail) {
         const newUser = await prisma.user.create({
           data: {
             clerkId: userId,
-            email: clerkUser?.emailAddresses[0]?.emailAddress || 'unknown@example.com',
+            email: email,
             name: clerkUser?.fullName || 'User',
             role: 'admin',
             superAdmin: true,
@@ -61,10 +66,46 @@ export async function getCurrentUser() {
         }
       }
       
+      // Check if user exists by email (might have clerkId missing)
+      const existingByEmail = await prisma.user.findFirst({
+        where: { email }
+      })
+      
+      if (existingByEmail) {
+        // Update with clerkId and superAdmin if applicable
+        const updatedUser = await prisma.user.update({
+          where: { id: existingByEmail.id },
+          data: {
+            clerkId: userId,
+            ...(isSuperAdminEmail && { superAdmin: true, role: 'admin' })
+          },
+          include: {
+            Company: true,
+            commissionRole: true
+          }
+        })
+        
+        return {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          role: updatedUser.role,
+          superAdmin: updatedUser.superAdmin,
+          companyId: updatedUser.companyId,
+          customFields: updatedUser.customFields,
+          Company: updatedUser.Company,
+          commissionRole: updatedUser.commissionRole,
+          commissionRoleId: updatedUser.commissionRoleId,
+          customCommissionRate: updatedUser.customCommissionRate,
+          canViewTeamMetrics: updatedUser.canViewTeamMetrics,
+          isActive: updatedUser.isActive
+        }
+      }
+      
       // Not first user, return temporary user
       return {
         id: userId,
-        email: clerkUser?.emailAddresses[0]?.emailAddress || 'unknown@example.com',
+        email: email,
         name: clerkUser?.fullName || 'User',
         role: 'user',
         superAdmin: false,

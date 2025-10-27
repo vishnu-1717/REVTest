@@ -14,7 +14,7 @@ export default async function DashboardLayout({
     redirect('/sign-in')
   }
   
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.superAdmin
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -84,7 +84,7 @@ export default async function DashboardLayout({
             <div className="flex items-center">
               <div className="flex-shrink-0">
                 <span className="text-sm text-gray-700 mr-4">
-                  {user?.name || 'User'} ({user?.role || 'user'})
+                  {user?.name || 'User'} ({user?.superAdmin ? 'super admin' : user?.role || 'user'})
                 </span>
               </div>
               <UserButton afterSignOutUrl="/" />
