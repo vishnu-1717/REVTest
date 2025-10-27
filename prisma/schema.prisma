@@ -106,6 +106,8 @@ model User {
   email                     String       @unique
   name                      String
   role                      String
+  superAdmin                Boolean      @default(false)
+  clerkId                   String?      @unique
   companyId                 String
   commissionRoleId          String?
   customCommissionRate      Float?
