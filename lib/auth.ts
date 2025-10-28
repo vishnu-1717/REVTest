@@ -251,17 +251,23 @@ export async function getImpersonatedUser() {
   const cookieStore = await cookies()
   const impersonatedUserId = cookieStore.get('impersonated_user_id')?.value
   
+  console.log('getImpersonatedUser: Cookie store keys:', Object.keys(cookieStore.getAll()))
+  console.log('getImpersonatedUser: impersonated_user_id cookie value:', impersonatedUserId)
+  
   if (!impersonatedUserId) return null
   
+  console.log('getImpersonatedUser: Looking up ID from cookie:', impersonatedUserId)
   // Get the impersonated user from database
   return await withPrisma(async (prisma) => {
-    return await prisma.user.findUnique({
+    const foundUser = await prisma.user.findUnique({
       where: { id: impersonatedUserId },
       include: {
         Company: true,
         commissionRole: true
       }
     })
+    console.log('getImpersonatedUser: Prisma lookup result for', impersonatedUserId, ':', foundUser ? foundUser.id : 'null')
+    return foundUser
   })
 }
 

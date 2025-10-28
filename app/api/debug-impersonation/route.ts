@@ -8,6 +8,10 @@ export async function GET() {
     const impersonatedUserId = cookieStore.get('impersonated_user_id')?.value
     const originalUserId = cookieStore.get('original_user_id')?.value
     
+    console.log('Debug endpoint: All cookies received:', cookieStore.getAll())
+    console.log('Debug endpoint: impersonated_user_id:', impersonatedUserId)
+    console.log('Debug endpoint: original_user_id:', originalUserId)
+    
     const currentUser = await getCurrentUser()
     const impersonatedUser = await getImpersonatedUser()
     const effectiveUser = await getEffectiveUser()
