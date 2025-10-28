@@ -24,6 +24,10 @@ interface User {
     Commission: number
   }
   createdAt: string
+  Company?: {
+    id: string
+    name: string
+  } | null
 }
 
 interface CommissionRole {
@@ -37,6 +41,7 @@ export default function UsersPage() {
   const [roles, setRoles] = useState<CommissionRole[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   
   const [formData, setFormData] = useState({
     name: '',
@@ -51,6 +56,13 @@ export default function UsersPage() {
     fetchUsers()
     fetchRoles()
   }, [])
+  
+  useEffect(() => {
+    // Detect if user is viewing as super admin (multiple companies visible)
+    const hasMultipleCompanies = new Set(users.map(u => u.Company?.id).filter(Boolean)).size > 1
+    const hasCompanyColumn = users.some(u => u.Company !== null && u.Company !== undefined)
+    setIsSuperAdmin(hasMultipleCompanies || hasCompanyColumn)
+  }, [users])
   
   const fetchUsers = async () => {
     try {
@@ -108,6 +120,29 @@ export default function UsersPage() {
     } catch (error) {
       console.error('Failed to create user:', error)
       alert('Failed to create user')
+    }
+  }
+  
+  const handleImpersonate = async (userId: string) => {
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        alert(error.error || 'Failed to impersonate user')
+        return
+      }
+      
+      // Refresh page to show impersonation state
+      window.location.href = '/dashboard'
+      
+    } catch (error) {
+      console.error('Failed to impersonate user:', error)
+      alert('Failed to impersonate user')
     }
   }
   
@@ -273,6 +308,11 @@ export default function UsersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Role
                   </th>
+                  {isSuperAdmin && (
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Company
+                    </th>
+                  )}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Commission
                   </th>
@@ -301,6 +341,11 @@ export default function UsersPage() {
                         {user.role}
                       </span>
                     </td>
+                    {isSuperAdmin && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {user.Company?.name || 'N/A'}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {getCommissionRate(user)}
                     </td>
@@ -320,6 +365,12 @@ export default function UsersPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <button
+                        onClick={() => handleImpersonate(user.id)}
+                        className="text-blue-600 hover:text-blue-800 mr-3 flex items-center gap-1"
+                      >
+                        👁️ View As
+                      </button>
                       <Link
                         href={`/admin/users/${user.id}`}
                         className="text-blue-600 hover:text-blue-800 mr-3"

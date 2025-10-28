@@ -10,25 +10,25 @@ datasource db {
 }
 
 model Commission {
-  id           String    @id @default(cuid())
-  amount       Decimal   @db.Decimal(10, 2)
-  percentage   Decimal?  @db.Decimal(5, 2)
-  status       String    @default("pending")
-  releasedAmount Decimal @db.Decimal(10, 2) @default(0)
-  totalAmount  Decimal   @db.Decimal(10, 2) @default(0)
-  releaseStatus String   @default("pending")
-  overrideAmount Decimal? @db.Decimal(10, 2)
-  overrideReason String?
+  id               String    @id @default(cuid())
+  amount           Decimal   @db.Decimal(10, 2)
+  percentage       Decimal?  @db.Decimal(5, 2)
+  status           String    @default("pending")
+  releasedAmount   Decimal   @default(0) @db.Decimal(10, 2)
+  totalAmount      Decimal   @default(0) @db.Decimal(10, 2)
+  releaseStatus    String    @default("pending")
+  overrideAmount   Decimal?  @db.Decimal(10, 2)
+  overrideReason   String?
   overrideByUserId String?
-  calculatedAt DateTime  @default(now())
-  approvedAt   DateTime?
-  paidAt       DateTime?
-  saleId       String    @unique
-  repId        String
-  companyId    String
-  Company      Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  User         User      @relation(fields: [repId], references: [id], onDelete: Cascade)
-  Sale         Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  calculatedAt     DateTime  @default(now())
+  approvedAt       DateTime?
+  paidAt           DateTime?
+  saleId           String    @unique
+  repId            String
+  companyId        String
+  Company          Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  User             User      @relation(fields: [repId], references: [id], onDelete: Cascade)
+  Sale             Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([repId])
@@ -36,15 +36,15 @@ model Commission {
 }
 
 model Company {
-  id                   String       @id @default(cuid())
+  id                   String             @id @default(cuid())
   name                 String
-  email                String       @unique
+  email                String             @unique
   processor            String
   processorAccountId   String?
   processorConnectedAt DateTime?
-  inviteCode           String?      @unique
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  inviteCode           String?            @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
   Commission           Commission[]
   Sale                 Sale[]
   User                 User[]
@@ -60,41 +60,41 @@ model Company {
 }
 
 model Sale {
-  id            String      @id @default(cuid())
-  amount        Decimal     @db.Decimal(10, 2)
-  currency      String      @default("USD")
-  status        String
-  processor     String
-  externalId    String      @unique
-  processorFees Decimal?    @db.Decimal(10, 2)
-  netAmount     Decimal?    @db.Decimal(10, 2)
-  source        String?
-  customerEmail String?
-  customerName  String?
-  rawData       Json?
-  paidAt        DateTime?
-  paymentType   String?
-  totalAmount   Float?
-  remainingAmount Float?
-  matchedBy     String?
-  matchConfidence Float?
-  manuallyMatched Boolean   @default(false)
-  matchedByUserId String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  repId         String?
-  contactId     String?
-  companyId     String
-  paymentLinkId String?
-  appointmentId String?
-  Commission    Commission?
-  Company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  User          User?       @relation(fields: [repId], references: [id])
-  Contact       Contact?    @relation(fields: [contactId], references: [id])
-  PaymentLink   PaymentLink? @relation(fields: [paymentLinkId], references: [id])
-  appointmentForSale Appointment? @relation("AppointmentSale")
-  Appointment   Appointment? @relation("AppointmentMatches", fields: [appointmentId], references: [id])
-  UnmatchedPayment UnmatchedPayment?
+  id                 String            @id @default(cuid())
+  amount             Decimal           @db.Decimal(10, 2)
+  currency           String            @default("USD")
+  status             String
+  processor          String
+  externalId         String            @unique
+  processorFees      Decimal?          @db.Decimal(10, 2)
+  netAmount          Decimal?          @db.Decimal(10, 2)
+  source             String?
+  customerEmail      String?
+  customerName       String?
+  rawData            Json?
+  paidAt             DateTime?
+  paymentType        String?
+  totalAmount        Float?
+  remainingAmount    Float?
+  matchedBy          String?
+  matchConfidence    Float?
+  manuallyMatched    Boolean           @default(false)
+  matchedByUserId    String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  repId              String?
+  contactId          String?
+  companyId          String
+  paymentLinkId      String?
+  appointmentId      String?
+  Commission         Commission?
+  Company            Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  User               User?             @relation(fields: [repId], references: [id])
+  Contact            Contact?          @relation(fields: [contactId], references: [id])
+  PaymentLink        PaymentLink?      @relation(fields: [paymentLinkId], references: [id])
+  appointmentForSale Appointment?      @relation("AppointmentSale")
+  Appointment        Appointment?      @relation("AppointmentMatches", fields: [appointmentId], references: [id])
+  UnmatchedPayment   UnmatchedPayment?
 
   @@index([companyId])
   @@index([externalId])
@@ -104,27 +104,27 @@ model Sale {
 }
 
 model User {
-  id                        String       @id @default(cuid())
-  email                     String       @unique
-  name                      String
-  role                      String
-  superAdmin                Boolean      @default(false)
-  clerkId                   String?      @unique
-  companyId                 String
-  commissionRoleId          String?
-  customCommissionRate      Float?
-  canViewTeamMetrics        Boolean      @default(false)
-  canViewLeaderboard        Boolean      @default(true)
-  isActive                  Boolean      @default(true)
-  customFields              Json?
-  createdAt                 DateTime     @default(now())
-  updatedAt                 DateTime     @updatedAt
-  Commission                Commission[]
-  Sale                      Sale[]
-  Company                   Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  commissionRole            CommissionRole? @relation(fields: [commissionRoleId], references: [id])
-  AppointmentsAsCloser      Appointment[] @relation("CloserAppointments")
-  AppointmentsAsSetter      Appointment[] @relation("SetterAppointments")
+  id                   String          @id @default(cuid())
+  email                String          @unique
+  name                 String
+  role                 String
+  superAdmin           Boolean         @default(false)
+  clerkId              String?         @unique
+  companyId            String
+  commissionRoleId     String?
+  customCommissionRate Float?
+  canViewTeamMetrics   Boolean         @default(false)
+  canViewLeaderboard   Boolean         @default(true)
+  isActive             Boolean         @default(true)
+  customFields         Json?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  Commission           Commission[]
+  Sale                 Sale[]
+  Company              Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  commissionRole       CommissionRole? @relation(fields: [commissionRoleId], references: [id])
+  AppointmentsAsCloser Appointment[]   @relation("CloserAppointments")
+  AppointmentsAsSetter Appointment[]   @relation("SetterAppointments")
 
   @@index([companyId])
   @@index([email])
@@ -149,81 +149,81 @@ model WebhookEvent {
 }
 
 model Contact {
-  id        String    @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  companyId String
+  id           String   @id @default(cuid())
+  name         String
+  email        String?
+  phone        String?
+  companyId    String
   ghlContactId String?
   customFields Json?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime @updatedAt
-  
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
-  
+
   trafficSourceId String?
-  Appointment      Appointment[]
-  Sale             Sale[]
+  Appointment     Appointment[]
+  Sale            Sale[]
 
   @@index([companyId, email])
   @@index([ghlContactId])
 }
 
 model TrafficSource {
-  id        String   @id @default(cuid())
-  name      String
-  type      String
-  companyId String
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  companyId   String
   monthlyCost Float?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  Contact      Contact[]
-  Appointment  Appointment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  Contact     Contact[]
+  Appointment Appointment[]
 
   @@index([companyId])
 }
 
 model Appointment {
-  id        String   @id @default(cuid())
-  scheduledAt DateTime
-  startTime   DateTime?
-  endTime     DateTime?
-  companyId String
-  contactId String
-  closerId  String?
-  setterId  String?
-  trafficSourceId String?
-  calendar  String?
-  status    String
-  outcome   String?
-  objectionType String?
-  objectionNotes String? @db.Text
-  notes     String? @db.Text
-  isFirstCall  Boolean @default(true)
-  duration     Int?
-  recordingUrl String?
-  followUpScheduled Boolean @default(false)
-  followUpDate      DateTime?
-  nurtureType       String?
-  qualificationStatus String?
+  id                     String    @id @default(cuid())
+  scheduledAt            DateTime
+  startTime              DateTime?
+  endTime                DateTime?
+  companyId              String
+  contactId              String
+  closerId               String?
+  setterId               String?
+  trafficSourceId        String?
+  calendar               String?
+  status                 String
+  outcome                String?
+  objectionType          String?
+  objectionNotes         String?   @db.Text
+  notes                  String?   @db.Text
+  isFirstCall            Boolean   @default(true)
+  duration               Int?
+  recordingUrl           String?
+  followUpScheduled      Boolean   @default(false)
+  followUpDate           DateTime?
+  nurtureType            String?
+  qualificationStatus    String?
   disqualificationReason String?
-  cashCollected Float?
-  saleId        String? @unique
-  ghlAppointmentId String?
-  customFields     Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  contact       Contact       @relation(fields: [contactId], references: [id])
-  closer        User?         @relation("CloserAppointments", fields: [closerId], references: [id])
-  setter        User?         @relation("SetterAppointments", fields: [setterId], references: [id])
+  cashCollected          Float?
+  saleId                 String?   @unique
+  ghlAppointmentId       String?
+  customFields           Json?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact       Contact        @relation(fields: [contactId], references: [id])
+  closer        User?          @relation("CloserAppointments", fields: [closerId], references: [id])
+  setter        User?          @relation("SetterAppointments", fields: [setterId], references: [id])
   trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
-  sale          Sale?        @relation("AppointmentSale", fields: [saleId], references: [id])
-  matchedSales  Sale[]       @relation("AppointmentMatches")
+  sale          Sale?          @relation("AppointmentSale", fields: [saleId], references: [id])
+  matchedSales  Sale[]         @relation("AppointmentMatches")
   paymentLinks  PaymentLink[]
 
   @@index([companyId])
@@ -249,40 +249,40 @@ model CommissionRole {
 }
 
 model PaymentLink {
-  id        String   @id @default(cuid())
+  id            String    @id @default(cuid())
   appointmentId String
-  companyId String
-  token     String   @unique
-  expiresAt DateTime?
-  opens     Int      @default(0)
-  lastOpenedAt DateTime?
-  amount    Float
-  paymentType String
-  status    String   @default("pending")
-  paidAt    DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sales         Sale[]
+  companyId     String
+  token         String    @unique
+  expiresAt     DateTime?
+  opens         Int       @default(0)
+  lastOpenedAt  DateTime?
+  amount        Float
+  paymentType   String
+  status        String    @default("pending")
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sales       Sale[]
 
   @@index([token])
   @@index([appointmentId])
 }
 
 model UnmatchedPayment {
-  id        String   @id @default(cuid())
-  saleId    String   @unique
-  companyId String
+  id               String    @id @default(cuid())
+  saleId           String    @unique
+  companyId        String
   suggestedMatches Json?
-  status    String   @default("pending")
-  reviewedAt DateTime?
+  status           String    @default("pending")
+  reviewedAt       DateTime?
   reviewedByUserId String?
-  createdAt DateTime @default(now())
-  
-  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, status])
 }

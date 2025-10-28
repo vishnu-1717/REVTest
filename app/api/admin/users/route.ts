@@ -7,12 +7,18 @@ export async function GET() {
     const user = await requireAdmin()
     
     const users = await withPrisma(async (prisma) => {
+      const where: any = {}
+      
+      // If not super admin, filter by company
+      if (!user.superAdmin) {
+        where.companyId = user.companyId
+      }
+      
       return await prisma.user.findMany({
-        where: {
-          companyId: user.companyId
-        },
+        where,
         include: {
           commissionRole: true,
+          Company: true, // Include for super admin view
           _count: {
             select: {
               AppointmentsAsCloser: true,

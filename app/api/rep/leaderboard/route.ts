@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth()
+    const user = await getEffectiveUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -30,7 +30,6 @@ export async function GET(request: Request) {
       const users = await prisma.user.findMany({
         where: {
           companyId: user.companyId,
-          isActive: true,
           role: { in: ['rep', 'closer', 'setter'] }
         }
       })
@@ -48,8 +47,8 @@ export async function GET(request: Request) {
             }
           })
           
-          const signed = appointments.filter(a => a.status === 'signed')
-          const totalRevenue = appointments.reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
+          const signed = appointments.filter((a: any) => a.status === 'signed')
+          const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
           
           const commissions = await prisma.commission.findMany({
             where: {
@@ -61,7 +60,7 @@ export async function GET(request: Request) {
             }
           })
           
-          const totalCommissions = commissions.reduce((sum, com) => sum + Number(com.totalAmount), 0)
+          const totalCommissions = commissions.reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
           
           return {
             id: rep.id,

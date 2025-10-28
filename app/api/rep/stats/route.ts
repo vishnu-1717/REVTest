@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/auth'
+import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth()
+    const user = await getEffectiveUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,35 +53,35 @@ export async function GET(request: Request) {
       
       // Calculate stats
       const totalAppointments = appointments.length
-      const scheduled = appointments.filter(a => a.status !== 'cancelled').length
-      const showed = appointments.filter(a => a.status === 'showed' || a.status === 'signed').length
-      const signed = appointments.filter(a => a.status === 'signed').length
-      const noShows = appointments.filter(a => a.status === 'no_show').length
+      const scheduled = appointments.filter((a: any) => a.status !== 'cancelled').length
+      const showed = appointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length
+      const signed = appointments.filter((a: any) => a.status === 'signed').length
+      const noShows = appointments.filter((a: any) => a.status === 'no_show').length
       
       const showRate = scheduled > 0 ? (showed / scheduled) * 100 : 0
       const closeRate = showed > 0 ? (signed / showed) * 100 : 0
       
-      const totalRevenue = appointments.reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
+      const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
       
-      const totalCommissions = commissions.reduce((sum, com) => sum + Number(com.totalAmount), 0)
+      const totalCommissions = commissions.reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
       const pendingCommissions = commissions
-        .filter(c => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
-        .reduce((sum, com) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
+        .filter((c: any) => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
+        .reduce((sum: number, com: any) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
       const releasedCommissions = commissions
-        .filter(c => c.releaseStatus === 'released')
-        .reduce((sum, com) => sum + Number(com.releasedAmount), 0)
+        .filter((c: any) => c.releaseStatus === 'released')
+        .reduce((sum: number, com: any) => sum + Number(com.releasedAmount), 0)
       const paidCommissions = commissions
-        .filter(c => c.releaseStatus === 'paid')
-        .reduce((sum, com) => sum + Number(com.totalAmount), 0)
+        .filter((c: any) => c.releaseStatus === 'paid')
+        .reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
       
       // Follow-ups needed
-      const followUpsNeeded = appointments.filter(a => 
+      const followUpsNeeded = appointments.filter((a: any) => 
         a.followUpScheduled && 
         a.status !== 'signed' && 
         a.status !== 'cancelled'
       )
       
-      const redzoneFollowUps = followUpsNeeded.filter(a => a.nurtureType === 'Redzone (Within 7 Days)')
+      const redzoneFollowUps = followUpsNeeded.filter((a: any) => a.nurtureType === 'Redzone (Within 7 Days)')
       
       return {
         totalAppointments,

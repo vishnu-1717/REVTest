@@ -1,32 +1,47 @@
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, getEffectiveUser, isImpersonating, getImpersonatedUser } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
 import CompanySwitcher from '@/components/CompanySwitcher'
+import ImpersonationBanner from '@/components/ImpersonationBanner'
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const user = await getCurrentUser()
+  // Get effective user (which may be impersonated)
+  const effectiveUser = await getEffectiveUser()
   
-  if (!user) {
+  if (!effectiveUser) {
     redirect('/sign-in')
   }
   
-  const isAdmin = user?.role === 'admin' || user?.superAdmin
-  const isSuperAdmin = user?.superAdmin
+  // Check if currently impersonating
+  const impersonating = await isImpersonating()
+  const impersonatedUser = impersonating ? await getImpersonatedUser() : null
+  
+  const isAdmin = effectiveUser?.role === 'admin' || effectiveUser?.superAdmin
+  const isSuperAdmin = effectiveUser?.superAdmin
   
   // Get company name if available
   let currentCompanyName: string | null = null
-  if (isSuperAdmin && user.companyId) {
+  if (isSuperAdmin && effectiveUser.companyId) {
     // This will be filled in client-side by CompanySwitcher
     currentCompanyName = null
   }
   
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Impersonation Banner */}
+      {impersonating && impersonatedUser && (
+        <ImpersonationBanner 
+          impersonatedUserName={impersonatedUser.name}
+          impersonatedUserEmail={impersonatedUser.email}
+          companyName={impersonatedUser.Company?.name || 'Unknown Company'}
+        />
+      )}
+      
       {/* Top Navigation */}
       <nav className="bg-white border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -136,9 +151,9 @@ export default async function DashboardLayout({
             
               {/* User Menu */}
             <div className="flex items-center gap-3">
-              {isSuperAdmin && (
+              {isSuperAdmin && !impersonating && (
                 <CompanySwitcher
-                  currentCompanyId={user.companyId}
+                  currentCompanyId={effectiveUser.companyId}
                   currentCompanyName={null}
                   isSuperAdmin={true}
                 />
@@ -146,7 +161,7 @@ export default async function DashboardLayout({
               
               <div className="flex-shrink-0">
                 <span className="text-sm text-gray-700 mr-4">
-                  {user?.name || 'User'} ({user?.superAdmin ? 'super admin' : user?.role || 'user'})
+                  {effectiveUser?.name || 'User'} ({effectiveUser?.superAdmin ? 'super admin' : effectiveUser?.role || 'user'})
                 </span>
               </div>
               <UserButton afterSignOutUrl="/" />

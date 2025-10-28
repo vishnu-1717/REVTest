@@ -1,6 +1,7 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { withPrisma } from './db'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 
 export async function getCurrentUser() {
   const { userId } = await auth()
@@ -24,7 +25,7 @@ export async function getCurrentUser() {
       const email = clerkUser?.emailAddresses[0]?.emailAddress || 'unknown@example.com'
       
       // Check if this is a super admin email
-      const superAdminEmails = ['ben@systemizedsales.com']
+      const superAdminEmails = ['ben@systemizedsales.com', 'dylan@automatedrev.com', 'jake@systemizedsales.com']
       const isSuperAdminEmail = superAdminEmails.includes(email)
       
       // Check if there are any users in the database
@@ -243,4 +244,53 @@ export function canViewTeamMetrics(user: any) {
 
 export function isSuperAdmin(user: any) {
   return user?.superAdmin === true
+}
+
+// Impersonation helpers
+export async function getImpersonatedUser() {
+  const cookieStore = await cookies()
+  const impersonatedUserId = cookieStore.get('impersonated_user_id')?.value
+  
+  if (!impersonatedUserId) return null
+  
+  // Get the impersonated user from database
+  return await withPrisma(async (prisma) => {
+    return await prisma.user.findUnique({
+      where: { id: impersonatedUserId },
+      include: {
+        Company: true,
+        commissionRole: true
+      }
+    })
+  })
+}
+
+export async function getEffectiveUser() {
+  const impersonatedUser = await getImpersonatedUser()
+  
+  if (impersonatedUser) {
+    return {
+      id: impersonatedUser.id,
+      email: impersonatedUser.email,
+      name: impersonatedUser.name,
+      role: impersonatedUser.role,
+      superAdmin: impersonatedUser.superAdmin,
+      companyId: impersonatedUser.companyId,
+      customFields: impersonatedUser.customFields,
+      Company: impersonatedUser.Company,
+      commissionRole: impersonatedUser.commissionRole,
+      commissionRoleId: impersonatedUser.commissionRoleId,
+      customCommissionRate: impersonatedUser.customCommissionRate,
+      canViewTeamMetrics: impersonatedUser.canViewTeamMetrics,
+      isActive: impersonatedUser.isActive,
+      _impersonating: true
+    }
+  }
+  
+  return await getCurrentUser()
+}
+
+export async function isImpersonating() {
+  const cookieStore = await cookies()
+  return !!cookieStore.get('impersonated_user_id')?.value
 }

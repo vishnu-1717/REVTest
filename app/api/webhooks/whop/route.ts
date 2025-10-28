@@ -21,8 +21,6 @@ export async function POST(request: NextRequest) {
     // Get webhook payload
     const body = await request.json()
     
-    console.log('Webhook received:', body)
-    
     // Use withPrisma to handle webhook processing
     const result = await withPrisma(async (prisma) => {
       // Verify the company exists and secret matches
@@ -40,11 +38,8 @@ export async function POST(request: NextRequest) {
       // Extract payment data from webhook
       const eventType = body.action || body.type || body.event
       
-      console.log('Event type:', eventType)
-      
       // Only process payment success events
       if (eventType !== 'payment.succeeded' && eventType !== 'payment_succeeded' && eventType !== 'checkout.completed') {
-        console.log('Ignoring non-payment event:', eventType)
         return { received: true, skipped: true }
       }
       
@@ -72,15 +67,12 @@ export async function POST(request: NextRequest) {
           appointmentId: body.metadata?.appointment_id || body.client_reference_id || body.data?.metadata?.appointment_id
         }
         
-        console.log('Payment data:', paymentData)
-        
         // Check if payment already processed
         const existingSale = await prisma.sale.findUnique({
           where: { externalId: paymentData.externalId }
         })
         
         if (existingSale) {
-          console.log('Payment already processed:', paymentData.externalId)
           await prisma.webhookEvent.update({
             where: { id: webhookEvent.id },
             data: { 
@@ -100,8 +92,6 @@ export async function POST(request: NextRequest) {
           externalId: paymentData.externalId,
           appointmentId: paymentData.appointmentId
         })
-        
-        console.log('Match result:', matchResult)
         
         // Create sale record
         const sale = await prisma.sale.create({
@@ -164,11 +154,7 @@ export async function POST(request: NextRequest) {
               }
             })
             
-            console.log('Commission created:', {
-              rep: appointment.closer.name,
-              amount: releasedCommission,
-              rate: commissionRate
-            })
+            // Commission created successfully
             
             // Update payment link status if applicable
             if (paymentData.appointmentId) {
@@ -195,11 +181,7 @@ export async function POST(request: NextRequest) {
             }
           })
           
-          console.log('Created unmatched payment for review:', {
-            saleId: sale.id,
-            confidence: matchResult.confidence,
-            method: matchResult.method
-          })
+          // Created unmatched payment for review
         }
         
         // Mark as processed
