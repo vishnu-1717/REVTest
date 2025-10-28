@@ -6,8 +6,8 @@ export async function POST() {
     const cookieStore = await cookies()
     
     // Clear impersonation cookies
-    cookieStore.delete('impersonated_user_id')
-    cookieStore.delete('original_user_id')
+    cookieStore.set('impersonated_user_id', '', { path: '/', maxAge: 0 })
+    cookieStore.set('original_user_id', '', { path: '/', maxAge: 0 })
     
     return NextResponse.json({ success: true })
     
