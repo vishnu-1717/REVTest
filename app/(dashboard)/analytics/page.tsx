@@ -72,6 +72,13 @@ export default function AnalyticsPage() {
         if (value) params.append(key, value)
       })
       
+      // Include viewAs parameter from current URL if present
+      const urlParams = new URLSearchParams(window.location.search)
+      const viewAs = urlParams.get('viewAs')
+      if (viewAs) {
+        params.append('viewAs', viewAs)
+      }
+      
       const res = await fetch(`/api/analytics?${params}`, {
         credentials: 'include'
       })
