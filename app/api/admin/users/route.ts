@@ -1,10 +1,19 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
 export async function GET() {
   try {
-    const user = await requireAdmin()
+    const user = await getEffectiveUser()
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (user.role !== 'admin' && !user.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
     
     const users = await withPrisma(async (prisma) => {
       const where: any = {}
@@ -40,7 +49,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireAdmin()
+    const user = await getEffectiveUser()
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (user.role !== 'admin' && !user.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics } = await request.json()
     
     const newUser = await withPrisma(async (prisma) => {

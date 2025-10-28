@@ -1,33 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
-import { requireAuth, canViewAllData } from '@/lib/auth'
+import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await getEffectiveUser()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
     const searchParams = request.nextUrl.searchParams
     
-    // Check if super admin is viewing as another company
-    const viewAsCompanyId = searchParams.get('viewAs')
-    
     // Build where clause based on filters
     const where: any = {
-      companyId: viewAsCompanyId || user.companyId
+      companyId: user.companyId
     }
     
     // If not admin, only show their appointments
     if (!canViewAllData(user)) {
       where.closerId = user.id
-    }
-    
-    // For super admins viewing as another company, show all appointments for that company
-    if (viewAsCompanyId && user.superAdmin) {
-      // Don't filter by closerId for super admin viewing another company
-      delete where.closerId
     }
     
     // Date filters
@@ -122,7 +113,9 @@ export async function GET(request: NextRequest) {
     const timeOfDay = searchParams.get('timeOfDay')
     if (timeOfDay) {
       filteredAppointments = filteredAppointments.filter(apt => {
-        const hour = new Date(apt.scheduledAt).getHours()
+        // Use startTime if available, otherwise fall back to scheduledAt
+        const timeToCheck = apt.startTime || apt.scheduledAt
+        const hour = new Date(timeToCheck).getHours()
         switch(timeOfDay) {
           case 'morning': return hour >= 6 && hour < 12
           case 'afternoon': return hour >= 12 && hour < 17
@@ -309,7 +302,9 @@ export async function GET(request: NextRequest) {
     // Time of day analysis
     const byTimeOfDay = ['morning', 'afternoon', 'evening', 'night'].map(period => {
       const periodAppointments = filteredAppointments.filter(apt => {
-        const hour = new Date(apt.scheduledAt).getHours()
+        // Use startTime if available, otherwise fall back to scheduledAt
+        const timeToCheck = apt.startTime || apt.scheduledAt
+        const hour = new Date(timeToCheck).getHours()
         switch(period) {
           case 'morning': return hour >= 6 && hour < 12
           case 'afternoon': return hour >= 12 && hour < 17
