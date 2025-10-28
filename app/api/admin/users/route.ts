@@ -15,6 +15,13 @@ export async function GET() {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
+    console.log('Users API - Effective user:', {
+      id: user.id,
+      name: user.name,
+      companyId: user.companyId,
+      isImpersonating: (user as any)._impersonating
+    })
+    
     const users = await withPrisma(async (prisma) => {
       const where: any = {}
       
@@ -22,6 +29,8 @@ export async function GET() {
       if (!user.superAdmin) {
         where.companyId = user.companyId
       }
+      
+      console.log('Users API - Where clause:', where)
       
       return await prisma.user.findMany({
         where,
@@ -41,8 +50,11 @@ export async function GET() {
       })
     })
     
+    console.log('Users API - Found users:', users.length)
+    
     return NextResponse.json(users)
   } catch (error: any) {
+    console.error('Users API error:', error)
     return NextResponse.json({ error: error.message }, { status: 401 })
   }
 }

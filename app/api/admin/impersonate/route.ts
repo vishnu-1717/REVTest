@@ -9,6 +9,14 @@ export async function POST(request: Request) {
     
     const { userId } = await request.json()
     
+    console.log('Impersonate API - Current user:', {
+      id: currentUser.id,
+      name: currentUser.name,
+      companyId: currentUser.companyId,
+      superAdmin: currentUser.superAdmin
+    })
+    console.log('Impersonate API - Target userId:', userId)
+    
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
     }
@@ -22,13 +30,26 @@ export async function POST(request: Request) {
     })
     
     if (!targetUser) {
+      console.log('Impersonate API - Target user not found:', userId)
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
+    
+    console.log('Impersonate API - Target user found:', {
+      id: targetUser.id,
+      name: targetUser.name,
+      email: targetUser.email,
+      companyId: targetUser.companyId,
+      companyName: targetUser.Company?.name
+    })
     
     // Check permissions
     // Super admin can impersonate anyone
     // Company admin can only impersonate users in their company
     if (!currentUser.superAdmin && targetUser.companyId !== currentUser.companyId) {
+      console.log('Impersonate API - Permission denied:', {
+        currentUserCompanyId: currentUser.companyId,
+        targetUserCompanyId: targetUser.companyId
+      })
       return NextResponse.json({ error: 'Unauthorized to impersonate this user' }, { status: 403 })
     }
     
