@@ -55,6 +55,9 @@ export async function POST(request: Request) {
     
     // Set impersonation cookie
     const cookieStore = await cookies()
+    console.log('Impersonate API: Setting cookies for userId:', userId)
+    console.log('Impersonate API: Cookie store before setting:', Object.keys(cookieStore.getAll()))
+    
     cookieStore.set('impersonated_user_id', userId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -71,6 +74,9 @@ export async function POST(request: Request) {
       path: '/',
       maxAge: 60 * 60 * 24 // 24 hours
     })
+    
+    console.log('Impersonate API: Cookie store after setting:', Object.keys(cookieStore.getAll()))
+    console.log('Impersonate API: Cookies set successfully')
     
     return NextResponse.json({ 
       success: true,
