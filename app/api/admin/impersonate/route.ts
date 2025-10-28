@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     
     cookieStore.set('impersonated_user_id', userId, {
       httpOnly: true,
-      secure: true, // Always secure for Vercel
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 // 24 hours
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     // Store the actual user ID for reference
     cookieStore.set('original_user_id', currentUser.id, {
       httpOnly: true,
-      secure: true, // Always secure for Vercel
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 // 24 hours
