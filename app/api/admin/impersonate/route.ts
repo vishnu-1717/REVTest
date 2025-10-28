@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const targetUser = await withPrisma(async (prisma) => {
       return await prisma.user.findUnique({
         where: { id: userId },
-        include: { company: true }
+        include: { Company: true }
       })
     })
     
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
         name: targetUser.name,
         email: targetUser.email,
         role: targetUser.role,
-        companyName: targetUser.company?.name
+        companyName: targetUser.Company?.name
       }
     })
     
