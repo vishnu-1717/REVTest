@@ -6,18 +6,8 @@ export async function POST() {
     const cookieStore = await cookies()
     
     // Clear impersonation cookies
-    cookieStore.set('impersonated_user_id', '', { 
-      path: '/', 
-      maxAge: 0,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    })
-    cookieStore.set('original_user_id', '', { 
-      path: '/', 
-      maxAge: 0,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax'
-    })
+    cookieStore.set('impersonated_user_id', '', { maxAge: 0 })
+    cookieStore.set('original_user_id', '', { maxAge: 0 })
     
     return NextResponse.json({ success: true })
     
