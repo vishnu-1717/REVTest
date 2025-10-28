@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/auth'
+import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
 export async function GET(
@@ -7,7 +7,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const currentUser = await requireAdmin()
+    const currentUser = await getEffectiveUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { id } = await params
     
     const user = await withPrisma(async (prisma) => {
@@ -55,7 +65,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const currentUser = await requireAdmin()
+    const currentUser = await getEffectiveUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { id } = await params
     const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
     
@@ -90,7 +110,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await requireAdmin()
+    const currentUser = await getEffectiveUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { id } = await params
     const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
     
@@ -99,7 +129,7 @@ export async function PATCH(
       const existing = await prisma.user.findFirst({
         where: {
           id,
-          companyId: user.companyId
+          companyId: currentUser.companyId
         }
       })
       
@@ -112,7 +142,7 @@ export async function PATCH(
         const emailExists = await prisma.user.findFirst({
           where: {
             email,
-            companyId: user.companyId
+            companyId: currentUser.companyId
           }
         })
         
@@ -154,7 +184,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const currentUser = await requireAdmin()
+    const currentUser = await getEffectiveUser()
+    
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // Verify admin permissions
+    if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { id } = await params
     
     // Don't allow deleting yourself
