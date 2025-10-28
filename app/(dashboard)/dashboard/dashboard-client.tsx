@@ -56,7 +56,9 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       
       // Use different endpoint based on role
       const endpoint = isCompanyAdmin ? '/api/admin/company-stats' : '/api/rep/stats'
-      const res = await fetch(`${endpoint}?${params}`)
+      const res = await fetch(`${endpoint}?${params}`, {
+        credentials: 'include'
+      })
       const data = await res.json()
       setStats(data)
     } catch (error) {
