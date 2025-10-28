@@ -13,7 +13,7 @@ export interface CompanyContext {
  * Get the company context for the current request
  * This determines which company's data should be shown
  */
-export async function getCompanyContext(): Promise<CompanyContext> {
+export async function getCompanyContext(requestUrl?: string): Promise<CompanyContext> {
   const user = await getCurrentUser()
   
   if (!user) {
@@ -36,7 +36,10 @@ export async function getCompanyContext(): Promise<CompanyContext> {
   // For super admins, check for viewAs param
   const headersList = await headers()
   const referer = headersList.get('referer') || ''
-  const viewAsMatch = referer.match(/[?&]viewAs=([a-zA-Z0-9-_]+)/)
+  
+  // Check both referer (for page requests) and requestUrl (for API requests)
+  const urlToCheck = requestUrl || referer
+  const viewAsMatch = urlToCheck.match(/[?&]viewAs=([a-zA-Z0-9-_]+)/)
   const viewAsCompanyId = viewAsMatch ? viewAsMatch[1] : null
   
   if (viewAsCompanyId) {
@@ -78,8 +81,8 @@ export async function getCompanyContext(): Promise<CompanyContext> {
  * Get the effective company ID for data queries
  * Respects viewAs param for super admins
  */
-export async function getEffectiveCompanyId(): Promise<string> {
-  const context = await getCompanyContext()
+export async function getEffectiveCompanyId(requestUrl?: string): Promise<string> {
+  const context = await getCompanyContext(requestUrl)
   return context.viewingCompanyId
 }
 

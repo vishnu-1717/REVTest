@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser, canViewAllData } from '@/lib/auth'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,9 +12,12 @@ export async function GET(request: NextRequest) {
     
     const searchParams = request.nextUrl.searchParams
     
+    // Get the effective company ID (respects viewAs for super admins)
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+    
     // Build where clause based on filters
     const where: any = {
-      companyId: user.companyId
+      companyId: effectiveCompanyId
     }
     
     // If not admin, only show their appointments
