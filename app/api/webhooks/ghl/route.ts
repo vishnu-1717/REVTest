@@ -387,11 +387,29 @@ export async function POST(request: NextRequest) {
       
       if (company && company.ghlApiKey) {
         // Try to fetch appointment data from GHL API
+        // Note: Appointment may not be fully committed yet, so we retry with delay
         try {
           const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
-          const appointments = await ghl.getContactAppointments(webhook.contactId)
+          
+          // First attempt - immediate
+          let appointments = await ghl.getContactAppointments(webhook.contactId)
+          
+          // If no appointments found, wait a moment and retry (appointment might be committing)
+          if (!appointments || appointments.length === 0) {
+            console.log('[GHL Webhook] No appointments found immediately, waiting 2 seconds for appointment to commit...')
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            appointments = await ghl.getContactAppointments(webhook.contactId)
+          }
+          
+          // Second retry if still empty
+          if (!appointments || appointments.length === 0) {
+            console.log('[GHL Webhook] Still no appointments, waiting 3 more seconds...')
+            await new Promise(resolve => setTimeout(resolve, 3000))
+            appointments = await ghl.getContactAppointments(webhook.contactId)
+          }
           
           if (appointments && appointments.length > 0) {
+            console.log(`[GHL Webhook] Found ${appointments.length} appointments after retries`)
             // Get the most recent appointment (usually the one that triggered this webhook)
             // Sort by startTime or dateCreated descending
             const sortedAppointments = appointments.sort((a: any, b: any) => {
@@ -483,26 +501,39 @@ export async function POST(request: NextRequest) {
     console.log('[GHL Webhook] Found company:', company.id, company.name)
     
     // Handle different appointment events
-    switch (webhook.appointmentStatus) {
+    // Note: appointmentStatus might be empty, so check if we have an appointmentId and treat as created
+    if (!webhook.appointmentStatus || webhook.appointmentStatus === '') {
+      if (webhook.appointmentId) {
+        console.log('[GHL Webhook] No appointmentStatus provided but appointmentId exists, treating as created/confirmed')
+        await handleAppointmentCreated(webhook, company)
+      } else {
+        console.log('[GHL Webhook] Processing appointment update (no status provided)')
+        await handleAppointmentUpdated(webhook)
+      }
+    } else {
+      switch (webhook.appointmentStatus.toLowerCase()) {
       case 'confirmed':
       case 'scheduled':
-        console.log('[GHL Webhook] Processing appointment created/confirmed')
-        await handleAppointmentCreated(webhook, company)
+        case 'booked':
+          console.log('[GHL Webhook] Processing appointment created/confirmed')
+          await handleAppointmentCreated(webhook, company)
         break
       
       case 'cancelled':
-        console.log('[GHL Webhook] Processing appointment cancelled')
-        await handleAppointmentCancelled(webhook)
+        case 'canceled':
+          console.log('[GHL Webhook] Processing appointment cancelled')
+          await handleAppointmentCancelled(webhook)
         break
       
       case 'rescheduled':
-        console.log('[GHL Webhook] Processing appointment rescheduled')
-        await handleAppointmentRescheduled(webhook, company)
+          console.log('[GHL Webhook] Processing appointment rescheduled')
+          await handleAppointmentRescheduled(webhook, company)
         break
       
       default:
-        console.log('[GHL Webhook] Processing appointment update (status:', webhook.appointmentStatus, ')')
-        await handleAppointmentUpdated(webhook)
+          console.log('[GHL Webhook] Processing appointment update (status:', webhook.appointmentStatus, ')')
+          await handleAppointmentUpdated(webhook)
+      }
     }
     
     console.log('[GHL Webhook] Successfully processed webhook')
@@ -517,6 +548,13 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
+  console.log('[GHL Webhook] handleAppointmentCreated called with:', {
+    appointmentId: webhook.appointmentId,
+    contactId: webhook.contactId,
+    companyId: company.id,
+    startTime: webhook.startTime
+  })
+  
   await withPrisma(async (prisma) => {
   // Find or create contact
   let contact = await prisma.contact.findFirst({
@@ -525,6 +563,8 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
       ghlContactId: webhook.contactId
     }
   })
+  
+  console.log('[GHL Webhook] Found contact:', contact?.id, contact?.name)
   
   if (!contact && webhook.contactId && company.ghlApiKey) {
     // Fetch contact from GHL
@@ -585,6 +625,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
   const isFirstCall = !calendar?.calendarType?.match(/reschedule|follow.?up/i)
   
     // Create or update appointment
+    console.log('[GHL Webhook] Looking for existing appointment with ghlAppointmentId:', webhook.appointmentId)
     let appointment = await prisma.appointment.findFirst({
     where: {
         ghlAppointmentId: webhook.appointmentId,
@@ -592,9 +633,13 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
       }
     })
     
+    console.log('[GHL Webhook] Existing appointment found:', !!appointment, appointment?.id)
+    
     // Parse dates from webhook (use parsed date if available, otherwise parse raw string)
     const startTimeDate = (webhook as any).startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
     const endTimeDate = (webhook as any).endTimeParsed || parseGHLDate(webhook.endTime) || null
+    
+    console.log('[GHL Webhook] Parsed dates - startTime:', startTimeDate, 'endTime:', endTimeDate)
     
     if (appointment) {
       // Update existing appointment
