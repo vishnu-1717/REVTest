@@ -84,7 +84,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
     
     if (!contact && webhook.contactId && company.ghlApiKey) {
       // Fetch contact from GHL
-      const ghl = new GHLClient(company.ghlApiKey)
+      const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
       const ghlContact = await ghl.getContact(webhook.contactId)
       
       if (ghlContact) {

@@ -18,11 +18,39 @@ export async function POST(request: Request) {
     
     // Test the API key by trying to fetch calendars
     try {
-      const ghl = new GHLClient(apiKey)
-      await ghl.getCalendars()
-    } catch (error) {
+      // Pass locationId to GHLClient - GHL V1 API often requires it for proper scoping
+      const ghl = new GHLClient(apiKey, locationId)
+      const calendars = await ghl.getCalendars()
+      console.log(`GHL validation successful: Found ${calendars.length} calendars for location ${locationId}`)
+    } catch (error: any) {
+      // Log detailed error information for debugging
+      console.error('GHL API validation error:', {
+        status: error.status,
+        message: error.message,
+        details: error.details,
+        stack: error.stack
+      })
+      
+      // Provide more specific error messages based on status code
+      let errorMessage = 'Invalid API key or location ID'
+      
+      if (error.status === 401) {
+        errorMessage = 'Invalid API key. Please check your API key and ensure it has the correct permissions.'
+      } else if (error.status === 403) {
+        errorMessage = 'API key does not have required permissions. Please ensure your API key has Read/Write access.'
+      } else if (error.status === 404) {
+        errorMessage = 'GHL API endpoint not found. Please verify your Location ID or contact support.'
+      } else if (error.status === 429) {
+        errorMessage = 'Rate limit exceeded. Please wait a moment and try again.'
+      } else if (error.details) {
+        // Include details from GHL API if available
+        errorMessage = `GHL API error: ${error.details}`
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
       return NextResponse.json(
-        { error: 'Invalid API key or location ID' },
+        { error: errorMessage },
         { status: 400 }
       )
     }

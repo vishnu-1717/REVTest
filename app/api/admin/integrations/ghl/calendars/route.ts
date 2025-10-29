@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     }
     
     // Fetch calendars from GHL
-    const ghl = new GHLClient(company.ghlApiKey)
+    const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
     const calendars = await ghl.getCalendars()
     
     console.log(`Syncing ${calendars.length} calendars for company ${user.companyId}`)
