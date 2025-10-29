@@ -29,14 +29,18 @@ export class GHLClient {
   }
   
   // Fetch all calendars
-  // Note: GHL V1 API may require locationId for some endpoints
-  // Even with Location-scoped API keys, passing locationId ensures proper scoping
+  // For GHL V1 API, try different endpoint structures:
+  // 1. /calendars (for location-scoped API keys)
+  // 2. /locations/{locationId}/calendars (if locationId is needed)
   async getCalendars(): Promise<GHLCalendar[]> {
-    // Build URL with locationId if provided
-    let url = `${this.baseUrl}/calendars/`
-    if (this.locationId) {
-      url = `${this.baseUrl}/calendars/?locationId=${encodeURIComponent(this.locationId)}`
-    }
+    // Try the standard endpoint first (for location-scoped API keys)
+    let url = `${this.baseUrl}/calendars`
+    
+    // If locationId is provided and the standard endpoint fails,
+    // we can try the location-specific endpoint as fallback
+    // For now, let's try the standard endpoint
+    
+    console.log(`[GHL API] Fetching calendars from: ${url}`, this.locationId ? `(locationId: ${this.locationId})` : '(location-scoped API key)')
     
     const response = await fetch(url, {
       headers: {
@@ -69,6 +73,13 @@ export class GHLClient {
       const error = new Error(`GHL API error: ${response.status} ${response.statusText}`)
       ;(error as any).status = response.status
       ;(error as any).details = errorDetails
+      ;(error as any).url = url // Include URL in error for debugging
+      console.error(`[GHL API] Request failed:`, {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        details: errorDetails
+      })
       throw error
     }
     
