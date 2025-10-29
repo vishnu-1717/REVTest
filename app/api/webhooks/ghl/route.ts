@@ -203,7 +203,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
 
 async function handleAppointmentCancelled(webhook: GHLWebhook) {
   await withPrisma(async (prisma) => {
-    const appointment = await prisma.appointment.findUnique({
+    const appointment = await prisma.appointment.findFirst({
       where: { ghlAppointmentId: webhook.appointmentId }
     })
     
@@ -218,7 +218,7 @@ async function handleAppointmentCancelled(webhook: GHLWebhook) {
 
 async function handleAppointmentRescheduled(webhook: GHLWebhook, company: any) {
   await withPrisma(async (prisma) => {
-    const existing = await prisma.appointment.findUnique({
+    const existing = await prisma.appointment.findFirst({
       where: { ghlAppointmentId: webhook.appointmentId }
     })
     
@@ -245,7 +245,7 @@ async function handleAppointmentRescheduled(webhook: GHLWebhook, company: any) {
 
 async function handleAppointmentUpdated(webhook: GHLWebhook) {
   await withPrisma(async (prisma) => {
-    const appointment = await prisma.appointment.findUnique({
+    const appointment = await prisma.appointment.findFirst({
       where: { ghlAppointmentId: webhook.appointmentId }
     })
     
