@@ -274,20 +274,64 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // If appointmentId is empty but we have contact, sync the contact data anyway
+    // Find company by GHL location ID (needed for both API fetch and normal processing)
+    let company = await withPrisma(async (prisma) => {
+      return await prisma.company.findFirst({
+        where: { ghlLocationId: webhook.locationId }
+      })
+    })
+    
+    if (!company) {
+      console.error('[GHL Webhook] Company not found for location:', webhook.locationId)
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+    }
+    
+    // If appointmentId is empty but we have contact, try fetching from GHL API
     // This might be a workflow trigger before appointment is created, or merge fields aren't working
     if (!webhook.appointmentId && webhook.locationId && webhook.contactId) {
       console.warn('[GHL Webhook] Appointment webhook received but appointmentId is missing.')
-      console.log('[GHL Webhook] However, we can sync contact data. Attempting contact sync...')
+      console.log('[GHL Webhook] Attempting to fetch appointment data from GHL API using contactId...')
       
-      // Still find company and sync contact
-      const company = await withPrisma(async (prisma) => {
-        return await prisma.company.findFirst({
-          where: { ghlLocationId: webhook.locationId }
-        })
-      })
+      if (company && company.ghlApiKey) {
+        // Try to fetch appointment data from GHL API
+        try {
+          const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
+          const appointments = await ghl.getContactAppointments(webhook.contactId)
+          
+          if (appointments && appointments.length > 0) {
+            // Get the most recent appointment (usually the one that triggered this webhook)
+            // Sort by startTime or dateCreated descending
+            const sortedAppointments = appointments.sort((a: any, b: any) => {
+              const dateA = new Date(a.startTime || a.scheduledAt || a.createdAt || 0).getTime()
+              const dateB = new Date(b.startTime || b.scheduledAt || b.createdAt || 0).getTime()
+              return dateB - dateA
+            })
+            
+            const latestAppointment = sortedAppointments[0]
+            console.log('[GHL Webhook] Found appointment via API:', latestAppointment.id)
+            
+            // Populate webhook data from API response
+            webhook.appointmentId = latestAppointment.id || latestAppointment.appointmentId
+            webhook.startTime = latestAppointment.startTime || latestAppointment.scheduledAt || latestAppointment.start_time
+            webhook.endTime = latestAppointment.endTime || latestAppointment.end_time
+            webhook.appointmentStatus = latestAppointment.status || latestAppointment.appointmentStatus || 'scheduled'
+            webhook.calendarId = latestAppointment.calendarId || latestAppointment.calendar_id || ''
+            webhook.assignedUserId = latestAppointment.assignedUserId || latestAppointment.assigned_user_id || ''
+            webhook.title = latestAppointment.title || latestAppointment.name || ''
+            webhook.notes = latestAppointment.notes || latestAppointment.description || ''
+            
+            console.log('[GHL Webhook] Successfully populated appointment data from GHL API')
+          } else {
+            console.warn('[GHL Webhook] No appointments found for contact via API. Proceeding with contact sync only.')
+          }
+        } catch (apiError: any) {
+          console.error('[GHL Webhook] Failed to fetch appointment from GHL API:', apiError.message)
+          console.log('[GHL Webhook] Proceeding with contact sync only...')
+        }
+      }
       
-      if (company && webhook.contactId) {
+      // If we still don't have appointmentId after API fetch, proceed with contact sync only
+      if (!webhook.appointmentId && company && webhook.contactId) {
         // Sync/update contact with available data
         const contactData: any = {
           name: (webhook as any).contactName || body.full_name || `${body.first_name || ''} ${body.last_name || ''}`.trim(),
@@ -331,22 +375,16 @@ export async function POST(request: NextRequest) {
         })
       }
       
-      return NextResponse.json({ 
-        received: true, 
-        warning: 'Appointment webhook received but appointmentId is missing. Please check GHL workflow merge fields.' 
-      })
-    }
-    
-    // Find company by GHL location ID
-    const company = await withPrisma(async (prisma) => {
-      return await prisma.company.findFirst({
-        where: { ghlLocationId: webhook.locationId }
-      })
-    })
-    
-    if (!company) {
-      console.error('[GHL Webhook] Company not found for location:', webhook.locationId)
-      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+      // If we still don't have appointmentId and no company/contact, return error
+      if (!webhook.appointmentId) {
+        return NextResponse.json({ 
+          received: true, 
+          warning: 'Appointment webhook received but appointmentId is missing. Please check GHL workflow merge fields.' 
+        })
+      }
+      
+      // If we successfully fetched appointmentId from API, continue with normal appointment processing
+      console.log('[GHL Webhook] AppointmentId obtained from API, continuing with normal appointment processing')
     }
     
     console.log('[GHL Webhook] Found company:', company.id, company.name)

@@ -162,4 +162,93 @@ export class GHLClient {
     const contacts = data.contacts || []
     return contacts.length > 0 ? contacts[0] : null
   }
+  
+  // Get appointments for a contact
+  // When appointment trigger fires, we can fetch the most recent appointment for that contact
+  async getContactAppointments(contactId: string): Promise<any[]> {
+    try {
+      // Try contact-specific appointments endpoint
+      const url = `${this.baseUrl}/contacts/${contactId}/appointments`
+      console.log(`[GHL API] Fetching appointments for contact: ${url}`)
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        // If 404, try general appointments endpoint with contact filter
+        if (response.status === 404) {
+          console.log(`[GHL API] Contact appointments endpoint not found, trying general appointments endpoint...`)
+          return this.getAppointmentsByContact(contactId)
+        }
+        throw new Error(`GHL API error: ${response.status} ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      return data.appointments || data.data || []
+    } catch (error: any) {
+      console.error(`[GHL API] Error fetching contact appointments:`, error.message)
+      // Fallback to general appointments endpoint
+      return this.getAppointmentsByContact(contactId)
+    }
+  }
+  
+  // Get appointments filtered by contact ID (alternative endpoint)
+  async getAppointmentsByContact(contactId: string): Promise<any[]> {
+    try {
+      // Try general appointments endpoint with query params
+      const url = `${this.baseUrl}/appointments?contactId=${contactId}`
+      console.log(`[GHL API] Fetching appointments via general endpoint: ${url}`)
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        console.warn(`[GHL API] General appointments endpoint also failed: ${response.status}`)
+        return []
+      }
+      
+      const data = await response.json()
+      return data.appointments || data.data || []
+    } catch (error: any) {
+      console.error(`[GHL API] Error fetching appointments:`, error.message)
+      return []
+    }
+  }
+  
+  // Get a specific appointment by ID
+  async getAppointment(appointmentId: string): Promise<any | null> {
+    try {
+      const url = `${this.baseUrl}/appointments/${appointmentId}`
+      console.log(`[GHL API] Fetching appointment: ${url}`)
+      
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        if (response.status === 404) return null
+        throw new Error(`GHL API error: ${response.status} ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      return data.appointment || data || null
+    } catch (error: any) {
+      console.error(`[GHL API] Error fetching appointment:`, error.message)
+      return null
+    }
+  }
 }
