@@ -3,6 +3,60 @@ import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
 import { resolveAttribution } from '@/lib/attribution'
 
+// Parse GHL date format: "Thu, Oct 30th, 2025 | 2:00 pm" or ISO 8601 format
+function parseGHLDate(dateString: string | null | undefined): Date | null {
+  if (!dateString || typeof dateString !== 'string') return null
+  
+  // Try ISO 8601 format first (e.g., "2025-10-30T14:00:00.000Z")
+  const isoDate = new Date(dateString)
+  if (!isNaN(isoDate.getTime())) {
+    return isoDate
+  }
+  
+  // Try parsing GHL format: "Thu, Oct 30th, 2025 | 2:00 pm"
+  // Pattern: Day, Month Day(th), Year | Hour:Minute am/pm
+  try {
+    // Extract the date and time parts
+    const parts = dateString.split(' | ')
+    if (parts.length === 2) {
+      const datePart = parts[0].trim() // "Thu, Oct 30th, 2025"
+      const timePart = parts[1].trim() // "2:00 pm"
+      
+      // Parse date: "Thu, Oct 30th, 2025" -> "Oct 30, 2025"
+      const dateMatch = datePart.match(/(\w+),?\s+(\w+)\s+(\d+)(?:th|st|nd|rd)?,?\s+(\d{4})/)
+      if (dateMatch) {
+        const [, , month, day, year] = dateMatch
+        const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month)
+        if (monthIndex !== -1) {
+          // Parse time: "2:00 pm"
+          const timeMatch = timePart.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i)
+          if (timeMatch) {
+            let [, hours, minutes, ampm] = timeMatch
+            let hour24 = parseInt(hours)
+            if (ampm.toLowerCase() === 'pm' && hour24 !== 12) hour24 += 12
+            if (ampm.toLowerCase() === 'am' && hour24 === 12) hour24 = 0
+            
+            const date = new Date(parseInt(year), monthIndex, parseInt(day), hour24, parseInt(minutes))
+            if (!isNaN(date.getTime())) {
+              return date
+            }
+          }
+        }
+      }
+    }
+    
+    // Fallback: try native Date parsing
+    const fallbackDate = new Date(dateString)
+    if (!isNaN(fallbackDate.getTime())) {
+      return fallbackDate
+    }
+  } catch (error) {
+    console.warn('[GHL Webhook] Failed to parse date:', dateString, error)
+  }
+  
+  return null
+}
+
 interface GHLWebhook {
   type: string
   id: string
@@ -95,7 +149,8 @@ export async function POST(request: NextRequest) {
     let webhookData: any = body
     
     // Extract appointment data from multiple possible locations
-    // GHL appointment triggers can place data in various structures
+    // PRIORITY ORDER: Root level first (actual GHL appointment payload structure),
+    // then nested structures, then custom fields
     const extractAppointmentData = (body: any) => {
       let appointmentId = ''
       let startTime = ''
@@ -103,45 +158,54 @@ export async function POST(request: NextRequest) {
       let appointmentStatus = ''
       let calendarId = ''
       let assignedUserId = ''
+      let title = ''
+      let notes = ''
       
-      // Check customData first (workflow payload structure)
-      if (body.customData) {
-        appointmentId = body.customData.appointmentId || body.customData.appointment_id || body.customData.id || ''
-        startTime = body.customData.startTime || body.customData.start_time || body.customData.scheduledAt || ''
-        endTime = body.customData.endTime || body.customData.end_time || ''
-        appointmentStatus = body.customData.appointmentStatus || body.customData.status || body.customData.appointment_status || ''
-        calendarId = body.customData.calendarId || body.customData.calendar_id || ''
-        assignedUserId = body.customData.assignedUserId || body.customData.assigned_user_id || body.customData.assignedUser || ''
-      }
+      // PRIORITY 1: Check root level FIRST - this is where GHL sends the actual appointment object
+      // Based on GHL payload structure: id, startTime, endTime, appointmentStatus, calendarId, contactId, locationId, etc.
+      appointmentId = body.id || body.appointmentId || body.appointment_id || ''
+      startTime = body.startTime || body.start_time || body.scheduledAt || body.scheduled_at || ''
+      endTime = body.endTime || body.end_time || ''
+      appointmentStatus = body.appointmentStatus || body.status || body.appointment_status || ''
+      calendarId = body.calendarId || body.calendar_id || ''
+      assignedUserId = body.assignedUserId || body.assigned_user_id || body.assignedUser || ''
+      title = body.title || body.name || ''
+      notes = body.notes || body.description || ''
       
-      // Check appointment object (if GHL sends it as an object)
-      if (body.appointment) {
+      // PRIORITY 2: Check appointment object (if GHL wraps it in an appointment property)
+      if (body.appointment && typeof body.appointment === 'object') {
         appointmentId = appointmentId || body.appointment.id || body.appointment.appointmentId || body.appointment.appointment_id || ''
         startTime = startTime || body.appointment.startTime || body.appointment.start_time || body.appointment.scheduledAt || ''
         endTime = endTime || body.appointment.endTime || body.appointment.end_time || ''
-        appointmentStatus = appointmentStatus || body.appointment.status || body.appointment.appointmentStatus || ''
+        appointmentStatus = appointmentStatus || body.appointment.appointmentStatus || body.appointment.status || ''
         calendarId = calendarId || body.appointment.calendarId || body.appointment.calendar_id || ''
         assignedUserId = assignedUserId || body.appointment.assignedUserId || body.appointment.assigned_user_id || ''
+        title = title || body.appointment.title || body.appointment.name || ''
+        notes = notes || body.appointment.notes || body.appointment.description || ''
       }
       
-      // Check triggerData (trigger-specific data)
+      // PRIORITY 3: Check triggerData (trigger-specific data)
       if (body.triggerData?.appointment) {
         appointmentId = appointmentId || body.triggerData.appointment.id || body.triggerData.appointment.appointmentId || ''
         startTime = startTime || body.triggerData.appointment.startTime || body.triggerData.appointment.start_time || ''
         endTime = endTime || body.triggerData.appointment.endTime || body.triggerData.appointment.end_time || ''
-        appointmentStatus = appointmentStatus || body.triggerData.appointment.status || ''
+        appointmentStatus = appointmentStatus || body.triggerData.appointment.status || body.triggerData.appointment.appointmentStatus || ''
         calendarId = calendarId || body.triggerData.appointment.calendarId || body.triggerData.appointment.calendar_id || ''
       }
       
-      // Check root level (snake_case or camelCase)
-      appointmentId = appointmentId || body.appointmentId || body.appointment_id || body.id || ''
-      startTime = startTime || body.startTime || body.start_time || body.scheduledAt || body.scheduled_at || ''
-      endTime = endTime || body.endTime || body.end_time || ''
-      appointmentStatus = appointmentStatus || body.appointmentStatus || body.status || body.appointment_status || ''
-      calendarId = calendarId || body.calendarId || body.calendar_id || ''
-      assignedUserId = assignedUserId || body.assignedUserId || body.assigned_user_id || body.assignedUser || ''
+      // PRIORITY 4: Check customData (workflow payload structure - merge fields may be here)
+      if (body.customData && typeof body.customData === 'object') {
+        appointmentId = appointmentId || body.customData.appointmentId || body.customData.appointment_id || body.customData.id || ''
+        startTime = startTime || body.customData.startTime || body.customData.start_time || body.customData.scheduledAt || ''
+        endTime = endTime || body.customData.endTime || body.customData.end_time || ''
+        appointmentStatus = appointmentStatus || body.customData.appointmentStatus || body.customData.status || body.customData.appointment_status || ''
+        calendarId = calendarId || body.customData.calendarId || body.customData.calendar_id || ''
+        assignedUserId = assignedUserId || body.customData.assignedUserId || body.customData.assigned_user_id || body.customData.assignedUser || ''
+        title = title || body.customData.title || ''
+        notes = notes || body.customData.notes || ''
+      }
       
-      // Check custom fields that might contain appointment data (fallback)
+      // PRIORITY 5: Check custom field names (company-specific fields as fallback)
       if (!appointmentId) {
         appointmentId = body['PCN - Appointment ID'] || body['Call Notes - Appointment ID'] || ''
       }
@@ -155,15 +219,39 @@ export async function POST(request: NextRequest) {
         endTime,
         appointmentStatus,
         calendarId,
-        assignedUserId
+        assignedUserId,
+        title,
+        notes
       }
     }
     
     const appointmentData = extractAppointmentData(body)
     console.log('[GHL Webhook] Extracted appointment data:', JSON.stringify(appointmentData, null, 2))
     
+    // PRIORITY: Check if body itself IS the appointment object (root level structure from GHL)
+    // This happens when GHL sends the appointment directly at root level (as shown in your screenshot)
+    if (appointmentData.appointmentId && body.locationId && (body.startTime || body.start_time || body.id)) {
+      console.log('[GHL Webhook] Appointment data found at root level - using direct appointment structure')
+      webhookData = {
+        ...body,
+        type: 'Appointment',
+        appointmentId: appointmentData.appointmentId,
+        startTime: appointmentData.startTime,
+        endTime: appointmentData.endTime,
+        appointmentStatus: appointmentData.appointmentStatus || body.appointmentStatus || body.status,
+        calendarId: appointmentData.calendarId,
+        assignedUserId: appointmentData.assignedUserId,
+        title: appointmentData.title || body.title,
+        notes: appointmentData.notes || body.notes,
+        locationId: body.locationId,
+        contactId: body.contactId || body.contact_id,
+        // Parse dates to ISO strings for database storage
+        startTimeParsed: appointmentData.startTime ? parseGHLDate(appointmentData.startTime) : null,
+        endTimeParsed: appointmentData.endTime ? parseGHLDate(appointmentData.endTime) : null,
+      }
+    }
     // Check if data is in customData (GHL workflow format)
-    if (body.customData && typeof body.customData === 'object') {
+    else if (body.customData && typeof body.customData === 'object') {
       console.log('[GHL Webhook] Data found nested in body.customData')
       // Merge customData with location from root level if available
       webhookData = {
@@ -177,6 +265,11 @@ export async function POST(request: NextRequest) {
         appointmentStatus: appointmentData.appointmentStatus,
         calendarId: appointmentData.calendarId,
         assignedUserId: appointmentData.assignedUserId,
+        title: appointmentData.title,
+        notes: appointmentData.notes,
+        // Parse dates
+        startTimeParsed: appointmentData.startTime ? parseGHLDate(appointmentData.startTime) : null,
+        endTimeParsed: appointmentData.endTime ? parseGHLDate(appointmentData.endTime) : null,
         // Also include other root-level data that might be useful
         contactEmail: body.email,
         contactPhone: body.phone,
@@ -425,89 +518,95 @@ export async function POST(request: NextRequest) {
 
 async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
   await withPrisma(async (prisma) => {
-    // Find or create contact
-    let contact = await prisma.contact.findFirst({
-      where: {
-        companyId: company.id,
-        ghlContactId: webhook.contactId
-      }
-    })
-    
-    if (!contact && webhook.contactId && company.ghlApiKey) {
-      // Fetch contact from GHL
+  // Find or create contact
+  let contact = await prisma.contact.findFirst({
+    where: {
+      companyId: company.id,
+      ghlContactId: webhook.contactId
+    }
+  })
+  
+  if (!contact && webhook.contactId && company.ghlApiKey) {
+    // Fetch contact from GHL
       const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
-      const ghlContact = await ghl.getContact(webhook.contactId)
-      
-      if (ghlContact) {
-        contact = await prisma.contact.create({
-          data: {
-            companyId: company.id,
-            ghlContactId: ghlContact.id,
-            name: ghlContact.name || 'Unknown',
-            email: ghlContact.email,
-            phone: ghlContact.phone,
-            tags: ghlContact.tags || [],
-            customFields: ghlContact.customFields || {}
-          }
-        })
-      }
-    }
+    const ghlContact = await ghl.getContact(webhook.contactId)
     
-    if (!contact) {
-      console.error('Could not create contact for appointment:', webhook.appointmentId)
-      return
-    }
-    
-    // Find calendar
-    let calendar: any = null
-    if (webhook.calendarId) {
-      calendar = await prisma.calendar.findFirst({
-        where: {
+    if (ghlContact) {
+      contact = await prisma.contact.create({
+        data: {
           companyId: company.id,
-          ghlCalendarId: webhook.calendarId
-        },
-        include: { defaultCloser: true }
-      })
-    }
-    
-    // Find closer
-    let closer: any = null
-    
-    // Priority 1: Use assignedUserId from GHL
-    if (webhook.assignedUserId) {
-      closer = await prisma.user.findFirst({
-        where: {
-          companyId: company.id,
-          ghlUserId: webhook.assignedUserId
+          ghlContactId: ghlContact.id,
+          name: ghlContact.name || 'Unknown',
+          email: ghlContact.email,
+          phone: ghlContact.phone,
+          tags: ghlContact.tags || [],
+          customFields: ghlContact.customFields || {}
         }
       })
     }
-    
-    // Priority 2: Use calendar's default closer
-    if (!closer && calendar?.defaultCloser) {
-      closer = calendar.defaultCloser
-    }
-    
-    // Determine if this is first call (not a reschedule/follow-up)
-    const isFirstCall = !calendar?.calendarType?.match(/reschedule|follow.?up/i)
-    
+  }
+  
+  if (!contact) {
+    console.error('Could not create contact for appointment:', webhook.appointmentId)
+    return
+  }
+  
+  // Find calendar
+  let calendar: any = null
+  if (webhook.calendarId) {
+    calendar = await prisma.calendar.findFirst({
+      where: {
+        companyId: company.id,
+        ghlCalendarId: webhook.calendarId
+      },
+      include: { defaultCloser: true }
+    })
+  }
+  
+  // Find closer
+  let closer: any = null
+  
+  // Priority 1: Use assignedUserId from GHL
+  if (webhook.assignedUserId) {
+    closer = await prisma.user.findFirst({
+      where: {
+        companyId: company.id,
+        ghlUserId: webhook.assignedUserId
+      }
+    })
+  }
+  
+  // Priority 2: Use calendar's default closer
+  if (!closer && calendar?.defaultCloser) {
+    closer = calendar.defaultCloser
+  }
+  
+  // Determine if this is first call (not a reschedule/follow-up)
+  const isFirstCall = !calendar?.calendarType?.match(/reschedule|follow.?up/i)
+  
     // Create or update appointment
     let appointment = await prisma.appointment.findFirst({
-      where: {
+    where: {
         ghlAppointmentId: webhook.appointmentId,
         companyId: company.id
       }
     })
+    
+    // Parse dates from webhook (use parsed date if available, otherwise parse raw string)
+    const startTimeDate = (webhook as any).startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
+    const endTimeDate = (webhook as any).endTimeParsed || parseGHLDate(webhook.endTime) || null
     
     if (appointment) {
       // Update existing appointment
       appointment = await prisma.appointment.update({
         where: { id: appointment.id },
         data: {
-          scheduledAt: new Date(webhook.startTime || Date.now()),
+          scheduledAt: startTimeDate,
+          startTime: startTimeDate,
+          endTime: endTimeDate,
           closerId: closer?.id,
           calendarId: calendar?.id,
-          notes: webhook.notes,
+          notes: webhook.notes || (webhook as any).title || undefined,
           customFields: webhook.customFields || {}
         }
       })
@@ -515,54 +614,56 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
       // Create new appointment
       appointment = await prisma.appointment.create({
         data: {
-          companyId: company.id,
-          contactId: contact.id,
-          closerId: closer?.id,
-          calendarId: calendar?.id,
-          
-          ghlAppointmentId: webhook.appointmentId,
-          scheduledAt: new Date(webhook.startTime || Date.now()),
-          
-          status: 'scheduled',
-          isFirstCall,
-          
-          notes: webhook.notes,
-          customFields: webhook.customFields || {}
+      companyId: company.id,
+      contactId: contact.id,
+      closerId: closer?.id,
+      calendarId: calendar?.id,
+      
+      ghlAppointmentId: webhook.appointmentId,
+      scheduledAt: startTimeDate,
+      startTime: startTimeDate,
+      endTime: endTimeDate,
+      
+      status: 'scheduled',
+      isFirstCall,
+      
+      notes: webhook.notes,
+      customFields: webhook.customFields || {}
         }
       })
     }
-    
-    // Resolve attribution
-    const attribution = await resolveAttribution(appointment.id)
-    
-    // Update appointment with attribution
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        attributionSource: attribution.trafficSource,
-        leadSource: attribution.leadSource,
-        customFields: {
+  
+  // Resolve attribution
+  const attribution = await resolveAttribution(appointment.id)
+  
+  // Update appointment with attribution
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: {
+      attributionSource: attribution.trafficSource,
+      leadSource: attribution.leadSource,
+      customFields: {
           ...(appointment.customFields as Record<string, any> || {}),
-          attributionConfidence: attribution.confidence
-        }
+        attributionConfidence: attribution.confidence
       }
-    })
-    
-    console.log('Appointment created:', appointment.id, 'Attribution:', attribution.trafficSource)
+    }
+  })
+  
+  console.log('Appointment created:', appointment.id, 'Attribution:', attribution.trafficSource)
   })
 }
 
 async function handleAppointmentCancelled(webhook: GHLWebhook) {
   await withPrisma(async (prisma) => {
     const appointment = await prisma.appointment.findFirst({
-      where: { ghlAppointmentId: webhook.appointmentId }
-    })
-    
-    if (!appointment) return
-    
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: { status: 'cancelled' }
+    where: { ghlAppointmentId: webhook.appointmentId }
+  })
+  
+  if (!appointment) return
+  
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { status: 'cancelled' }
     })
   })
 }
@@ -570,26 +671,33 @@ async function handleAppointmentCancelled(webhook: GHLWebhook) {
 async function handleAppointmentRescheduled(webhook: GHLWebhook, company: any) {
   await withPrisma(async (prisma) => {
     const existing = await prisma.appointment.findFirst({
-      where: { ghlAppointmentId: webhook.appointmentId }
-    })
-    
-    if (!existing) {
-      // Treat as new appointment
-      await handleAppointmentCreated(webhook, company)
-      return
-    }
-    
-    // Update existing appointment
-    await prisma.appointment.update({
-      where: { id: existing.id },
-      data: {
-        scheduledAt: new Date(webhook.startTime || Date.now()),
-        status: 'scheduled',
-        customFields: {
+    where: { ghlAppointmentId: webhook.appointmentId }
+  })
+  
+  if (!existing) {
+    // Treat as new appointment
+    await handleAppointmentCreated(webhook, company)
+    return
+  }
+  
+  // Parse dates from webhook
+  const startTimeDate = (webhook as any).startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
+  const endTimeDate = (webhook as any).endTimeParsed || parseGHLDate(webhook.endTime) || null
+  
+  // Update existing appointment
+  await prisma.appointment.update({
+    where: { id: existing.id },
+    data: {
+      scheduledAt: startTimeDate,
+      startTime: startTimeDate,
+      endTime: endTimeDate,
+      status: 'scheduled',
+      notes: webhook.notes || (webhook as any).title || existing.notes,
+      customFields: {
           ...(existing.customFields as Record<string, any> || {}),
-          rescheduledCount: ((existing.customFields as any)?.rescheduledCount || 0) + 1
-        }
+        rescheduledCount: ((existing.customFields as any)?.rescheduledCount || 0) + 1
       }
+    }
     })
   })
 }
@@ -597,18 +705,24 @@ async function handleAppointmentRescheduled(webhook: GHLWebhook, company: any) {
 async function handleAppointmentUpdated(webhook: GHLWebhook) {
   await withPrisma(async (prisma) => {
     const appointment = await prisma.appointment.findFirst({
-      where: { ghlAppointmentId: webhook.appointmentId }
-    })
-    
-    if (!appointment) return
-    
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        scheduledAt: webhook.startTime ? new Date(webhook.startTime) : undefined,
-        notes: webhook.notes,
-        customFields: webhook.customFields
-      }
+    where: { ghlAppointmentId: webhook.appointmentId }
+  })
+  
+  if (!appointment) return
+  
+  // Parse dates from webhook
+  const startTimeDate = (webhook as any).startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
+  const endTimeDate = (webhook as any).endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
+  
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: {
+      scheduledAt: startTimeDate || undefined,
+      startTime: startTimeDate || undefined,
+      endTime: endTimeDate || undefined,
+      notes: webhook.notes || (webhook as any).title || undefined,
+      customFields: webhook.customFields
+    }
     })
   })
 }
