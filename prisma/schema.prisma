@@ -43,6 +43,22 @@ model Company {
   processorAccountId   String?
   processorConnectedAt DateTime?
   inviteCode           String?            @unique
+  
+  // GHL Integration
+  ghlApiKey            String?
+  ghlLocationId        String?
+  ghlWebhookSecret     String?
+  
+  // Attribution Strategy
+  attributionStrategy    String  @default("ghl_fields")
+  // Options: "ghl_fields", "calendars", "hyros", "tags", "none"
+  
+  attributionSourceField String? @default("contact.source")
+  // For "ghl_fields" strategy: which field to pull from
+  
+  useCalendarsForAttribution Boolean @default(false)
+  // For "calendars" strategy: enable calendar categorization
+  
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   Commission           Commission[]
@@ -55,8 +71,43 @@ model Company {
   CommissionRole       CommissionRole[]
   PaymentLink          PaymentLink[]
   UnmatchedPayment     UnmatchedPayment[]
+  calendars            Calendar[]
 
   @@index([email])
+}
+
+// ==========================================
+// CALENDAR MODEL
+// ==========================================
+
+model Calendar {
+  id        String   @id @default(cuid())
+  
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // GHL data
+  ghlCalendarId String  @unique
+  name          String
+  description   String?
+  isActive      Boolean @default(true)
+  
+  // OPTIONAL: For companies that use calendars for attribution (like BudgetDog)
+  trafficSource String?
+  calendarType  String?
+  
+  // OPTIONAL: Auto-assign appointments to specific closer
+  defaultCloserId String?
+  defaultCloser   User?   @relation(fields: [defaultCloserId], references: [id], onDelete: SetNull)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  appointments Appointment[]
+  
+  @@index([companyId])
+  @@index([ghlCalendarId])
+  @@index([trafficSource])
 }
 
 model Sale {
@@ -117,6 +168,10 @@ model User {
   canViewLeaderboard   Boolean         @default(true)
   isActive             Boolean         @default(true)
   customFields         Json?
+  
+  // Map to GHL user for auto-assignment
+  ghlUserId String? @unique
+  
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   Commission           Commission[]
@@ -125,9 +180,11 @@ model User {
   commissionRole       CommissionRole? @relation(fields: [commissionRoleId], references: [id])
   AppointmentsAsCloser Appointment[]   @relation("CloserAppointments")
   AppointmentsAsSetter Appointment[]   @relation("SetterAppointments")
+  assignedCalendars    Calendar[]
 
   @@index([companyId])
   @@index([email])
+  @@index([ghlUserId])
 }
 
 model WebhookEvent {
@@ -156,6 +213,10 @@ model Contact {
   companyId    String
   ghlContactId String?
   customFields Json?
+  
+  // GHL tags (for attribution via tags strategy)
+  tags String[]
+  
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -214,6 +275,15 @@ model Appointment {
   saleId                 String?   @unique
   ghlAppointmentId       String?
   customFields           Json?
+  
+  // Link to calendar
+  calendarId String?
+  calendarRelation Calendar? @relation(fields: [calendarId], references: [id], onDelete: SetNull)
+  
+  // Attribution (resolved from company's strategy)
+  attributionSource String?
+  leadSource        String? // "ghl_field", "calendar", "hyros", "tag"
+  
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -231,6 +301,8 @@ model Appointment {
   @@index([setterId])
   @@index([status])
   @@index([ghlAppointmentId])
+  @@index([calendarId])
+  @@index([attributionSource])
 }
 
 model CommissionRole {

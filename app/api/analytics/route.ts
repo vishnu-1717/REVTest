@@ -90,6 +90,14 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // Traffic source filter
+    if (searchParams.get('trafficSource')) {
+      where.attributionSource = {
+        contains: searchParams.get('trafficSource'),
+        mode: 'insensitive'
+      }
+    }
+    
     // Get all appointments matching filters
     const appointments = await withPrisma(async (prisma) => {
       return await prisma.appointment.findMany({
@@ -333,6 +341,37 @@ export async function GET(request: NextRequest) {
       }
     })
     
+    // Group by traffic source
+    const byTrafficSource = Object.values(
+      filteredAppointments.reduce((acc: any, apt) => {
+        const key = apt.attributionSource || 'Unknown'
+        if (!acc[key]) {
+          acc[key] = {
+            trafficSource: key,
+            total: 0,
+            showed: 0,
+            signed: 0,
+            scheduled: 0,
+            revenue: 0
+          }
+        }
+        
+        acc[key].total++
+        if (apt.status !== 'cancelled') acc[key].scheduled++
+        if (apt.status === 'showed' || apt.status === 'signed') acc[key].showed++
+        if (apt.status === 'signed') {
+          acc[key].signed++
+          acc[key].revenue += apt.cashCollected || 0
+        }
+        
+        return acc
+      }, {})
+    ).map((source: any) => ({
+      ...source,
+      showRate: source.scheduled > 0 ? ((source.showed / source.scheduled) * 100).toFixed(1) : 0,
+      closeRate: source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : 0
+    })).sort((a: any, b: any) => b.revenue - a.revenue)
+    
     return NextResponse.json({
       totalAppointments,
       scheduled,
@@ -348,7 +387,8 @@ export async function GET(request: NextRequest) {
       byObjection,
       byCalendar,
       byAppointmentType,
-      byTimeOfDay
+      byTimeOfDay,
+      byTrafficSource
     })
     
   } catch (error: any) {

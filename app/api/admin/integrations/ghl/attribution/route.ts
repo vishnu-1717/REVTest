@@ -1,0 +1,40 @@
+import { NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+
+export async function POST(request: Request) {
+  try {
+    const user = await requireAdmin()
+    const { 
+      attributionStrategy, 
+      attributionSourceField,
+      useCalendarsForAttribution 
+    } = await request.json()
+    
+    // Validate strategy
+    const validStrategies = ['ghl_fields', 'calendars', 'hyros', 'tags', 'none']
+    if (!validStrategies.includes(attributionStrategy)) {
+      return NextResponse.json(
+        { error: 'Invalid attribution strategy' },
+        { status: 400 }
+      )
+    }
+    
+    // Update company
+    await prisma.company.update({
+      where: { id: user.companyId },
+      data: {
+        attributionStrategy,
+        attributionSourceField: attributionStrategy === 'ghl_fields' 
+          ? attributionSourceField 
+          : null,
+        useCalendarsForAttribution: attributionStrategy === 'calendars'
+      }
+    })
+    
+    return NextResponse.json({ success: true })
+    
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}
