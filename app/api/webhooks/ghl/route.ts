@@ -24,50 +24,84 @@ interface GHLWebhook {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as GHLWebhook
+    // Log the raw request for debugging
+    const rawBody = await request.text()
+    console.log('[GHL Webhook] Raw payload received:', rawBody)
     
-    console.log('GHL Webhook received:', body.type, body.id)
+    // Parse JSON payload
+    let body: any
+    try {
+      body = JSON.parse(rawBody)
+    } catch (parseError) {
+      console.error('[GHL Webhook] JSON parse error:', parseError)
+      console.error('[GHL Webhook] Raw body that failed to parse:', rawBody)
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
+    }
+    
+    // Log the parsed payload structure
+    console.log('[GHL Webhook] Parsed payload:', JSON.stringify(body, null, 2))
+    console.log('[GHL Webhook] Payload keys:', Object.keys(body))
+    console.log('[GHL Webhook] Type:', body.type, '| ID:', body.id, '| LocationId:', body.locationId)
+    
+    // Type guard - check if this looks like our expected format
+    const webhook = body as GHLWebhook
     
     // Only process appointment webhooks
-    if (body.type !== 'Appointment') {
+    if (webhook.type !== 'Appointment' && !webhook.appointmentId && !webhook.appointmentStatus) {
+      console.log('[GHL Webhook] Not an appointment webhook, ignoring. Type:', webhook.type)
       return NextResponse.json({ received: true })
+    }
+    
+    // Validate required fields
+    if (!webhook.locationId) {
+      console.error('[GHL Webhook] Missing locationId in payload')
+      return NextResponse.json({ error: 'Missing locationId' }, { status: 400 })
     }
     
     // Find company by GHL location ID
     const company = await withPrisma(async (prisma) => {
       return await prisma.company.findFirst({
-        where: { ghlLocationId: body.locationId }
+        where: { ghlLocationId: webhook.locationId }
       })
     })
     
     if (!company) {
-      console.error('Company not found for location:', body.locationId)
+      console.error('[GHL Webhook] Company not found for location:', webhook.locationId)
       return NextResponse.json({ error: 'Company not found' }, { status: 404 })
     }
     
+    console.log('[GHL Webhook] Found company:', company.id, company.name)
+    
     // Handle different appointment events
-    switch (body.appointmentStatus) {
+    switch (webhook.appointmentStatus) {
       case 'confirmed':
       case 'scheduled':
-        await handleAppointmentCreated(body, company)
+        console.log('[GHL Webhook] Processing appointment created/confirmed')
+        await handleAppointmentCreated(webhook, company)
         break
       
       case 'cancelled':
-        await handleAppointmentCancelled(body)
+        console.log('[GHL Webhook] Processing appointment cancelled')
+        await handleAppointmentCancelled(webhook)
         break
       
       case 'rescheduled':
-        await handleAppointmentRescheduled(body, company)
+        console.log('[GHL Webhook] Processing appointment rescheduled')
+        await handleAppointmentRescheduled(webhook, company)
         break
       
       default:
-        await handleAppointmentUpdated(body)
+        console.log('[GHL Webhook] Processing appointment update (status:', webhook.appointmentStatus, ')')
+        await handleAppointmentUpdated(webhook)
     }
     
+    console.log('[GHL Webhook] Successfully processed webhook')
     return NextResponse.json({ received: true })
     
   } catch (error: any) {
-    console.error('GHL webhook error:', error)
+    console.error('[GHL Webhook] Error processing webhook:', error)
+    console.error('[GHL Webhook] Error stack:', error.stack)
+    console.error('[GHL Webhook] Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

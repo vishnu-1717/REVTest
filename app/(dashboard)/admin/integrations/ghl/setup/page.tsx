@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -92,7 +92,39 @@ export default function GHLSetupPage() {
     setSaving(false)
   }
   
-  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'https://yourapp.com'}/api/webhooks/ghl`
+  // Use production domain for webhook URL (prioritize env var over current domain)
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [isUsingVercelUrl, setIsUsingVercelUrl] = useState(false)
+  
+  // Set webhook URL - prioritize NEXT_PUBLIC_APP_URL (production domain) over current domain
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // In Next.js, NEXT_PUBLIC_* env vars are available in client code at build time
+      // They're static replacements, so we can access them directly
+      const productionUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+      const currentOrigin = window.location.origin
+      
+      // Check if we're on a Vercel deployment URL
+      const isVercelDomain = currentOrigin.includes('vercel.app')
+      setIsUsingVercelUrl(isVercelDomain && (!productionUrl || productionUrl === 'http://localhost:3000'))
+      
+      // Use production URL if set and valid, otherwise use current domain
+      // This ensures webhooks always use the stable production domain when configured
+      const baseUrl = productionUrl && productionUrl !== 'http://localhost:3000' 
+        ? productionUrl 
+        : currentOrigin
+      const webhook = `${baseUrl}/api/webhooks/ghl`
+      setWebhookUrl(webhook)
+      
+      // Warn if using non-production domain
+      if (!productionUrl && isVercelDomain) {
+        console.warn('⚠️ Using Vercel deployment URL for webhook. Set NEXT_PUBLIC_APP_URL in Vercel to use production domain.')
+      }
+    } else {
+      // Fallback for SSR (shouldn't happen in client component, but just in case)
+      setWebhookUrl(`${process.env.NEXT_PUBLIC_APP_URL || 'https://yourapp.com'}/api/webhooks/ghl`)
+    }
+  }, [])
   
   return (
     <div className="container mx-auto py-10 max-w-3xl">
@@ -117,6 +149,30 @@ export default function GHLSetupPage() {
       {/* Step 1: GHL Credentials */}
       {step === 1 && (
         <>
+          {/* Environment Variable Warning */}
+          {isUsingVercelUrl && (
+            <Card className="mb-6 border-yellow-500 bg-yellow-50">
+              <CardHeader>
+                <CardTitle className="text-yellow-900">⚠️ Setup Required: Production Domain</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-yellow-800 mb-3">
+                  Your webhook URL is using a Vercel deployment URL that will change with each deployment. To use your stable production domain:
+                </p>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-yellow-800">
+                  <li>Go to your Vercel Dashboard → Project Settings → Environment Variables</li>
+                  <li>Add a new variable: <code className="bg-yellow-100 px-2 py-1 rounded">NEXT_PUBLIC_APP_URL</code></li>
+                  <li>Set the value to: <code className="bg-yellow-100 px-2 py-1 rounded">https://www.cleansalesdata.com</code></li>
+                  <li>Select all environments (Production, Preview, Development)</li>
+                  <li>Redeploy your application (Vercel will auto-redeploy after adding env vars)</li>
+                </ol>
+                <p className="text-xs text-yellow-700 mt-3">
+                  After redeployment, refresh this page and the webhook URL will automatically update to use your production domain.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Step 1: Connect GoHighLevel</CardTitle>
@@ -197,21 +253,49 @@ export default function GHLSetupPage() {
                         <div>
                           <strong>URL:</strong> 
                           <code className="block bg-white p-2 rounded mt-1 break-all text-xs">
-                            {webhookUrl}
+                            {webhookUrl || 'Loading...'}
                           </code>
+                          <div className="mt-1 space-y-1">
+                            <p className="text-xs text-blue-600">
+                              💡 <strong>Important:</strong> This URL should use your production domain (<code className="bg-blue-50 px-1 rounded">www.cleansalesdata.com</code>), not a Vercel deployment URL.
+                            </p>
+                            {isUsingVercelUrl && (
+                              <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs text-yellow-800">
+                                ⚠️ <strong>Warning:</strong> This webhook URL is using a Vercel deployment URL that will change with each deployment.
+                                <br />
+                                <strong>Fix:</strong> Set <code className="bg-white px-1 rounded">NEXT_PUBLIC_APP_URL=https://www.cleansalesdata.com</code> in your Vercel environment variables and redeploy.
+                              </div>
+                            )}
+                            {!isUsingVercelUrl && webhookUrl && (webhookUrl.includes('cleansalesdata.com') || !webhookUrl.includes('vercel.app')) && (
+                              <div className="bg-green-50 border border-green-200 rounded p-2 text-xs text-green-800">
+                                ✅ Using production domain: <code>{webhookUrl}</code>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <strong>Headers:</strong> 
-                          <code className="block bg-white p-2 rounded mt-1 text-xs">
-                            Content-Type: application/json
-                          </code>
+                          <div className="bg-white p-2 rounded mt-1 text-xs">
+                            <p className="mb-1 text-gray-600">⚠️ <strong>IMPORTANT:</strong> Only put HTTP headers here (like Content-Type). <strong>Do NOT</strong> put appointment data in Headers!</p>
+                            <code className="block mt-2">
+                              Content-Type: application/json
+                            </code>
+                            <p className="mt-2 text-gray-600">You can add this header, but it's usually optional as GHL sends JSON by default.</p>
+                          </div>
                         </div>
                       </div>
                     </div>
                     
                     <div>
-                      <p className="font-semibold mb-1">Step 4: Configure Payload</p>
-                      <p className="mb-2">In the "Payload" section, use this JSON structure. <strong>Important:</strong> Replace the merge fields with actual GHL merge field names available in your workflow:</p>
+                      <p className="font-semibold mb-1">Step 4: Configure Payload (Body)</p>
+                      <p className="mb-2">
+                        <strong>⚠️ CRITICAL:</strong> In the <strong>"Payload"</strong> or <strong>"Request Body"</strong> section (NOT Headers!), paste this JSON structure.
+                        <br />
+                        <strong>All appointment data goes in the Payload section, not Headers!</strong>
+                      </p>
+                      <p className="mb-2 text-sm text-gray-600">
+                        Look for a section labeled "Payload", "Body", "Request Body", or "Custom Data" in your GHL webhook configuration.
+                      </p>
                       <div className="bg-white p-3 rounded text-xs overflow-x-auto border-2 border-blue-200">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-gray-600">Click to copy payload template:</span>
@@ -280,6 +364,39 @@ export default function GHLSetupPage() {
                   💡 <strong>Note:</strong> You can complete the API setup below without configuring the webhook. 
                   Webhooks enable real-time sync, but you can also manually sync appointments later.
                 </p>
+                
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-xs font-medium text-blue-900 hover:text-blue-700">
+                    ❓ Troubleshooting Webhook Errors
+                  </summary>
+                  <div className="mt-2 space-y-2 text-xs text-blue-800 bg-blue-100 p-3 rounded">
+                    <div>
+                      <p className="font-semibold">404 Error: "The deployment could not be found on Vercel"</p>
+                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                        <li>You're using a preview deployment URL that expired</li>
+                        <li><strong>Solution:</strong> Use your production domain URL instead</li>
+                        <li>Check Vercel dashboard for your production URL</li>
+                        <li>Update the webhook URL in your GHL workflow</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold">500 Error or Timeout</p>
+                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                        <li>Check that your Vercel deployment is active and healthy</li>
+                        <li>Verify database connection in Vercel environment variables</li>
+                        <li>Check Vercel function logs for detailed error messages</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold">Webhook not receiving events</p>
+                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                        <li>Verify workflow is active in GHL</li>
+                        <li>Check that trigger events match (Created, Updated, Cancelled)</li>
+                        <li>Test the webhook URL manually with a tool like Postman</li>
+                      </ul>
+                    </div>
+                  </div>
+                </details>
               </div>
             </CardContent>
           </Card>
