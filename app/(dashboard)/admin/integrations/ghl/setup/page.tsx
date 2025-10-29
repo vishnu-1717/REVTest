@@ -236,7 +236,12 @@ export default function GHLSetupPage() {
                         <li>Click the <strong>"+"</strong> icon on the workflow canvas</li>
                         <li>Search for and select <strong>"Appointment"</strong> trigger</li>
                         <li>Choose events: <strong>Created</strong>, <strong>Updated</strong>, and <strong>Cancelled</strong></li>
+                        <li><strong>Important:</strong> Make sure you select the <strong>Appointment</strong> trigger (not Contact trigger), so appointment merge fields are available</li>
                       </ol>
+                      <p className="text-xs text-red-600 mt-2 bg-red-50 p-2 rounded">
+                        ⚠️ <strong>Common Mistake:</strong> If you use a Contact trigger, appointment merge fields won't work. 
+                        You must use an <strong>Appointment trigger</strong> to access appointment data.
+                      </p>
                     </div>
                     
                     <div>
