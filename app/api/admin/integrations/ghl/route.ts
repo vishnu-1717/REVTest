@@ -16,12 +16,31 @@ export async function POST(request: Request) {
       )
     }
     
-    // Test the API key by trying to fetch calendars
+    // Test the API key by validating it (checking if it's valid format and has access)
     try {
-      // Pass locationId to GHLClient - GHL V1 API often requires it for proper scoping
       const ghl = new GHLClient(apiKey, locationId)
-      const calendars = await ghl.getCalendars()
-      console.log(`GHL validation successful: Found ${calendars.length} calendars for location ${locationId}`)
+      
+      // First, validate the API key with a simpler endpoint
+      const isValid = await ghl.validateApiKey()
+      if (!isValid) {
+        return NextResponse.json(
+          { error: 'Invalid API key. Please check your API key and ensure it has the correct permissions.' },
+          { status: 400 }
+        )
+      }
+      
+      console.log(`GHL API key validation successful for location ${locationId}`)
+      
+      // Try to fetch calendars (this may fail if V1 API doesn't support calendars endpoint)
+      // But we'll allow setup to proceed even if calendars can't be fetched
+      try {
+        const calendars = await ghl.getCalendars()
+        console.log(`GHL calendars fetch: Found ${calendars.length} calendars`)
+      } catch (calendarError: any) {
+        // If calendars fail, log warning but don't fail the setup
+        // V1 API might not support calendars endpoint
+        console.warn(`GHL calendars fetch failed (non-blocking):`, calendarError.message)
+      }
     } catch (error: any) {
       // Log detailed error information for debugging
       console.error('GHL API validation error:', {

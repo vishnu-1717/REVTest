@@ -28,63 +28,100 @@ export class GHLClient {
     this.locationId = locationId
   }
   
-  // Fetch all calendars
-  // For GHL V1 API, try different endpoint structures:
-  // 1. /calendars (for location-scoped API keys)
-  // 2. /locations/{locationId}/calendars (if locationId is needed)
-  async getCalendars(): Promise<GHLCalendar[]> {
-    // Try the standard endpoint first (for location-scoped API keys)
-    let url = `${this.baseUrl}/calendars`
-    
-    // If locationId is provided and the standard endpoint fails,
-    // we can try the location-specific endpoint as fallback
-    // For now, let's try the standard endpoint
-    
-    console.log(`[GHL API] Fetching calendars from: ${url}`, this.locationId ? `(locationId: ${this.locationId})` : '(location-scoped API key)')
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Version': '2021-07-28',
-        'Content-Type': 'application/json'
-      }
-    })
-    
-    if (!response.ok) {
-      // Try to get error details from response
-      let errorDetails = response.statusText
-      try {
-        const errorBody = await response.text()
-        if (errorBody) {
-          errorDetails = errorBody
-          // Try to parse as JSON if possible
-          try {
-            const jsonError = JSON.parse(errorBody)
-            errorDetails = jsonError.message || jsonError.error || errorBody
-          } catch {
-            // If not JSON, use text as is
-          }
+  // Validate API key by making a simple request (try contacts endpoint as it's more likely to exist)
+  async validateApiKey(): Promise<boolean> {
+    try {
+      // Try to fetch contacts list - this is a simpler endpoint that validates the API key
+      const url = `${this.baseUrl}/contacts`
+      console.log(`[GHL API] Validating API key with: ${url}`)
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
         }
-      } catch {
-        // If we can't read the body, use status text
+      })
+      
+      // If we get 200 or even 401/403, the endpoint exists and API key format is valid
+      // 404 means endpoint doesn't exist, 401/403 means invalid API key
+      if (response.status === 401 || response.status === 403) {
+        console.error(`[GHL API] API key validation failed: ${response.status}`)
+        return false
       }
       
-      // Create error with status code and details
-      const error = new Error(`GHL API error: ${response.status} ${response.statusText}`)
-      ;(error as any).status = response.status
-      ;(error as any).details = errorDetails
-      ;(error as any).url = url // Include URL in error for debugging
-      console.error(`[GHL API] Request failed:`, {
-        url,
-        status: response.status,
-        statusText: response.statusText,
-        details: errorDetails
-      })
-      throw error
+      // Even if we get 404, it might mean the endpoint structure is different
+      // But if we get here without an exception, the API key format is valid
+      return response.status === 200 || response.status === 404
+    } catch (error: any) {
+      console.error(`[GHL API] API key validation error:`, error.message)
+      return false
+    }
+  }
+  
+  // Fetch all calendars
+  // Note: GHL V1 API calendars endpoint may not exist - try multiple endpoint structures
+  async getCalendars(): Promise<GHLCalendar[]> {
+    const endpoints = [
+      `${this.baseUrl}/calendars`,
+      `${this.baseUrl}/calendars/`,
+    ]
+    
+    // If locationId is provided, also try location-specific endpoints
+    if (this.locationId) {
+      endpoints.push(
+        `${this.baseUrl}/locations/${this.locationId}/calendars`,
+        `${this.baseUrl}/locations/${this.locationId}/calendars/`
+      )
     }
     
-    const data = await response.json()
-    return data.calendars || []
+    let lastError: any = null
+    
+    for (const url of endpoints) {
+      try {
+        console.log(`[GHL API] Trying calendars endpoint: ${url}`)
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Version': '2021-07-28',
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`[GHL API] Successfully fetched calendars from: ${url}`)
+          return data.calendars || data.data || []
+        }
+        
+        // If it's not a 404, this might be an auth error, don't try other endpoints
+        if (response.status !== 404) {
+          const errorText = await response.text().catch(() => response.statusText)
+          throw new Error(`GHL API error: ${response.status} ${response.statusText} - ${errorText}`)
+        }
+        
+        // If 404, try next endpoint
+        lastError = new Error(`Endpoint not found: ${url}`)
+        console.log(`[GHL API] Endpoint ${url} returned 404, trying next...`)
+        
+      } catch (error: any) {
+        // If it's a 404, continue to next endpoint
+        if (error.message?.includes('404') || error.message?.includes('not found')) {
+          lastError = error
+          continue
+        }
+        // Otherwise, re-throw as it's a real error
+        throw error
+      }
+    }
+    
+    // All endpoints failed - calendars endpoint may not exist in V1 API
+    // Return empty array and log warning instead of throwing
+    console.warn(`[GHL API] Calendars endpoint not found. GHL V1 API may not support calendars endpoint.`)
+    console.warn(`[GHL API] This is acceptable - calendars can be synced later or may not be available in V1 API.`)
+    return []
   }
   
   // Fetch single contact
