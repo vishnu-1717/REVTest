@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
 
 // Sync calendars from GHL
@@ -8,8 +8,10 @@ export async function POST(request: Request) {
   try {
     const user = await requireAdmin()
     
-    const company = await prisma.company.findUnique({
-      where: { id: user.companyId }
+    const company = await withPrisma(async (prisma) => {
+      return await prisma.company.findUnique({
+        where: { id: user.companyId }
+      })
     })
     
     if (!company?.ghlApiKey) {
@@ -26,23 +28,25 @@ export async function POST(request: Request) {
     console.log(`Syncing ${calendars.length} calendars for company ${user.companyId}`)
     
     // Sync to database
-    for (const ghlCalendar of calendars) {
-      await prisma.calendar.upsert({
-        where: { ghlCalendarId: ghlCalendar.id },
-        create: {
-          companyId: user.companyId,
-          ghlCalendarId: ghlCalendar.id,
-          name: ghlCalendar.name,
-          description: ghlCalendar.description,
-          isActive: ghlCalendar.isActive
-        },
-        update: {
-          name: ghlCalendar.name,
-          description: ghlCalendar.description,
-          isActive: ghlCalendar.isActive
-        }
-      })
-    }
+    await withPrisma(async (prisma) => {
+      for (const ghlCalendar of calendars) {
+        await prisma.calendar.upsert({
+          where: { ghlCalendarId: ghlCalendar.id },
+          create: {
+            companyId: user.companyId,
+            ghlCalendarId: ghlCalendar.id,
+            name: ghlCalendar.name,
+            description: ghlCalendar.description,
+            isActive: ghlCalendar.isActive
+          },
+          update: {
+            name: ghlCalendar.name,
+            description: ghlCalendar.description,
+            isActive: ghlCalendar.isActive
+          }
+        })
+      }
+    })
     
     return NextResponse.json({
       success: true,
@@ -60,23 +64,25 @@ export async function GET() {
   try {
     const user = await requireAdmin()
     
-    const calendars = await prisma.calendar.findMany({
-      where: { companyId: user.companyId },
-      include: {
-        defaultCloser: {
-          select: {
-            id: true,
-            name: true,
-            email: true
+    const calendars = await withPrisma(async (prisma) => {
+      return await prisma.calendar.findMany({
+        where: { companyId: user.companyId },
+        include: {
+          defaultCloser: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          },
+          _count: {
+            select: {
+              appointments: true
+            }
           }
         },
-        _count: {
-          select: {
-            appointments: true
-          }
-        }
-      },
-      orderBy: { name: 'asc' }
+        orderBy: { name: 'asc' }
+      })
     })
     
     return NextResponse.json(calendars)

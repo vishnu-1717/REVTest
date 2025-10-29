@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { withPrisma } from '@/lib/db'
 
 export async function POST(request: Request) {
   try {
@@ -21,15 +21,17 @@ export async function POST(request: Request) {
     }
     
     // Update company
-    await prisma.company.update({
-      where: { id: user.companyId },
-      data: {
-        attributionStrategy,
-        attributionSourceField: attributionStrategy === 'ghl_fields' 
-          ? attributionSourceField 
-          : null,
-        useCalendarsForAttribution: attributionStrategy === 'calendars'
-      }
+    await withPrisma(async (prisma) => {
+      return await prisma.company.update({
+        where: { id: user.companyId },
+        data: {
+          attributionStrategy,
+          attributionSourceField: attributionStrategy === 'ghl_fields' 
+            ? attributionSourceField 
+            : null,
+          useCalendarsForAttribution: attributionStrategy === 'calendars'
+        }
+      })
     })
     
     return NextResponse.json({ success: true })

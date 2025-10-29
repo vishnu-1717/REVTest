@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
 
 // Save GHL credentials
@@ -28,12 +28,14 @@ export async function POST(request: Request) {
     }
     
     // Update company with GHL credentials
-    await prisma.company.update({
-      where: { id: user.companyId },
-      data: {
-        ghlApiKey: apiKey,
-        ghlLocationId: locationId
-      }
+    await withPrisma(async (prisma) => {
+      return await prisma.company.update({
+        where: { id: user.companyId },
+        data: {
+          ghlApiKey: apiKey,
+          ghlLocationId: locationId
+        }
+      })
     })
     
     return NextResponse.json({ success: true })
@@ -49,15 +51,17 @@ export async function GET() {
   try {
     const user = await requireAdmin()
     
-    const company = await prisma.company.findUnique({
-      where: { id: user.companyId },
-      select: {
-        ghlApiKey: true,
-        ghlLocationId: true,
-        attributionStrategy: true,
-        attributionSourceField: true,
-        useCalendarsForAttribution: true
-      }
+    const company = await withPrisma(async (prisma) => {
+      return await prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: {
+          ghlApiKey: true,
+          ghlLocationId: true,
+          attributionStrategy: true,
+          attributionSourceField: true,
+          useCalendarsForAttribution: true
+        }
+      })
     })
     
     return NextResponse.json({

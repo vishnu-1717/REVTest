@@ -1,4 +1,4 @@
-import { prisma } from './prisma'
+import { withPrisma } from './db'
 
 interface AttributionResult {
   trafficSource: string | null
@@ -9,13 +9,15 @@ interface AttributionResult {
 export async function resolveAttribution(
   appointmentId: string
 ): Promise<AttributionResult> {
-  const appointment = await prisma.appointment.findUnique({
-    where: { id: appointmentId },
-    include: {
-      contact: true,
-      calendarRelation: true,
-      company: true
-    }
+  const appointment = await withPrisma(async (prisma) => {
+    return await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        contact: true,
+        calendarRelation: true,
+        company: true
+      }
+    })
   })
   
   if (!appointment) {
@@ -131,18 +133,7 @@ async function resolveFromHyros(
   contact: any
 ): Promise<AttributionResult> {
   // This will be populated by daily Hyros sync (Part 2)
-  const hyrosData = await prisma.hyrosAttribution?.findFirst({
-    where: { contactId: contact.id }
-  })
-  
-  if (hyrosData?.lastSource) {
-    return {
-      trafficSource: hyrosData.lastSource,
-      leadSource: 'hyros',
-      confidence: 1.0
-    }
-  }
-  
+  // For now, return no attribution since Hyros model doesn't exist yet
   return { trafficSource: null, leadSource: null, confidence: 0 }
 }
 
