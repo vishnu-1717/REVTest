@@ -167,7 +167,10 @@ export async function POST(request: NextRequest) {
       startTime = body.startTime || body.start_time || body.scheduledAt || body.scheduled_at || ''
       endTime = body.endTime || body.end_time || ''
       appointmentStatus = body.appointmentStatus || body.status || body.appointment_status || ''
-      calendarId = body.calendarId || body.calendar_id || ''
+      
+      // Check for calendarId in calendar object (GHL sends calendar data in body.calendar)
+      calendarId = body.calendarId || body.calendar_id || body.calendar?.id || ''
+      
       assignedUserId = body.assignedUserId || body.assigned_user_id || body.assignedUser || ''
       title = body.title || body.name || ''
       notes = body.notes || body.description || ''
@@ -274,6 +277,8 @@ export async function POST(request: NextRequest) {
         contactEmail: body.email,
         contactPhone: body.phone,
         contactName: body.full_name || `${body.first_name || ''} ${body.last_name || ''}`.trim(),
+        firstName: body.first_name,
+        lastName: body.last_name,
         // Store all custom fields for attribution resolution
         allCustomFields: body
       }
@@ -369,14 +374,23 @@ export async function POST(request: NextRequest) {
     
     // Find company by GHL location ID (needed for both API fetch and normal processing)
     let company = await withPrisma(async (prisma) => {
-      return await prisma.company.findFirst({
+      const found = await prisma.company.findFirst({
         where: { ghlLocationId: webhook.locationId }
       })
+      console.log('[GHL Webhook] Looking for company with locationId:', webhook.locationId)
+      if (found) {
+        console.log('[GHL Webhook] Found company:', found.name, 'ID:', found.id, 'LocationId:', found.ghlLocationId)
+      } else {
+        console.log('[GHL Webhook] No company found with that locationId. Available companies:')
+        const allCompanies = await prisma.company.findMany({ select: { id: true, name: true, ghlLocationId: true } })
+        allCompanies.forEach(c => console.log(`  - ${c.name} (ID: ${c.id}, LocationId: ${c.ghlLocationId || 'null'})`))
+      }
+      return found
     })
     
     if (!company) {
       console.error('[GHL Webhook] Company not found for location:', webhook.locationId)
-      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+      return NextResponse.json({ error: `Company not found for GHL locationId: ${webhook.locationId}. Please configure this locationId in your company settings.` }, { status: 404 })
     }
     
     // If appointmentId is empty but we have contact, try fetching from GHL API
@@ -566,28 +580,46 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
   
   console.log('[GHL Webhook] Found contact:', contact?.id, contact?.name)
   
-  if (!contact && webhook.contactId && company.ghlApiKey) {
-    // Fetch contact from GHL
-      const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
-    const ghlContact = await ghl.getContact(webhook.contactId)
+  // Create or update contact from webhook data
+  if (!contact && webhook.contactId) {
+    const firstName = (webhook as any).firstName || ''
+    const lastName = (webhook as any).lastName || ''
+    const fullName = (webhook as any).contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
     
-    if (ghlContact) {
-      contact = await prisma.contact.create({
-        data: {
-          companyId: company.id,
-          ghlContactId: ghlContact.id,
-          name: ghlContact.name || 'Unknown',
-          email: ghlContact.email,
-          phone: ghlContact.phone,
-          tags: ghlContact.tags || [],
-          customFields: ghlContact.customFields || {}
-        }
-      })
+    console.log('[GHL Webhook] Creating contact with name:', fullName, 'from', { firstName, lastName })
+    
+    contact = await prisma.contact.create({
+      data: {
+        companyId: company.id,
+        ghlContactId: webhook.contactId,
+        name: fullName,
+        email: (webhook as any).contactEmail,
+        phone: (webhook as any).contactPhone,
+        tags: [],
+        customFields: (webhook as any).allCustomFields || {}
+      }
+    })
+    console.log('[GHL Webhook] Contact created:', contact.id)
+  } else if (contact) {
+    // Update existing contact name if it's "Unknown"
+    if (contact.name === 'Unknown' && (webhook as any).contactName) {
+      const fullName = (webhook as any).contactName || `${(webhook as any).firstName} ${(webhook as any).lastName}`.trim()
+      if (fullName && fullName !== 'Unknown') {
+        console.log('[GHL Webhook] Updating contact name from "Unknown" to:', fullName)
+        contact = await prisma.contact.update({
+          where: { id: contact.id },
+          data: { 
+            name: fullName,
+            email: (webhook as any).contactEmail || contact.email,
+            phone: (webhook as any).contactPhone || contact.phone
+          }
+        })
+      }
     }
   }
   
   if (!contact) {
-    console.error('Could not create contact for appointment:', webhook.appointmentId)
+    console.error('[GHL Webhook] Could not create contact for appointment:', webhook.appointmentId)
     return
   }
   
