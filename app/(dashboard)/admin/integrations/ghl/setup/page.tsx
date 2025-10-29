@@ -155,15 +155,130 @@ export default function GHLSetupPage() {
               </div>
               
               <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook:</h3>
-                <p className="text-sm text-blue-800 mb-2">
-                  In GHL, go to Settings → Integrations → Webhooks and add:
+                <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook Workflow (Optional but Recommended):</h3>
+                <p className="text-sm text-blue-800 mb-3">
+                  Create a workflow in GHL to send appointment data in real-time. This is optional - you can also sync appointments manually.
                 </p>
-                <code className="block text-xs bg-white p-2 rounded break-all">
-                  {webhookUrl}
-                </code>
-                <p className="text-xs text-blue-600 mt-2">
-                  Select events: Appointment Created, Updated, Cancelled
+                
+                <details className="mt-3">
+                  <summary className="cursor-pointer font-medium text-blue-900 hover:text-blue-700">
+                    📋 Click to see step-by-step instructions
+                  </summary>
+                  <div className="mt-3 space-y-3 text-sm text-blue-800">
+                    <div>
+                      <p className="font-semibold mb-1">Step 1: Create Workflow</p>
+                      <ol className="list-decimal list-inside space-y-1 ml-2">
+                        <li>Go to <strong>Automation → Workflows</strong> in GHL</li>
+                        <li>Click <strong>"Create Workflow"</strong> or <strong>"+"</strong> button</li>
+                        <li>Name it: <strong>"Appointment Sync to [Your App Name]"</strong></li>
+                      </ol>
+                    </div>
+                    
+                    <div>
+                      <p className="font-semibold mb-1">Step 2: Add Trigger</p>
+                      <ol className="list-decimal list-inside space-y-1 ml-2">
+                        <li>Click the <strong>"+"</strong> icon on the workflow canvas</li>
+                        <li>Search for and select <strong>"Appointment"</strong> trigger</li>
+                        <li>Choose events: <strong>Created</strong>, <strong>Updated</strong>, and <strong>Cancelled</strong></li>
+                      </ol>
+                    </div>
+                    
+                    <div>
+                      <p className="font-semibold mb-1">Step 3: Add Custom Webhook Action</p>
+                      <ol className="list-decimal list-inside space-y-1 ml-2">
+                        <li>After the trigger, click <strong>"+"</strong> again</li>
+                        <li>Search for <strong>"Webhook"</strong> and select <strong>"Custom Webhook"</strong></li>
+                        <li>Configure the webhook:</li>
+                      </ol>
+                      <div className="ml-6 mt-2 space-y-2">
+                        <div>
+                          <strong>Method:</strong> <code className="bg-white px-1 rounded">POST</code>
+                        </div>
+                        <div>
+                          <strong>URL:</strong> 
+                          <code className="block bg-white p-2 rounded mt-1 break-all text-xs">
+                            {webhookUrl}
+                          </code>
+                        </div>
+                        <div>
+                          <strong>Headers:</strong> 
+                          <code className="block bg-white p-2 rounded mt-1 text-xs">
+                            Content-Type: application/json
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="font-semibold mb-1">Step 4: Configure Payload</p>
+                      <p className="mb-2">In the "Payload" section, use this JSON structure. <strong>Important:</strong> Replace the merge fields with actual GHL merge field names available in your workflow:</p>
+                      <div className="bg-white p-3 rounded text-xs overflow-x-auto border-2 border-blue-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-gray-600">Click to copy payload template:</span>
+                          <button
+                            onClick={() => {
+                              const payload = JSON.stringify({
+                                type: "Appointment",
+                                id: "{{appointment.id}}",
+                                locationId: locationId || "YOUR_LOCATION_ID",
+                                appointmentId: "{{appointment.id}}",
+                                contactId: "{{contact.id}}",
+                                calendarId: "{{appointment.calendar_id}}",
+                                assignedUserId: "{{appointment.assigned_user_id}}",
+                                appointmentStatus: "{{appointment.status}}",
+                                startTime: "{{appointment.start_time}}",
+                                endTime: "{{appointment.end_time}}",
+                                title: "{{appointment.title}}",
+                                notes: "{{appointment.notes}}"
+                              }, null, 2).replace('YOUR_LOCATION_ID', locationId || 'YOUR_LOCATION_ID');
+                              navigator.clipboard.writeText(payload);
+                              alert('Payload copied to clipboard!');
+                            }}
+                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                          >
+                            📋 Copy
+                          </button>
+                        </div>
+                        <pre className="text-xs">
+{`{
+  "type": "Appointment",
+  "id": "{{appointment.id}}",
+  "locationId": "${locationId || 'YOUR_LOCATION_ID'}",
+  "appointmentId": "{{appointment.id}}",
+  "contactId": "{{contact.id}}",
+  "calendarId": "{{appointment.calendar_id}}",
+  "assignedUserId": "{{appointment.assigned_user_id}}",
+  "appointmentStatus": "{{appointment.status}}",
+  "startTime": "{{appointment.start_time}}",
+  "endTime": "{{appointment.end_time}}",
+  "title": "{{appointment.title}}",
+  "notes": "{{appointment.notes}}"
+}`}
+                        </pre>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <p className="text-blue-700">
+                          ⚠️ <strong>Note:</strong> GHL merge field names may vary. If the fields above don't work, check available merge fields in your workflow builder and adjust accordingly.
+                        </p>
+                        <p className="text-blue-600">
+                          💡 <strong>Tip:</strong> If Location ID is not filled in above, manually replace <code>YOUR_LOCATION_ID</code> with your actual Location ID in the payload.
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <p className="font-semibold mb-1">Step 5: Activate Workflow</p>
+                      <ol className="list-decimal list-inside space-y-1 ml-2">
+                        <li>Click <strong>"Save"</strong> to save your workflow</li>
+                        <li>Toggle the workflow to <strong>"Active"</strong> (top right switch)</li>
+                      </ol>
+                    </div>
+                  </div>
+                </details>
+                
+                <p className="text-xs text-blue-600 mt-3">
+                  💡 <strong>Note:</strong> You can complete the API setup below without configuring the webhook. 
+                  Webhooks enable real-time sync, but you can also manually sync appointments later.
                 </p>
               </div>
             </CardContent>
