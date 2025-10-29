@@ -41,10 +41,32 @@ export async function POST(request: NextRequest) {
     // Log the parsed payload structure
     console.log('[GHL Webhook] Parsed payload:', JSON.stringify(body, null, 2))
     console.log('[GHL Webhook] Payload keys:', Object.keys(body))
-    console.log('[GHL Webhook] Type:', body.type, '| ID:', body.id, '| LocationId:', body.locationId)
+    console.log('[GHL Webhook] Payload type:', typeof body)
+    
+    // GHL might send data in different structures:
+    // 1. Direct: { type: "Appointment", id: "...", ... }
+    // 2. Nested: { data: { type: "Appointment", ... } }
+    // 3. Wrapped: { event: { type: "...", ... }, locationId: "..." }
+    
+    let webhookData: any = body
+    
+    // Check if data is nested
+    if (body.data && typeof body.data === 'object') {
+      console.log('[GHL Webhook] Data found nested in body.data')
+      webhookData = { ...body.data, locationId: body.locationId || body.data.locationId }
+    }
+    
+    // Check if event is nested
+    if (body.event && typeof body.event === 'object') {
+      console.log('[GHL Webhook] Data found nested in body.event')
+      webhookData = { ...body.event, locationId: body.locationId || body.event.locationId }
+    }
+    
+    console.log('[GHL Webhook] Extracted webhook data:', JSON.stringify(webhookData, null, 2))
+    console.log('[GHL Webhook] Type:', webhookData.type, '| ID:', webhookData.id, '| LocationId:', webhookData.locationId)
     
     // Type guard - check if this looks like our expected format
-    const webhook = body as GHLWebhook
+    const webhook = webhookData as GHLWebhook
     
     // Only process appointment webhooks
     if (webhook.type !== 'Appointment' && !webhook.appointmentId && !webhook.appointmentStatus) {
