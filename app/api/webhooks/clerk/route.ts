@@ -58,9 +58,10 @@ export async function POST(req: Request) {
           await prisma.user.update({
             where: { id: existingUser.id },
             data: {
+              clerkId: id, // Update clerkId field directly
               customFields: {
-                ...existingUser.customFields as any,
-                clerkId: id
+                ...(existingUser.customFields as any || {}),
+                clerkId: id // Also keep in customFields for backward compatibility
               }
             }
           })
@@ -87,8 +88,9 @@ export async function POST(req: Request) {
               name: `${first_name || ''} ${last_name || ''}`.trim() || email.split('@')[0],
               role: 'user',
               companyId: defaultCompany.id,
+              clerkId: id, // Set clerkId directly
               customFields: {
-                clerkId: id
+                clerkId: id // Also keep in customFields for backward compatibility
               }
             }
           })

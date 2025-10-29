@@ -34,6 +34,48 @@ export async function getCurrentUser() {
       
       // Auto-create user as super admin if this is the first user OR super admin email
       if (isFirstUser || isSuperAdminEmail) {
+        // First, check if user already exists by email (might have been created manually)
+        const existingByEmail = await prisma.user.findFirst({
+          where: { email }
+        })
+        
+        if (existingByEmail) {
+          // User exists, just update with clerkId and super admin status
+          const updateData: any = {
+            clerkId: userId
+          }
+          
+          if (isSuperAdminEmail) {
+            updateData.superAdmin = true
+            updateData.role = 'admin'
+          }
+          
+          const updatedUser = await prisma.user.update({
+            where: { id: existingByEmail.id },
+            data: updateData,
+            include: {
+              Company: true,
+              commissionRole: true
+            }
+          })
+          
+          return {
+            id: updatedUser.id,
+            email: updatedUser.email,
+            name: updatedUser.name,
+            role: updatedUser.role,
+            superAdmin: updatedUser.superAdmin,
+            companyId: updatedUser.companyId,
+            customFields: updatedUser.customFields,
+            Company: updatedUser.Company,
+            commissionRole: updatedUser.commissionRole,
+            commissionRoleId: updatedUser.commissionRoleId,
+            customCommissionRate: updatedUser.customCommissionRate,
+            canViewTeamMetrics: updatedUser.canViewTeamMetrics,
+            isActive: updatedUser.isActive
+          }
+        }
+        
         // Get or create a default company
         let defaultCompany = await prisma.company.findFirst({
           where: { email: 'default@paymaestro.com' }
