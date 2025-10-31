@@ -216,6 +216,11 @@ export async function POST(request: NextRequest) {
         startTime = body['Appointment Date'] || body['Call Booked Date'] || body['Appointment Confirmed Date'] || ''
       }
       
+      // PRIORITY 6: Check body.calendar structure for appointmentId (GHL might nest it)
+      if (!appointmentId && body.calendar && typeof body.calendar === 'object') {
+        appointmentId = body.calendar.appointmentId || body.calendar.id || ''
+      }
+      
       return {
         appointmentId,
         startTime,
@@ -230,6 +235,16 @@ export async function POST(request: NextRequest) {
     
     const appointmentData = extractAppointmentData(body)
     console.log('[GHL Webhook] Extracted appointment data:', JSON.stringify(appointmentData, null, 2))
+    
+    // If appointmentId still empty, log detailed error for debugging
+    if (!appointmentData.appointmentId) {
+      console.error('[GHL Webhook] ⚠️ APPOINTMENT ID MISSING IN PAYLOAD!')
+      console.error('[GHL Webhook] This webhook will fail to create an appointment')
+      console.error('[GHL Webhook] Payload structure:', Object.keys(body))
+      console.error('[GHL Webhook] Body.calendar:', JSON.stringify(body.calendar, null, 2))
+      console.error('[GHL Webhook] Body.customData:', JSON.stringify(body.customData, null, 2))
+      console.error('[GHL Webhook] Body.triggerData:', JSON.stringify(body.triggerData, null, 2))
+    }
     
     // PRIORITY: Check if body itself IS the appointment object (root level structure from GHL)
     // This happens when GHL sends the appointment directly at root level (as shown in your screenshot)
@@ -522,7 +537,7 @@ export async function POST(request: NextRequest) {
         await handleAppointmentCreated(webhook, company)
       } else {
         console.log('[GHL Webhook] Processing appointment update (no status provided)')
-        await handleAppointmentUpdated(webhook)
+        await handleAppointmentUpdated(webhook, company)
       }
     } else {
       switch (webhook.appointmentStatus.toLowerCase()) {
@@ -546,7 +561,7 @@ export async function POST(request: NextRequest) {
       
       default:
           console.log('[GHL Webhook] Processing appointment update (status:', webhook.appointmentStatus, ')')
-          await handleAppointmentUpdated(webhook)
+          await handleAppointmentUpdated(webhook, company)
       }
     }
     
@@ -624,6 +639,8 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
   }
   
   // Find calendar
+  console.log('[GHL Webhook] Looking for calendar with ghlCalendarId:', webhook.calendarId || 'NONE')
+  
   let calendar: any = null
   if (webhook.calendarId) {
     calendar = await prisma.calendar.findFirst({
@@ -633,24 +650,89 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
       },
       include: { defaultCloser: true }
     })
+    
+    if (calendar) {
+      console.log('[GHL Webhook] ✅ Found calendar:', calendar.name)
+    } else {
+      console.warn('[GHL Webhook] ⚠️ Calendar not found in database. ghlCalendarId:', webhook.calendarId)
+      console.warn('[GHL Webhook] Available calendars:')
+      const allCalendars = await prisma.calendar.findMany({
+        where: { companyId: company.id },
+        select: { name: true, ghlCalendarId: true }
+      })
+      if (allCalendars.length === 0) {
+        console.warn('[GHL Webhook]   No calendars synced yet. Go to GHL setup to sync calendars.')
+      } else {
+        allCalendars.forEach(c => console.warn(`  - ${c.name} (${c.ghlCalendarId})`))
+      }
+    }
+  } else {
+    console.log('[GHL Webhook] ⚠️ No calendarId in webhook payload - appointment will not be linked to a calendar')
   }
   
-  // Find closer
+  // Find setter and closer - intelligently determine which role
+  let setter: any = null
   let closer: any = null
   
-  // Priority 1: Use assignedUserId from GHL
+  console.log('[GHL Webhook] Determining setter vs closer assignment...')
+  
+  // Priority 1: Check if webhook specifies assignedUserId from GHL
   if (webhook.assignedUserId) {
-    closer = await prisma.user.findFirst({
+    const assignedUser = await prisma.user.findFirst({
       where: {
         companyId: company.id,
         ghlUserId: webhook.assignedUserId
       }
     })
+    
+    if (assignedUser) {
+      console.log('[GHL Webhook] Found assigned user:', assignedUser.name, 'Role:', assignedUser.role)
+      
+      // Determine role based on multiple signals:
+      // 1. GHL custom fields that might indicate role
+      const customFields = (webhook as any).allCustomFields || webhook.customFields || {}
+      const roleField = customFields['Role'] || customFields['Assignment Type'] || customFields['Team']
+      
+      // 2. Calendar type (e.g., "Setter Call" vs "Closer Call")
+      const calendarHint = calendar?.calendarType?.toLowerCase() || ''
+      const calendarName = calendar?.name?.toLowerCase() || ''
+      
+      // 3. User's role in the system
+      const userRole = assignedUser.role?.toLowerCase() || ''
+      
+      // Determine if this is a SETTER
+      const isSetter = 
+        roleField?.toLowerCase().includes('setter') ||
+        calendarHint.includes('setter') ||
+        calendarName.includes('setter') ||
+        userRole === 'setter'
+      
+      // Determine if this is a CLOSER
+      const isCloser = 
+        roleField?.toLowerCase().includes('closer') ||
+        calendarHint.includes('closer') ||
+        calendarName.includes('closer') ||
+        userRole === 'closer'
+      
+      // Assign based on detected role
+      if (isSetter) {
+        setter = assignedUser
+        console.log('[GHL Webhook] ✅ Assigned to SETTER:', setter.name)
+      } else if (isCloser) {
+        closer = assignedUser
+        console.log('[GHL Webhook] ✅ Assigned to CLOSER:', closer.name)
+      } else {
+        // Default to closer if role unclear (most appointments are closer appointments)
+        closer = assignedUser
+        console.log('[GHL Webhook] ⚠️ Role unclear - defaulting to CLOSER:', closer.name)
+      }
+    }
   }
   
-  // Priority 2: Use calendar's default closer
-  if (!closer && calendar?.defaultCloser) {
+  // Priority 2: Use calendar's default closer if no closer assigned yet
+  if (!setter && !closer && calendar?.defaultCloser) {
     closer = calendar.defaultCloser
+    console.log('[GHL Webhook] ✅ Using calendar default CLOSER:', closer.name)
   }
   
   // Determine if this is first call (not a reschedule/follow-up)
@@ -681,6 +763,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
           scheduledAt: startTimeDate,
           startTime: startTimeDate,
           endTime: endTimeDate,
+          setterId: setter?.id,
           closerId: closer?.id,
           calendarId: calendar?.id,
           notes: webhook.notes || (webhook as any).title || undefined,
@@ -693,6 +776,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
         data: {
       companyId: company.id,
       contactId: contact.id,
+      setterId: setter?.id,
       closerId: closer?.id,
       calendarId: calendar?.id,
       
@@ -726,7 +810,11 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
     }
   })
   
-  console.log('Appointment created:', appointment.id, 'Attribution:', attribution.trafficSource)
+  console.log('[GHL Webhook] ✅ Appointment created:', appointment.id)
+  console.log('[GHL Webhook]   - Setter:', setter?.name || 'None')
+  console.log('[GHL Webhook]   - Closer:', closer?.name || 'None')
+  console.log('[GHL Webhook]   - Calendar:', calendar?.name || 'None')
+  console.log('[GHL Webhook]   - Attribution:', attribution.trafficSource || 'None')
   })
 }
 
@@ -779,27 +867,36 @@ async function handleAppointmentRescheduled(webhook: GHLWebhook, company: any) {
   })
 }
 
-async function handleAppointmentUpdated(webhook: GHLWebhook) {
+async function handleAppointmentUpdated(webhook: GHLWebhook, company: any) {
   await withPrisma(async (prisma) => {
     const appointment = await prisma.appointment.findFirst({
-    where: { ghlAppointmentId: webhook.appointmentId }
-  })
-  
-  if (!appointment) return
-  
-  // Parse dates from webhook
-  const startTimeDate = (webhook as any).startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
-  const endTimeDate = (webhook as any).endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
-  
-  await prisma.appointment.update({
-    where: { id: appointment.id },
-    data: {
-      scheduledAt: startTimeDate || undefined,
-      startTime: startTimeDate || undefined,
-      endTime: endTimeDate || undefined,
-      notes: webhook.notes || (webhook as any).title || undefined,
-      customFields: webhook.customFields
+      where: { 
+        ghlAppointmentId: webhook.appointmentId,
+        companyId: company.id
+      }
+    })
+    
+    if (!appointment) {
+      console.warn('[GHL Webhook] Update requested but appointment not found, treating as new')
+      console.warn('[GHL Webhook] This likely means the appointment was never created - creating it now')
+      // Call handleAppointmentCreated to create the appointment
+      await handleAppointmentCreated(webhook, company)
+      return
     }
+    
+    // Parse dates from webhook
+    const startTimeDate = (webhook as any).startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
+    const endTimeDate = (webhook as any).endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
+    
+    await prisma.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        scheduledAt: startTimeDate || undefined,
+        startTime: startTimeDate || undefined,
+        endTime: endTimeDate || undefined,
+        notes: webhook.notes || (webhook as any).title || undefined,
+        customFields: webhook.customFields
+      }
     })
   })
 }
