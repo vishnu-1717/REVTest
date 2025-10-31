@@ -157,6 +157,7 @@ export async function POST(request: NextRequest) {
       let endTime = ''
       let appointmentStatus = ''
       let calendarId = ''
+      let calendarName = ''
       let assignedUserId = ''
       let title = ''
       let notes = ''
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest) {
       
       // Check for calendarId in calendar object (GHL sends calendar data in body.calendar)
       calendarId = body.calendarId || body.calendar_id || body.calendar?.id || ''
+      calendarName = body.calendarName || body.calendar?.calendarName || body.calendar?.name || ''
       
       assignedUserId = body.assignedUserId || body.assigned_user_id || body.assignedUser || ''
       title = body.title || body.name || ''
@@ -227,6 +229,7 @@ export async function POST(request: NextRequest) {
         endTime,
         appointmentStatus,
         calendarId,
+        calendarName,
         assignedUserId,
         title,
         notes
@@ -258,6 +261,7 @@ export async function POST(request: NextRequest) {
         endTime: appointmentData.endTime,
         appointmentStatus: appointmentData.appointmentStatus || body.appointmentStatus || body.status,
         calendarId: appointmentData.calendarId,
+        calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId,
         title: appointmentData.title || body.title,
         notes: appointmentData.notes || body.notes,
@@ -282,6 +286,7 @@ export async function POST(request: NextRequest) {
         endTime: appointmentData.endTime,
         appointmentStatus: appointmentData.appointmentStatus,
         calendarId: appointmentData.calendarId,
+        calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId,
         title: appointmentData.title,
         notes: appointmentData.notes,
@@ -664,6 +669,27 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
         console.warn('[GHL Webhook]   No calendars synced yet. Go to GHL setup to sync calendars.')
       } else {
         allCalendars.forEach(c => console.warn(`  - ${c.name} (${c.ghlCalendarId})`))
+      }
+      
+      // Auto-create calendar if we have both ID and name from webhook
+      if (webhook.calendarId && (webhook as any).calendarName) {
+        console.log('[GHL Webhook] 🆕 Auto-creating missing calendar:', (webhook as any).calendarName)
+        try {
+          calendar = await prisma.calendar.create({
+            data: {
+              companyId: company.id,
+              ghlCalendarId: webhook.calendarId,
+              name: (webhook as any).calendarName,
+              isActive: true
+            },
+            include: { defaultCloser: true }
+          })
+          console.log('[GHL Webhook] ✅ Calendar auto-created successfully')
+        } catch (createError: any) {
+          console.error('[GHL Webhook] Failed to auto-create calendar:', createError.message)
+        }
+      } else {
+        console.log('[GHL Webhook] Cannot auto-create calendar - missing calendarId or calendarName')
       }
     }
   } else {
