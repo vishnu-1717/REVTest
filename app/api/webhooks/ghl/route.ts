@@ -315,6 +315,7 @@ export async function POST(request: NextRequest) {
         endTime: appointmentData.endTime || body.data.endTime,
         appointmentStatus: appointmentData.appointmentStatus || body.data.appointmentStatus,
         calendarId: appointmentData.calendarId || body.data.calendarId,
+        calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId || body.data.assignedUserId,
       }
     }
@@ -330,6 +331,7 @@ export async function POST(request: NextRequest) {
         endTime: appointmentData.endTime || body.event.endTime,
         appointmentStatus: appointmentData.appointmentStatus || body.event.appointmentStatus,
         calendarId: appointmentData.calendarId || body.event.calendarId,
+        calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId || body.event.assignedUserId,
       }
     }
@@ -345,6 +347,7 @@ export async function POST(request: NextRequest) {
         endTime: appointmentData.endTime,
         appointmentStatus: appointmentData.appointmentStatus,
         calendarId: appointmentData.calendarId,
+        calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId,
         contactId: body.contact_id || body.contactId,
         contactEmail: body.email,
