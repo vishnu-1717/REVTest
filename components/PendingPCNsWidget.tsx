@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ export function PendingPCNsWidget() {
   const [appointments, setAppointments] = useState<PendingPCN[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchPending = async () => {
+  const fetchPending = useCallback(async () => {
     try {
       const response = await fetch('/api/appointments/pending-pcns')
       const data = await response.json()
@@ -23,7 +23,7 @@ export function PendingPCNsWidget() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchPending()
@@ -31,7 +31,7 @@ export function PendingPCNsWidget() {
     // Refresh every 60 seconds
     const interval = setInterval(fetchPending, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchPending])
 
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)

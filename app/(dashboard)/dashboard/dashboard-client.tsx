@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -43,11 +43,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('30') // days
   
-  useEffect(() => {
-    fetchStats()
-  }, [dateRange, isCompanyAdmin])
-  
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const dateFrom = new Date()
       dateFrom.setDate(dateFrom.getDate() - parseInt(dateRange))
@@ -67,7 +63,11 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       console.error('Failed to fetch stats:', error)
     }
     setLoading(false)
-  }
+  }, [dateRange, isCompanyAdmin])
+  
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
   
   if (loading || !stats) {
     return <div className="container mx-auto py-10">Loading...</div>
