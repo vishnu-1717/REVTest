@@ -18,6 +18,7 @@ export default function CategorizeCalendarsPage() {
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   
   useEffect(() => {
     fetchCalendars()
@@ -32,6 +33,32 @@ export default function CategorizeCalendarsPage() {
       console.error('Failed to fetch calendars:', error)
     }
     setLoading(false)
+  }
+  
+  const handleSyncCalendars = async () => {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/admin/integrations/ghl/calendars', {
+        method: 'POST'
+      })
+      
+      if (!res.ok) {
+        alert('Failed to sync calendars')
+        return
+      }
+      
+      const data = await res.json()
+      console.log(`Synced ${data.count} calendars`)
+      
+      // Refresh the list
+      await fetchCalendars()
+      alert(`✅ Synced ${data.count} calendars successfully!`)
+    } catch (error) {
+      console.error('Failed to sync calendars:', error)
+      alert('Failed to sync calendars')
+    } finally {
+      setSyncing(false)
+    }
   }
   
   const handleSave = async () => {
@@ -72,10 +99,21 @@ export default function CategorizeCalendarsPage() {
   return (
     <div className="container mx-auto py-10 max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Categorize Calendars</h1>
-        <p className="text-gray-600">
-          Tell us which traffic source each calendar represents
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Categorize Calendars</h1>
+            <p className="text-gray-600">
+              Tell us which traffic source each calendar represents
+            </p>
+          </div>
+          <Button 
+            onClick={handleSyncCalendars}
+            disabled={syncing}
+            variant="outline"
+          >
+            {syncing ? 'Syncing...' : '🔄 Sync Calendars'}
+          </Button>
+        </div>
       </div>
       
       <div className="space-y-4 mb-8">
