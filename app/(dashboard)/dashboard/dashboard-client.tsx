@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import Leaderboard from '@/components/Leaderboard'
 import { PendingPCNsWidget } from '@/components/PendingPCNsWidget'
+import { PCNStatus } from '@/components/PCNStatus'
 
 interface Stats {
   totalAppointments: number
@@ -325,7 +326,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-2">
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         apt.status === 'signed' 
                           ? 'bg-green-100 text-green-800'
@@ -338,10 +339,20 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
                         {apt.status.replace('_', ' ')}
                       </span>
                       {apt.cashCollected && (
-                        <p className="text-sm font-semibold mt-1">
+                        <p className="text-sm font-semibold">
                           ${apt.cashCollected.toLocaleString()}
                         </p>
                       )}
+                      <div className="flex justify-end">
+                        <PCNStatus
+                          appointmentId={apt.id}
+                          pcnSubmitted={apt.pcnSubmitted || false}
+                          pcnSubmittedAt={apt.pcnSubmittedAt || null}
+                          scheduledAt={apt.scheduledAt}
+                          status={apt.status}
+                          showButton={true}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
