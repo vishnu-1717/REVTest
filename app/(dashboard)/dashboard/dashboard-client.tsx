@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import Leaderboard from '@/components/Leaderboard'
+import { PendingPCNsWidget } from '@/components/PendingPCNsWidget'
 
 interface Stats {
   totalAppointments: number
@@ -177,6 +178,11 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
             </div>
           </CardContent>
         </Card>
+      </div>
+      
+      {/* Pending PCNs Widget */}
+      <div className="mb-8">
+        <PendingPCNsWidget />
       </div>
       
       {/* Commission Tracker - Only for Sales Reps */}
