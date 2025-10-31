@@ -22,16 +22,22 @@ export async function GET(request: Request) {
       if (dateFrom) dateFilter.gte = new Date(dateFrom)
       if (dateTo) dateFilter.lte = new Date(dateTo)
       
-      // Get appointments for this rep
+      // Get appointments for this rep (either as closer or setter)
       const appointments = await prisma.appointment.findMany({
         where: {
-          closerId: user.id,
+          OR: [
+            { closerId: user.id },
+            { setterId: user.id }
+          ],
           ...(Object.keys(dateFilter).length > 0 && {
             scheduledAt: dateFilter
           })
         },
         include: {
-          contact: true
+          contact: true,
+          setter: true,
+          closer: true,
+          calendarRelation: true
         },
         orderBy: {
           scheduledAt: 'desc'

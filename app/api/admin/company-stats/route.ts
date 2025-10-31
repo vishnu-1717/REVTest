@@ -37,7 +37,9 @@ export async function GET(request: Request) {
         },
         include: {
           contact: true,
-          closer: true
+          closer: true,
+          setter: true,
+          calendarRelation: true
         },
         orderBy: {
           scheduledAt: 'desc'
@@ -50,8 +52,7 @@ export async function GET(request: Request) {
           companyId: user.companyId
         },
         include: {
-          Sale: true,
-          User: true
+          Sale: true
         },
         orderBy: {
           calculatedAt: 'desc'

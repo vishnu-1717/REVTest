@@ -290,12 +290,34 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
             ) : (
               <div className="space-y-3">
                 {stats.recentAppointments.map((apt: any) => (
-                  <div key={apt.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                  <div key={apt.id} className="flex justify-between items-start py-2 border-b last:border-0">
                     <div className="flex-1">
                       <p className="font-medium">{apt.contact?.name || 'Unknown'}</p>
                       <p className="text-sm text-gray-500">
                         {new Date(apt.scheduledAt).toLocaleDateString()}
                       </p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {apt.setter && (
+                          <span className="text-xs text-blue-600">
+                            Setter: {apt.setter.name}
+                          </span>
+                        )}
+                        {apt.closer && (
+                          <span className="text-xs text-green-600">
+                            Closer: {apt.closer.name}
+                          </span>
+                        )}
+                        {apt.calendarRelation && (
+                          <span className="text-xs text-purple-600">
+                            {apt.calendarRelation.name}
+                          </span>
+                        )}
+                        {apt.attributionSource && (
+                          <span className="text-xs text-orange-600">
+                            📊 {apt.attributionSource}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className={`px-2 py-1 text-xs rounded-full ${
