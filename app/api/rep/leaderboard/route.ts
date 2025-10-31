@@ -46,14 +46,21 @@ export async function GET(request: Request) {
           const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
           
           return {
-            repName: rep.name,
-            totalRevenue: totalRevenue
+            id: rep.id,
+            name: rep.name,
+            email: '', // Not returned by API anymore
+            revenue: totalRevenue,
+            commissions: 0, // Not calculated anymore
+            appointments: appointments.length,
+            signed: appointments.filter((a: any) => a.status === 'signed').length,
+            showDetails: false,
+            isCurrentUser: rep.id === user.id
           }
         })
       )
       
       // Sort by revenue (descending)
-      leaderboard.sort((a, b) => b.totalRevenue - a.totalRevenue)
+      leaderboard.sort((a, b) => b.revenue - a.revenue)
       
       // Add rank
       const leaderboardWithRank = leaderboard.map((entry, index) => ({
