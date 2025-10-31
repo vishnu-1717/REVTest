@@ -77,29 +77,53 @@ export default async function DashboardLayout({
                   Commissions
                 </Link>
                 
+                <Link
+                  href="/leaderboard"
+                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                >
+                  Leaderboard
+                </Link>
+                
                 {isAdmin && (
-                  <>
-                    <Link
-                      href="/admin/users"
-                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-                    >
-                      Users
-                    </Link>
+                  <div className="relative group">
+                    <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
+                      Admin
+                      <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
                     
-                    <Link
-                      href="/admin/roles"
-                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-                    >
-                      Roles
-                    </Link>
-                    
-                    <Link
-                      href="/admin/payments"
-                      className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
-                    >
-                      Payments
-                    </Link>
-                  </>
+                    {/* Dropdown Menu */}
+                    <div className="absolute left-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
+                      <div className="py-1">
+                        <Link
+                          href="/admin/users"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Users
+                        </Link>
+                        <Link
+                          href="/admin/roles"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Commission Roles
+                        </Link>
+                        <Link
+                          href="/admin/payments"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Payments
+                        </Link>
+                        <div className="border-t my-1" />
+                        <Link
+                          href="/admin/integrations"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Integrations
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
                 )}
                 
                 {isSuperAdmin && (
