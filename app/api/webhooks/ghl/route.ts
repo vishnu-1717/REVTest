@@ -603,9 +603,9 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
     
     console.log('[GHL Webhook] Creating contact with name:', fullName, 'from', { firstName, lastName })
     
-    contact = await prisma.contact.create({
-      data: {
-        companyId: company.id,
+      contact = await prisma.contact.create({
+        data: {
+          companyId: company.id,
         ghlContactId: webhook.contactId,
         name: fullName,
         email: (webhook as any).contactEmail,
@@ -887,16 +887,16 @@ async function handleAppointmentUpdated(webhook: GHLWebhook, company: any) {
     // Parse dates from webhook
     const startTimeDate = (webhook as any).startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
     const endTimeDate = (webhook as any).endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
-    
-    await prisma.appointment.update({
-      where: { id: appointment.id },
-      data: {
+  
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: {
         scheduledAt: startTimeDate || undefined,
         startTime: startTimeDate || undefined,
         endTime: endTimeDate || undefined,
         notes: webhook.notes || (webhook as any).title || undefined,
-        customFields: webhook.customFields
-      }
+      customFields: webhook.customFields
+    }
     })
   })
 }

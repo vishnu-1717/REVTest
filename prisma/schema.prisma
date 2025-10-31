@@ -181,6 +181,7 @@ model User {
   AppointmentsAsCloser Appointment[]   @relation("CloserAppointments")
   AppointmentsAsSetter Appointment[]   @relation("SetterAppointments")
   assignedCalendars    Calendar[]
+  pcnSubmittedAppointments Appointment[] @relation("PCNSubmissions")
 
   @@index([companyId])
   @@index([email])
@@ -284,6 +285,29 @@ model Appointment {
   attributionSource String?
   leadSource        String? // "ghl_field", "calendar", "hyros", "tag"
   
+  // PCN submission tracking
+  pcnSubmitted             Boolean   @default(false)
+  pcnSubmittedAt           DateTime?
+  pcnSubmittedByUserId     String?
+  pcnSubmittedBy           User?     @relation("PCNSubmissions", fields: [pcnSubmittedByUserId], references: [id], onDelete: SetNull)
+  
+  // PCN call details
+  firstCallOrFollowUp      String?
+  wasOfferMade             Boolean?
+  whyDidntMoveForward      String?
+  notMovingForwardNotes    String?   @db.Text
+  
+  // No-show specific
+  noShowCommunicative      Boolean?
+  noShowCommunicativeNotes String?   @db.Text
+  
+  // Cancellation specific
+  cancellationReason       String?   @db.Text
+  cancellationNotes        String?   @db.Text
+  
+  // Signed specific
+  signedNotes              String?   @db.Text
+  
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -303,6 +327,8 @@ model Appointment {
   @@index([ghlAppointmentId])
   @@index([calendarId])
   @@index([attributionSource])
+  @@index([pcnSubmitted])
+  @@index([pcnSubmittedAt])
 }
 
 model CommissionRole {
