@@ -67,6 +67,8 @@
 - **TailwindCSS**: Utility-first CSS framework
 - **Lucide React**: Icon library
 - **Papaparse**: CSV parsing for data import
+- **xlsx**: Excel file parsing for data import (dev dependency)
+- **date-fns**: Date formatting and manipulation
 
 ### Development Tools
 - **TypeScript**: Static type checking
@@ -166,7 +168,16 @@ The center of the revenue funnel - every sales call, demo, consultation.
 - `saleId` - Links to final Sale
 - `ghlAppointmentId` - Sync with GoHighLevel
 
-**Relations**: Belongs to Contact, Company; links to Sale; may have setter/closer
+**PCN (Post-Call Notes) Fields**:
+- `pcnSubmitted`, `pcnSubmittedAt`, `pcnSubmittedByUserId` - PCN submission tracking
+- `firstCallOrFollowUp` - Call type classification
+- `wasOfferMade`, `qualificationStatus` - Qualification tracking
+- `followUpScheduled`, `nurtureType` - Follow-up management
+- `cancellationReason`, `signedNotes` - Outcome documentation
+- `whyDidntMoveForward`, `notMovingForwardNotes` - Objection tracking
+- `noShowCommunicative` - No-show details
+
+**Relations**: Belongs to Contact, Company; links to Sale; may have setter/closer; PCN submitted by User
 
 #### Sale (Revenue Event)
 A payment received from a customer, matched to an appointment.
@@ -367,6 +378,11 @@ Create Commission record → Update Appointment
 
 **Unmatched Payments**: If confidence < 0.7, create `UnmatchedPayment` for admin review
 
+**Enhanced Matching**:
+- When matching a payment to a `showed` appointment, automatically updates appointment status to `signed`
+- Supports matching payments to appointments even when deals close later (off-call)
+- When PCN is submitted for a `signed` appointment, automatically matches with pending `UnmatchedPayment` by email
+
 ### Commission Calculation
 
 **Formula**:
@@ -409,6 +425,11 @@ return { totalCommission, releasedCommission: totalCommission }
 
 **Result**: Appointments always have setter/closer when possible
 
+**GHL User Mapping**:
+- Users can be mapped to GHL users via `ghlUserId` field
+- Admin UI allows fetching GHL users and assigning them to internal users
+- Ensures proper appointment attribution when appointments sync from GHL
+
 ### 4. Analytics Aggregation
 
 **Dashboard Stats**: Total appointments, show rate, close rate, revenue, by traffic source, by rep
@@ -416,6 +437,18 @@ return { totalCommission, releasedCommission: totalCommission }
 **Rep Dashboard**: Filter to user's appointments as closer/setter
 
 **Leaderboard**: All reps ranked by revenue
+
+**Analytics Metrics** (matches Excel tracker formulas):
+- **Show Rate**: `Shown / (Scheduled - Missing PCNs)` - Percentage of processed appointments that showed
+- **Close Rate**: `Closed / Shown` - Percentage of showed appointments that closed
+- **Scheduled Call/Close %**: `Closed Deals / Scheduled Calls` - Overall conversion from booking to close
+- **Revenue per Scheduled Call**: `Total Revenue / Scheduled Calls`
+- **Revenue per Showed Call**: `Total Revenue / Showed Calls`
+- **Missing PCNs**: Count of appointments overdue for PCN submission (not submitted by 6PM Eastern on appointment day)
+
+**Revenue Calculation**: Combines `cashCollected` from appointments and `amount` from matched `Sale` records
+
+**Groupings**: Analytics support breakdowns by closer, day of week, calendar, appointment type, time of day, and traffic source
 
 ---
 
@@ -438,9 +471,19 @@ All API routes in `app/api/` directory, grouped by feature:
 
 ### Key API Endpoints
 
-**Company Stats**: Get aggregated metrics for company
+**Company Stats** (`/api/admin/company-stats`): Get aggregated metrics for company
 
-**Leaderboard**: Get ranked reps by revenue
+**Rep Stats** (`/api/rep/stats`): Get individual rep performance metrics
+
+**Analytics** (`/api/analytics`): Detailed analytics with filters, breakdowns, and new metrics
+
+**Leaderboard** (`/api/rep/leaderboard`): Get ranked reps by revenue
+
+**Pending PCNs** (`/api/appointments/pending-pcns`): Get appointments needing PCN submission
+
+**User Management** (`/api/admin/users`): CRUD operations for users, with deletion support
+
+**Impersonation** (`/api/admin/impersonate`, `/api/admin/exit-impersonation`): View-as functionality
 
 **Webhooks**: Process external events and sync data
 
@@ -457,8 +500,17 @@ Protected by `app/(dashboard)/layout.tsx` which provides shared navigation and a
 - `analytics/` - Detailed reporting
 - `commissions/` - Earnings view
 - `leaderboard/` - Team rankings
+- `appointments/` - View all pending PCNs
 - `admin/` - Management tools (dropdown)
+  - `users/` - User management, deletion, GHL mapping
+  - `payments/` - Unmatched payments review
+  - `roles/` - Commission role management
+  - `integrations/` - GHL setup and calendar categorization
 - `super-admin/` - Platform tools (dropdown)
+  - `companies/` - Company management and deletion
+  - `users/` - Cross-company user view
+  - `overview/` - Platform-wide statistics
+  - `monitoring/` - System health monitoring
 
 ### Component Architecture
 
@@ -491,9 +543,14 @@ Protected by `app/(dashboard)/layout.tsx` which provides shared navigation and a
 
 **GHL Client** (`lib/ghl-api.ts`): 
 - Validates API keys
-- Fetches calendars, contacts, appointments
+- Fetches calendars, contacts, appointments, and users
 - Handles multiple endpoint variations gracefully
 - Retry logic for eventual consistency
+
+**User Mapping**:
+- Admin can fetch GHL users via `/api/admin/integrations/ghl/users`
+- Users can be mapped to GHL users via `ghlUserId` field in user edit page
+- Ensures appointments sync to the correct rep based on GHL assignment
 
 ### Payment Processors (Whop, Stripe)
 
@@ -506,6 +563,15 @@ Protected by `app/(dashboard)/layout.tsx` which provides shared navigation and a
 **Webhook**: Syncs user lifecycle events to database
 
 **Events**: `user.created`, `user.deleted`
+
+### Data Import
+
+**Excel Import** (`scripts/import-excel-data.ts`):
+- Imports appointments and PCN data from Excel spreadsheets
+- Maps Excel columns to database fields
+- Handles date conversions (Excel serial dates to JavaScript dates)
+- Creates contacts and appointments with PCN data
+- Validates closer/setter assignments via email matching
 
 ---
 
@@ -543,6 +609,50 @@ Click impersonate → Set cookie → Get impersonated user →
 Filter data by impersonated user → Show banner → 
 Exit clears cookie
 ```
+
+**Multi-Tenant Enforcement**:
+- When impersonating, all API endpoints filter by impersonated user's `companyId`
+- Ensures super admins viewing as a user only see that user's company data
+- Cookie-based state persists across page navigations
+- Banner shows impersonated user's name, email, and company
+
+### PCN (Post-Call Notes) Workflow
+
+**Auto-Creation**:
+- PCN records are automatically created when appointments sync from GHL
+- `pcnSubmitted` defaults to `false` for all new appointments
+
+**Submission Permissions**:
+- **Reps**: Can only submit PCNs for their own appointments (where they are the closer)
+- **Admins**: Can submit PCNs for any appointment in their company
+- **Super Admins**: Can submit PCNs for any appointment when impersonating
+
+**Overdue Definition**:
+- PCN is considered overdue if not submitted by 6PM Eastern on the appointment day
+- Past appointments are automatically overdue
+- Missing PCNs are excluded from Show Rate denominator (Excel formula: `Shown / (Scheduled - Missing PCNs)`)
+
+**Submission Flow**:
+```
+Appointment completed → PCN auto-created (pcnSubmitted: false) →
+Rep/Admin submits PCN → Update appointment with PCN data →
+If appointment is signed → Auto-match with pending payments →
+Create commission if payment matched → Mark PCN as submitted
+```
+
+### User & Company Deletion
+
+**User Deletion** (`/api/admin/users/[id]`):
+- **Super Admins**: Can delete users from any company (when not impersonating)
+- **Company Admins**: Can only delete users from their own company
+- **When Impersonating**: Deletion restricted to impersonated user's company
+- Users with historical data (commissions, appointments) are deactivated instead of deleted
+- Users without data are permanently deleted
+
+**Company Deletion** (`/api/super-admin/companies/[id]`):
+- Only super admins can delete companies
+- Cascading deletes handled by Prisma schema
+- Warning logged if company has significant data before deletion
 
 ---
 
@@ -584,14 +694,15 @@ Required:
 
 PayMaestro is a **multi-tenant appointment-to-commission tracking system** that:
 
-1. **Tracks** appointments from booking to close
-2. **Matches** payments to appointments intelligently
+1. **Tracks** appointments from booking to close with PCN management
+2. **Matches** payments to appointments intelligently (even for off-call closes)
 3. **Calculates** commissions based on roles and rates
 4. **Attributes** marketing sources for ROI analysis
-5. **Reports** performance metrics across dashboards
-6. **Manages** access with role-based permissions
+5. **Reports** performance metrics across dashboards (matching Excel tracker formulas)
+6. **Manages** access with role-based permissions and impersonation
+7. **Enforces** multi-tenancy at every level with proper data isolation
 
 **Key Technologies**: Next.js 16, Prisma, Clerk, PostgreSQL, Vercel
 
-**Architecture Principles**: Multi-tenancy, API-first, type safety, role-based access, real-time webhooks
+**Architecture Principles**: Multi-tenancy, API-first, type safety, role-based access, real-time webhooks, Excel-compatible analytics
 
