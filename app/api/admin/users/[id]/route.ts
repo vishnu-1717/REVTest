@@ -77,9 +77,24 @@ export async function PUT(
     }
     
     const { id } = await params
-    const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
+    const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive, ghlUserId } = await request.json()
     
     const user = await withPrisma(async (prisma) => {
+      // If ghlUserId is being set, check for uniqueness within company
+      if (ghlUserId !== undefined && ghlUserId !== null && ghlUserId !== '') {
+        const existingUser = await prisma.user.findFirst({
+          where: {
+            companyId: currentUser.companyId,
+            ghlUserId: ghlUserId,
+            NOT: { id }
+          }
+        })
+        
+        if (existingUser) {
+          throw new Error('GHL User ID is already assigned to another user in your company')
+        }
+      }
+      
       return await prisma.user.update({
         where: {
           id,
@@ -91,7 +106,8 @@ export async function PUT(
           commissionRoleId: commissionRoleId || null,
           customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
           canViewTeamMetrics,
-          isActive
+          isActive,
+          ...(ghlUserId !== undefined && { ghlUserId: ghlUserId || null })
         },
         include: {
           commissionRole: true
@@ -122,7 +138,7 @@ export async function PATCH(
     }
     
     const { id } = await params
-    const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive } = await request.json()
+    const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive, ghlUserId } = await request.json()
     
     const updatedUser = await withPrisma(async (prisma) => {
       // Check if user belongs to the same company
@@ -151,6 +167,21 @@ export async function PATCH(
         }
       }
       
+      // If ghlUserId is being set, check for uniqueness within company
+      if (ghlUserId !== undefined && ghlUserId !== null && ghlUserId !== '' && ghlUserId !== existing.ghlUserId) {
+        const existingUser = await prisma.user.findFirst({
+          where: {
+            companyId: currentUser.companyId,
+            ghlUserId: ghlUserId,
+            NOT: { id }
+          }
+        })
+        
+        if (existingUser) {
+          throw new Error('GHL User ID is already assigned to another user in your company')
+        }
+      }
+      
       return await prisma.user.update({
         where: {
           id
@@ -162,7 +193,8 @@ export async function PATCH(
           ...(commissionRoleId !== undefined && { commissionRoleId: commissionRoleId || null }),
           ...(customCommissionRate !== undefined && { customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null }),
           ...(canViewTeamMetrics !== undefined && { canViewTeamMetrics }),
-          ...(isActive !== undefined && { isActive })
+          ...(isActive !== undefined && { isActive }),
+          ...(ghlUserId !== undefined && { ghlUserId: ghlUserId || null })
         },
         include: {
           commissionRole: true

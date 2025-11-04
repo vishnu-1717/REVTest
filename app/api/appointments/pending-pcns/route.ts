@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveUser } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const user = await getEffectiveUser()
     
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const result = await withPrisma(async (prisma) => {
-      const user = await prisma.user.findUnique({
-        where: { clerkId: userId }
-      })
-
-      if (!user) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 })
-      }
 
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
       

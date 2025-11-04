@@ -36,42 +36,42 @@ model Commission {
 }
 
 model Company {
-  id                   String             @id @default(cuid())
+  id                   String    @id @default(cuid())
   name                 String
-  email                String             @unique
+  email                String    @unique
   processor            String
   processorAccountId   String?
   processorConnectedAt DateTime?
-  inviteCode           String?            @unique
-  
+  inviteCode           String?   @unique
+
   // GHL Integration
-  ghlApiKey            String?
-  ghlLocationId        String?
-  ghlWebhookSecret     String?
-  
+  ghlApiKey        String?
+  ghlLocationId    String?
+  ghlWebhookSecret String?
+
   // Attribution Strategy
-  attributionStrategy    String  @default("ghl_fields")
+  attributionStrategy String @default("ghl_fields")
   // Options: "ghl_fields", "calendars", "hyros", "tags", "none"
-  
+
   attributionSourceField String? @default("contact.source")
   // For "ghl_fields" strategy: which field to pull from
-  
+
   useCalendarsForAttribution Boolean @default(false)
   // For "calendars" strategy: enable calendar categorization
-  
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  Commission           Commission[]
-  Sale                 Sale[]
-  User                 User[]
-  Contact              Contact[]
-  TrafficSource        TrafficSource[]
-  Appointment          Appointment[]
-  WebhookEvent         WebhookEvent[]
-  CommissionRole       CommissionRole[]
-  PaymentLink          PaymentLink[]
-  UnmatchedPayment     UnmatchedPayment[]
-  calendars            Calendar[]
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  Commission       Commission[]
+  Sale             Sale[]
+  User             User[]
+  Contact          Contact[]
+  TrafficSource    TrafficSource[]
+  Appointment      Appointment[]
+  WebhookEvent     WebhookEvent[]
+  CommissionRole   CommissionRole[]
+  PaymentLink      PaymentLink[]
+  UnmatchedPayment UnmatchedPayment[]
+  calendars        Calendar[]
 
   @@index([email])
 }
@@ -81,30 +81,30 @@ model Company {
 // ==========================================
 
 model Calendar {
-  id        String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   // GHL data
   ghlCalendarId String  @unique
   name          String
   description   String?
   isActive      Boolean @default(true)
-  
+
   // OPTIONAL: For companies that use calendars for attribution (like BudgetDog)
   trafficSource String?
   calendarType  String?
-  
+
   // OPTIONAL: Auto-assign appointments to specific closer
   defaultCloserId String?
   defaultCloser   User?   @relation(fields: [defaultCloserId], references: [id], onDelete: SetNull)
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   appointments Appointment[]
-  
+
   @@index([companyId])
   @@index([ghlCalendarId])
   @@index([trafficSource])
@@ -155,33 +155,33 @@ model Sale {
 }
 
 model User {
-  id                   String          @id @default(cuid())
-  email                String          @unique
+  id                   String  @id @default(cuid())
+  email                String  @unique
   name                 String
   role                 String
-  superAdmin           Boolean         @default(false)
-  clerkId              String?         @unique
+  superAdmin           Boolean @default(false)
+  clerkId              String? @unique
   companyId            String
   commissionRoleId     String?
   customCommissionRate Float?
-  canViewTeamMetrics   Boolean         @default(false)
-  canViewLeaderboard   Boolean         @default(true)
-  isActive             Boolean         @default(true)
+  canViewTeamMetrics   Boolean @default(false)
+  canViewLeaderboard   Boolean @default(true)
+  isActive             Boolean @default(true)
   customFields         Json?
-  
+
   // Map to GHL user for auto-assignment
   ghlUserId String? @unique
-  
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-  Commission           Commission[]
-  Sale                 Sale[]
-  Company              Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  commissionRole       CommissionRole? @relation(fields: [commissionRoleId], references: [id])
-  AppointmentsAsCloser Appointment[]   @relation("CloserAppointments")
-  AppointmentsAsSetter Appointment[]   @relation("SetterAppointments")
-  assignedCalendars    Calendar[]
-  pcnSubmittedAppointments Appointment[] @relation("PCNSubmissions")
+
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+  Commission               Commission[]
+  Sale                     Sale[]
+  Company                  Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  commissionRole           CommissionRole? @relation(fields: [commissionRoleId], references: [id])
+  AppointmentsAsCloser     Appointment[]   @relation("CloserAppointments")
+  AppointmentsAsSetter     Appointment[]   @relation("SetterAppointments")
+  assignedCalendars        Calendar[]
+  pcnSubmittedAppointments Appointment[]   @relation("PCNSubmissions")
 
   @@index([companyId])
   @@index([email])
@@ -207,19 +207,19 @@ model WebhookEvent {
 }
 
 model Contact {
-  id           String   @id @default(cuid())
+  id           String  @id @default(cuid())
   name         String
   email        String?
   phone        String?
   companyId    String
   ghlContactId String?
   customFields Json?
-  
+
   // GHL tags (for attribution via tags strategy)
   tags String[]
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   trafficSource TrafficSource? @relation(fields: [trafficSourceId], references: [id])
@@ -276,40 +276,40 @@ model Appointment {
   saleId                 String?   @unique
   ghlAppointmentId       String?
   customFields           Json?
-  
+
   // Link to calendar
-  calendarId String?
+  calendarId       String?
   calendarRelation Calendar? @relation(fields: [calendarId], references: [id], onDelete: SetNull)
-  
+
   // Attribution (resolved from company's strategy)
   attributionSource String?
   leadSource        String? // "ghl_field", "calendar", "hyros", "tag"
-  
+
   // PCN submission tracking
-  pcnSubmitted             Boolean   @default(false)
-  pcnSubmittedAt           DateTime?
-  pcnSubmittedByUserId     String?
-  pcnSubmittedBy           User?     @relation("PCNSubmissions", fields: [pcnSubmittedByUserId], references: [id], onDelete: SetNull)
-  
+  pcnSubmitted         Boolean   @default(false)
+  pcnSubmittedAt       DateTime?
+  pcnSubmittedByUserId String?
+  pcnSubmittedBy       User?     @relation("PCNSubmissions", fields: [pcnSubmittedByUserId], references: [id], onDelete: SetNull)
+
   // PCN call details
-  firstCallOrFollowUp      String?
-  wasOfferMade             Boolean?
-  whyDidntMoveForward      String?
-  notMovingForwardNotes    String?   @db.Text
-  
+  firstCallOrFollowUp   String?
+  wasOfferMade          Boolean?
+  whyDidntMoveForward   String?
+  notMovingForwardNotes String?  @db.Text
+
   // No-show specific
   noShowCommunicative      Boolean?
-  noShowCommunicativeNotes String?   @db.Text
-  
+  noShowCommunicativeNotes String?  @db.Text
+
   // Cancellation specific
-  cancellationReason       String?   @db.Text
-  cancellationNotes        String?   @db.Text
-  
+  cancellationReason String? @db.Text
+  cancellationNotes  String? @db.Text
+
   // Signed specific
-  signedNotes              String?   @db.Text
-  
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  signedNotes String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company       Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   contact       Contact        @relation(fields: [contactId], references: [id])

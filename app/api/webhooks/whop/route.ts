@@ -126,6 +126,14 @@ export async function POST(request: NextRequest) {
             }
           })
           
+          // Update appointment status to 'signed' if it was 'showed' (deal closed later)
+          if (appointment && appointment.status === 'showed') {
+            await prisma.appointment.update({
+              where: { id: appointment.id },
+              data: { status: 'signed' }
+            })
+          }
+          
           if (appointment?.closer) {
             // Get commission rate
             const commissionRate = appointment.closer.customCommissionRate 

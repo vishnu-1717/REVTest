@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveUser } from '@/lib/auth'
+import { calculateCommission } from '@/lib/payment-matcher'
 import { PCNSubmission } from '@/types/pcn'
 
 export async function POST(
@@ -8,22 +9,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    const user = await getEffectiveUser()
     
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
 
     const result = await withPrisma(async (prisma) => {
-      const user = await prisma.user.findUnique({
-        where: { clerkId: userId }
-      })
-
-      if (!user) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 })
-      }
 
       const body: PCNSubmission = await request.json()
       
@@ -111,10 +105,97 @@ export async function POST(
         where: { id: id },
         data: updateData,
         include: {
-          contact: { select: { name: true } },
-          closer: { select: { name: true } }
+          contact: { select: { name: true, email: true } },
+          closer: { select: { id: true, name: true } }
         }
       })
+      
+      // If outcome is 'signed', try to match with existing unmatched payments
+      if (body.callOutcome === 'signed' && updatedAppointment.contact.email) {
+        try {
+          // First find unmatched payments by email
+          const unmatchedPayments = await prisma.unmatchedPayment.findMany({
+            where: {
+              companyId: user.companyId,
+              status: 'pending'
+            },
+            include: {
+              sale: true
+            },
+            orderBy: {
+              createdAt: 'desc'
+            }
+          })
+          
+          // Filter by email match
+          const unmatchedPayment = unmatchedPayments.find(
+            up => up.sale.customerEmail?.toLowerCase() === updatedAppointment.contact.email?.toLowerCase()
+          )
+          
+          if (unmatchedPayment) {
+            // Link payment to appointment
+            await prisma.sale.update({
+              where: { id: unmatchedPayment.saleId },
+              data: {
+                appointmentId: id,
+                matchedBy: 'pcn_submission',
+                matchConfidence: 0.9,
+                manuallyMatched: false,
+                matchedByUserId: user.id
+              }
+            })
+            
+            // Create commission if closer exists
+            if (updatedAppointment.closer) {
+              const closer = await prisma.user.findUnique({
+                where: { id: updatedAppointment.closer.id },
+                include: { commissionRole: true }
+              })
+              
+              if (closer) {
+                const commissionRate = closer.customCommissionRate 
+                  || closer.commissionRole?.defaultRate 
+                  || 0.10
+                
+                const commissionResult = calculateCommission(
+                  Number(unmatchedPayment.sale.amount),
+                  commissionRate,
+                  Number(unmatchedPayment.sale.amount)
+                )
+                const totalCommission = commissionResult.totalCommission
+                const releasedCommission = commissionResult.releasedCommission
+                
+                await prisma.commission.create({
+                  data: {
+                    amount: releasedCommission,
+                    totalAmount: totalCommission,
+                    releasedAmount: releasedCommission,
+                    percentage: commissionRate,
+                    status: 'pending',
+                    releaseStatus: 'released',
+                    companyId: user.companyId,
+                    saleId: unmatchedPayment.saleId,
+                    repId: closer.id
+                  }
+                })
+                
+                // Mark as matched
+                await prisma.unmatchedPayment.update({
+                  where: { id: unmatchedPayment.id },
+                  data: {
+                    status: 'matched',
+                    reviewedAt: new Date(),
+                    reviewedByUserId: user.id
+                  }
+                })
+              }
+            }
+          }
+        } catch (matchError: any) {
+          // Log error but don't fail the PCN submission
+          console.error('[PCN] Error matching payment:', matchError)
+        }
+      }
 
       // Create audit log
       await prisma.webhookEvent.create({

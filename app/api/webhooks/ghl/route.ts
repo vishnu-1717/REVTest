@@ -796,7 +796,9 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
           closerId: closer?.id,
           calendarId: calendar?.id,
           notes: webhook.notes || (webhook as any).title || undefined,
-          customFields: webhook.customFields || {}
+          customFields: webhook.customFields || {},
+          // Ensure PCN is still available if not submitted
+          pcnSubmitted: appointment.pcnSubmitted || false
         }
       })
     } else {
@@ -816,6 +818,7 @@ async function handleAppointmentCreated(webhook: GHLWebhook, company: any) {
       
       status: 'scheduled',
       isFirstCall,
+      pcnSubmitted: false, // PCN is automatically "created" when appointment exists
       
       notes: webhook.notes,
       customFields: webhook.customFields || {}

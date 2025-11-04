@@ -18,6 +18,13 @@ interface GHLCalendar {
   isActive: boolean
 }
 
+interface GHLUser {
+  id: string
+  name: string
+  email?: string
+  role?: string
+}
+
 export class GHLClient {
   private apiKey: string
   private locationId?: string
@@ -121,6 +128,61 @@ export class GHLClient {
     // Return empty array and log warning instead of throwing
     console.warn(`[GHL API] Calendars endpoint not found. GHL V1 API may not support calendars endpoint.`)
     console.warn(`[GHL API] This is acceptable - calendars can be synced later or may not be available in V1 API.`)
+    return []
+  }
+  
+  // Fetch all users from GHL
+  async getUsers(): Promise<GHLUser[]> {
+    const endpoints = []
+    
+    // Try multiple endpoint patterns for users
+    if (this.locationId) {
+      endpoints.push(
+        `${this.baseUrl}/locations/${this.locationId}/users`,
+        `${this.baseUrl}/locations/${this.locationId}/users/`,
+        `${this.baseUrl}/users?locationId=${this.locationId}`
+      )
+    }
+    
+    endpoints.push(
+      `${this.baseUrl}/users`,
+      `${this.baseUrl}/users/`
+    )
+    
+    for (const url of endpoints) {
+      try {
+        console.log(`[GHL API] Trying users endpoint: ${url}`)
+        
+        const response = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Version': '2021-07-28',
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`[GHL API] Successfully fetched users from: ${url}`)
+          const users = data.users || data.data || data || []
+          return Array.isArray(users) ? users : []
+        }
+        
+        // If it's not a 404, this might be an auth error, don't try other endpoints
+        if (response.status !== 404) {
+          const errorText = await response.text().catch(() => response.statusText)
+          console.warn(`[GHL API] Users endpoint error: ${response.status} ${response.statusText} - ${errorText}`)
+          // Continue to try other endpoints
+        } else {
+          console.log(`[GHL API] Endpoint ${url} returned 404, trying next...`)
+        }
+      } catch (error: any) {
+        console.warn(`[GHL API] Error trying users endpoint ${url}:`, error.message)
+      }
+    }
+    
+    // All endpoints failed - return empty array
+    console.warn(`[GHL API] Users endpoint not found. GHL V1 API may not support users endpoint.`)
     return []
   }
   

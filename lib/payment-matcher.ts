@@ -51,8 +51,8 @@ export async function findAppointmentForPayment(
       })
       
       if (contact) {
-        // Find recent signed appointment for this contact
-        const appointment = await prisma.appointment.findFirst({
+        // First try to find signed appointment
+        let appointment = await prisma.appointment.findFirst({
           where: {
             contactId: contact.id,
             status: 'signed',
@@ -67,7 +67,33 @@ export async function findAppointmentForPayment(
           }
         })
         
+        // If no signed appointment, try showed appointments (deal might close later)
+        if (!appointment) {
+          appointment = await prisma.appointment.findFirst({
+            where: {
+              contactId: contact.id,
+              status: 'showed',
+              companyId,
+              // Within last 30 days
+              scheduledAt: {
+                gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+              }
+            },
+            orderBy: {
+              scheduledAt: 'desc'
+            }
+          })
+        }
+        
         if (appointment) {
+          // If appointment was showed, update status to signed
+          if (appointment.status === 'showed') {
+            await prisma.appointment.update({
+              where: { id: appointment.id },
+              data: { status: 'signed' }
+            })
+          }
+          
           return {
             appointmentId: appointment.id,
             confidence: 0.9,

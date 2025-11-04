@@ -15,6 +15,14 @@ interface User {
   commissionRoleId: string | null
   customCommissionRate: number | null
   canViewTeamMetrics: boolean
+  ghlUserId: string | null
+}
+
+interface GHLUser {
+  id: string
+  name: string
+  email?: string
+  role?: string
 }
 
 interface CommissionRole {
@@ -29,6 +37,8 @@ export default function EditUserPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [roles, setRoles] = useState<CommissionRole[]>([])
+  const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([])
+  const [loadingGhlUsers, setLoadingGhlUsers] = useState(false)
   
   const [formData, setFormData] = useState({
     name: '',
@@ -36,7 +46,8 @@ export default function EditUserPage() {
     commissionRoleId: '',
     customCommissionRate: '',
     canViewTeamMetrics: false,
-    isActive: true
+    isActive: true,
+    ghlUserId: ''
   })
   
   useEffect(() => {
@@ -59,7 +70,8 @@ export default function EditUserPage() {
           ? (user.customCommissionRate * 100).toString()
           : '',
         canViewTeamMetrics: user.canViewTeamMetrics,
-        isActive: user.isActive
+        isActive: user.isActive,
+        ghlUserId: user.ghlUserId || ''
       })
     } catch (error) {
       console.error('Failed to fetch user:', error)
@@ -75,6 +87,24 @@ export default function EditUserPage() {
       setRoles(data)
     } catch (error) {
       console.error('Failed to fetch roles:', error)
+    }
+  }
+  
+  const fetchGhlUsers = async () => {
+    setLoadingGhlUsers(true)
+    try {
+      const res = await fetch('/api/admin/integrations/ghl/users')
+      const data = await res.json()
+      if (data.success) {
+        setGhlUsers(data.users || [])
+      } else {
+        alert(data.error || 'Failed to fetch GHL users')
+      }
+    } catch (error) {
+      console.error('Failed to fetch GHL users:', error)
+      alert('Failed to fetch GHL users. Make sure GHL is configured.')
+    } finally {
+      setLoadingGhlUsers(false)
     }
   }
   
@@ -205,6 +235,43 @@ export default function EditUserPage() {
               <p className="text-sm text-gray-500 mt-1">
                 This overrides the commission role's default rate
               </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                GHL User ID
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={formData.ghlUserId}
+                  onChange={(e) => setFormData({...formData, ghlUserId: e.target.value})}
+                  className="flex-1 border rounded-md p-2"
+                  disabled={ghlUsers.length === 0}
+                >
+                  <option value="">-- Not mapped --</option>
+                  {ghlUsers.map(ghlUser => (
+                    <option key={ghlUser.id} value={ghlUser.id}>
+                      {ghlUser.name} {ghlUser.email ? `(${ghlUser.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={fetchGhlUsers}
+                  disabled={loadingGhlUsers}
+                >
+                  {loadingGhlUsers ? 'Loading...' : 'Fetch GHL Users'}
+                </Button>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                Map this user to a GHL user so appointments sync correctly. Required for appointment assignment.
+              </p>
+              {formData.ghlUserId && (
+                <p className="text-sm text-green-600 mt-1">
+                  ✓ Mapped to GHL User ID: {formData.ghlUserId}
+                </p>
+              )}
             </div>
             
             <div className="space-y-3">

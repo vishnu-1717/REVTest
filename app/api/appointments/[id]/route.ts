@@ -1,29 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveUser } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { userId } = await auth()
+    const user = await getEffectiveUser()
     
-    if (!userId) {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
 
     const result = await withPrisma(async (prisma) => {
-      // Get user from database
-      const user = await prisma.user.findUnique({
-        where: { clerkId: userId }
-      })
-
-      if (!user) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 })
-      }
 
       // Build where clause based on role
       const whereClause: any = {

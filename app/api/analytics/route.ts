@@ -148,12 +148,92 @@ export async function GET(request: NextRequest) {
     const showRate = scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0'
     const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
     
-    const totalRevenue = filteredAppointments
+    // Calculate revenue from appointments and matched sales
+    const revenueFromAppointments = filteredAppointments
       .reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
+    
+    // Get matched sales for appointments in this date range
+    const appointmentIds = filteredAppointments.map(a => a.id)
+    const matchedSales = await withPrisma(async (prisma) => {
+      if (appointmentIds.length === 0) return []
+      return await prisma.sale.findMany({
+        where: {
+          appointmentId: { in: appointmentIds },
+          companyId: effectiveCompanyId,
+          status: 'paid'
+        },
+        select: {
+          amount: true,
+          appointmentId: true
+        }
+      })
+    })
+    
+    const revenueFromSales = matchedSales.reduce((sum, sale) => {
+      return sum + Number(sale.amount)
+    }, 0)
+    
+    const totalRevenue = revenueFromAppointments + revenueFromSales
     
     const avgDealSize = signed > 0 
       ? (totalRevenue / signed).toFixed(0)
       : '0'
+    
+    // Calculate closed deals (signed appointments OR appointments with matched sales)
+    const closedDeals = new Set([
+      ...filteredAppointments.filter(a => a.status === 'signed').map(a => a.id),
+      ...matchedSales.map(s => s.appointmentId).filter(Boolean)
+    ]).size
+    
+    // Calculate scheduled call/close %
+    const scheduledCallCloseRate = scheduled > 0 
+      ? ((closedDeals / scheduled) * 100).toFixed(1)
+      : '0'
+    
+    // Revenue per scheduled call
+    const revenuePerScheduledCall = scheduled > 0
+      ? (totalRevenue / scheduled).toFixed(2)
+      : '0'
+    
+    // Revenue per showed call
+    const revenuePerShowedCall = showed > 0
+      ? (totalRevenue / showed).toFixed(2)
+      : '0'
+    
+    // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
+    // Use a helper function to check if appointment is overdue
+    const isPCNOverdue = (appointment: any): boolean => {
+      if (appointment.pcnSubmitted || appointment.status === 'cancelled') return false
+      
+      const scheduledDate = new Date(appointment.scheduledAt)
+      const now = new Date()
+      
+      // Get scheduled date in Eastern time (simplified - assumes EST/EDT handled by system)
+      // Convert to Eastern time by subtracting 5 hours (EST) or 4 hours (EDT)
+      // For simplicity, we'll use a fixed offset and check if it's past 6PM Eastern
+      // In production, you'd want to use a proper timezone library like date-fns-tz
+      const scheduledDay = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate())
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      // If scheduled date is in the past, it's overdue
+      if (scheduledDay < today) {
+        return true
+      }
+      
+      // If scheduled date is today, check if it's past 6PM Eastern (18:00)
+      if (scheduledDay.getTime() === today.getTime()) {
+        // Get current hour in Eastern time (simplified - using UTC-5 for EST)
+        // Note: This doesn't account for DST, but for MVP this is acceptable
+        let easternHour = now.getUTCHours() - 5
+        if (easternHour < 0) easternHour += 24
+        
+        return easternHour >= 18 // 6PM Eastern
+      }
+      
+      return false
+    }
+    
+    const missingPCNs = filteredAppointments.filter(isPCNOverdue).length
     
     // Group by closer
     const byCloser = Object.values(
@@ -382,6 +462,10 @@ export async function GET(request: NextRequest) {
       closeRate: parseFloat(closeRate),
       totalRevenue,
       avgDealSize: parseFloat(avgDealSize),
+      scheduledCallCloseRate: parseFloat(scheduledCallCloseRate),
+      revenuePerScheduledCall: parseFloat(revenuePerScheduledCall),
+      revenuePerShowedCall: parseFloat(revenuePerShowedCall),
+      missingPCNs,
       byCloser,
       byDayOfWeek,
       byObjection,

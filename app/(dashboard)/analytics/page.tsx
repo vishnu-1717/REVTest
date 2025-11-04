@@ -203,6 +203,65 @@ export default function AnalyticsPage() {
             </Card>
           </div>
           
+          {/* New Metrics Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Scheduled Call/Close %
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.scheduledCallCloseRate || 0}%</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Closed deals / Scheduled calls
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Revenue per Scheduled Call
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  ${analytics.revenuePerScheduledCall?.toLocaleString() || 0}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Revenue per Showed Call
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  ${analytics.revenuePerShowedCall?.toLocaleString() || 0}
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Missing PCNs
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-red-600">
+                  {analytics.missingPCNs || 0}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Overdue PCN submissions
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          
           {/* View Tabs */}
           <div className="flex gap-2 mb-6">
             <Button

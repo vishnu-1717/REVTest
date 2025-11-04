@@ -19,6 +19,7 @@ interface User {
   } | null
   customCommissionRate: number | null
   canViewTeamMetrics: boolean
+  ghlUserId: string | null
   _count: {
     AppointmentsAsCloser: number
     Commission: number
@@ -318,6 +319,9 @@ export default function UsersPage() {
                     Commission
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    GHL Mapped
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Stats
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -349,6 +353,17 @@ export default function UsersPage() {
                     )}
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {getCommissionRate(user)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {user.ghlUserId ? (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          ✓ Mapped
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                          ⚠ Not Mapped
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user._count.AppointmentsAsCloser} appts<br/>
