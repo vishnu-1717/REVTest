@@ -223,8 +223,16 @@ export async function DELETE(
     }
     
     // Verify admin permissions
+    // Also check if user is impersonating - if so, they need to be impersonating an admin
+    const isImpersonating = (currentUser as any)._impersonating === true
+    
     if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
-      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+      return NextResponse.json({ 
+        error: 'Admin access required',
+        details: isImpersonating 
+          ? 'You are currently impersonating a user who is not an admin. Please exit impersonation to delete users.'
+          : 'You need admin or super admin access to delete users.'
+      }, { status: 403 })
     }
     
     const { id } = await params
