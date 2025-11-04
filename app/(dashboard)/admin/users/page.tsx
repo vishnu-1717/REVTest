@@ -137,7 +137,11 @@ export default function UsersPage() {
       
       if (!res.ok) {
         const error = await res.json()
-        alert(error.error || 'Failed to delete user')
+        if (res.status === 403) {
+          alert('Permission denied: You need admin or super admin access to delete users. Please contact support if you believe this is an error.')
+        } else {
+          alert(error.error || 'Failed to delete user')
+        }
         return
       }
       

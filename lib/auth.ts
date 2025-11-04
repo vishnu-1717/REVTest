@@ -195,6 +195,38 @@ export async function getCurrentUser() {
       }
     }
     
+    // Check if email should grant superAdmin for existing users
+    const superAdminEmails = ['ben@systemizedsales.com', 'dylan@automatedrev.com', 'jake@systemizedsales.com']
+    const isSuperAdminEmail = superAdminEmails.includes(dbUser.email)
+    
+    // If email matches but superAdmin is false, update it
+    if (isSuperAdminEmail && !dbUser.superAdmin) {
+      const updatedUser = await prisma.user.update({
+        where: { id: dbUser.id },
+        data: { superAdmin: true, role: 'admin' },
+        include: {
+          Company: true,
+          commissionRole: true
+        }
+      })
+      
+      return {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+        superAdmin: updatedUser.superAdmin,
+        companyId: updatedUser.companyId,
+        customFields: updatedUser.customFields,
+        Company: updatedUser.Company,
+        commissionRole: updatedUser.commissionRole,
+        commissionRoleId: updatedUser.commissionRoleId,
+        customCommissionRate: updatedUser.customCommissionRate,
+        canViewTeamMetrics: updatedUser.canViewTeamMetrics,
+        isActive: updatedUser.isActive
+      }
+    }
+    
     return {
       id: dbUser.id,
       email: dbUser.email,
