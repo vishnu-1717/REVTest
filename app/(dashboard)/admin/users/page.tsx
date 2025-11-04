@@ -124,6 +124,32 @@ export default function UsersPage() {
     }
   }
   
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+      return
+    }
+    
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        alert(error.error || 'Failed to delete user')
+        return
+      }
+      
+      // Refresh the users list
+      fetchUsers()
+      alert('User deleted successfully')
+    } catch (error) {
+      console.error('Failed to delete user:', error)
+      alert('Failed to delete user')
+    }
+  }
+
   const handleImpersonate = async (userId: string) => {
     try {
       const res = await fetch('/api/admin/impersonate', {
@@ -395,10 +421,18 @@ export default function UsersPage() {
                       </Link>
                       <Link
                         href={`/admin/users/${user.id}/edit`}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 mr-3"
                       >
                         Edit
                       </Link>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.name)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

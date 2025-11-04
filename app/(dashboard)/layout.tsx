@@ -94,7 +94,7 @@ export default async function DashboardLayout({
                     </button>
                     
                     {/* Dropdown Menu */}
-                    <div className="absolute left-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
+                    <div className="absolute left-0 top-full pt-1 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
                       <div className="py-1">
                         <Link
                           href="/admin/users"
@@ -136,7 +136,7 @@ export default async function DashboardLayout({
                     </button>
                     
                     {/* Dropdown Menu */}
-                    <div className="absolute left-0 mt-2 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
+                    <div className="absolute left-0 top-full pt-1 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
                       <div className="py-1">
                         <Link
                           href="/super-admin/overview"

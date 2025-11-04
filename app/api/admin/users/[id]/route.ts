@@ -238,12 +238,15 @@ export async function DELETE(
     }
     
     const result = await withPrisma(async (prisma) => {
-      // Check if user belongs to the same company
+      // Build where clause - super admins can delete from any company
+      const whereClause: any = { id }
+      if (!currentUser.superAdmin) {
+        // Regular admins can only delete from their own company
+        whereClause.companyId = currentUser.companyId
+      }
+      
       const user = await prisma.user.findFirst({
-        where: {
-          id,
-          companyId: currentUser.companyId
-        },
+        where: whereClause,
         include: {
           _count: {
             select: {

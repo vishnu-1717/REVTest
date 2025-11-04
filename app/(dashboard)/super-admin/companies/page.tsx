@@ -59,6 +59,33 @@ export default function CompaniesPage() {
     router.push(`/dashboard?${params.toString()}`)
   }
   
+  const handleDeleteCompany = async (companyId: string, companyName: string) => {
+    if (!confirm(`Are you sure you want to delete ${companyName}? This will delete all associated users, appointments, and data. This action cannot be undone.`)) {
+      return
+    }
+    
+    try {
+      const res = await fetch(`/api/super-admin/companies/${companyId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        alert(error.error || 'Failed to delete company')
+        return
+      }
+      
+      // Refresh the companies list
+      setCompanies(companies.filter(c => c.id !== companyId))
+      setFilteredCompanies(filteredCompanies.filter(c => c.id !== companyId))
+      alert('Company deleted successfully')
+    } catch (error) {
+      console.error('Failed to delete company:', error)
+      alert('Failed to delete company')
+    }
+  }
+  
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -149,6 +176,12 @@ export default function CompaniesPage() {
                             className="text-sm text-blue-600 hover:text-blue-800"
                           >
                             View As
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCompany(company.id, company.name)}
+                            className="text-sm text-red-600 hover:text-red-800"
+                          >
+                            Delete
                           </button>
                         </div>
                       </td>
