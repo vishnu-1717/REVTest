@@ -145,7 +145,42 @@ export async function GET(request: NextRequest) {
     const signed = filteredAppointments.filter(a => a.status === 'signed').length
     const noShows = filteredAppointments.filter(a => a.status === 'no_show').length
     
-    const showRate = scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0'
+    // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
+    const isPCNOverdue = (appointment: any): boolean => {
+      if (appointment.pcnSubmitted || appointment.status === 'cancelled') return false
+      
+      const scheduledDate = new Date(appointment.scheduledAt)
+      const now = new Date()
+      
+      const scheduledDay = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate())
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      // If scheduled date is in the past, it's overdue
+      if (scheduledDay < today) {
+        return true
+      }
+      
+      // If scheduled date is today, check if it's past 6PM Eastern (18:00)
+      if (scheduledDay.getTime() === today.getTime()) {
+        let easternHour = now.getUTCHours() - 5
+        if (easternHour < 0) easternHour += 24
+        
+        return easternHour >= 18 // 6PM Eastern
+      }
+      
+      return false
+    }
+    
+    const missingPCNs = filteredAppointments.filter(isPCNOverdue).length
+    
+    // Show Rate calculation: Excel uses Shown / (Scheduled - Missing PCNs)
+    // This represents the percentage of processed appointments that showed up
+    const scheduledMinusMissingPCNs = scheduled - missingPCNs
+    const showRate = scheduledMinusMissingPCNs > 0 
+      ? ((showed / scheduledMinusMissingPCNs) * 100).toFixed(1) 
+      : (scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0')
+    
+    // Close Rate: Excel uses Closed / Shown
     const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
     
     // Calculate revenue from appointments and matched sales
@@ -200,40 +235,6 @@ export async function GET(request: NextRequest) {
       ? (totalRevenue / showed).toFixed(2)
       : '0'
     
-    // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
-    // Use a helper function to check if appointment is overdue
-    const isPCNOverdue = (appointment: any): boolean => {
-      if (appointment.pcnSubmitted || appointment.status === 'cancelled') return false
-      
-      const scheduledDate = new Date(appointment.scheduledAt)
-      const now = new Date()
-      
-      // Get scheduled date in Eastern time (simplified - assumes EST/EDT handled by system)
-      // Convert to Eastern time by subtracting 5 hours (EST) or 4 hours (EDT)
-      // For simplicity, we'll use a fixed offset and check if it's past 6PM Eastern
-      // In production, you'd want to use a proper timezone library like date-fns-tz
-      const scheduledDay = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate())
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      
-      // If scheduled date is in the past, it's overdue
-      if (scheduledDay < today) {
-        return true
-      }
-      
-      // If scheduled date is today, check if it's past 6PM Eastern (18:00)
-      if (scheduledDay.getTime() === today.getTime()) {
-        // Get current hour in Eastern time (simplified - using UTC-5 for EST)
-        // Note: This doesn't account for DST, but for MVP this is acceptable
-        let easternHour = now.getUTCHours() - 5
-        if (easternHour < 0) easternHour += 24
-        
-        return easternHour >= 18 // 6PM Eastern
-      }
-      
-      return false
-    }
-    
-    const missingPCNs = filteredAppointments.filter(isPCNOverdue).length
     
     // Group by closer
     const byCloser = Object.values(
@@ -264,11 +265,28 @@ export async function GET(request: NextRequest) {
         
         return acc
       }, {})
-    ).map((closer: any) => ({
-      ...closer,
-      showRate: closer.scheduled > 0 ? ((closer.showed / closer.scheduled) * 100).toFixed(1) : 0,
-      closeRate: closer.showed > 0 ? ((closer.signed / closer.showed) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => b.revenue - a.revenue)
+    ).map((closer: any) => {
+      // Calculate missing PCNs for this closer's appointments
+      const closerAppointments = filteredAppointments.filter(a => 
+        a.closer && a.closer.email === closer.closerEmail
+      )
+      const closerMissingPCNs = closerAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const closerScheduledMinusMissing = closer.scheduled - closerMissingPCNs
+      const closerShowRate = closerScheduledMinusMissing > 0
+        ? ((closer.showed / closerScheduledMinusMissing) * 100).toFixed(1)
+        : (closer.scheduled > 0 ? ((closer.showed / closer.scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const closerCloseRate = closer.showed > 0 ? ((closer.signed / closer.showed) * 100).toFixed(1) : '0'
+      
+      return {
+        ...closer,
+        showRate: closerShowRate,
+        closeRate: closerCloseRate
+      }
+    }).sort((a: any, b: any) => b.revenue - a.revenue)
     
     // Group by day of week
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -298,11 +316,29 @@ export async function GET(request: NextRequest) {
         
         return acc
       }, {})
-    ).map((day: any) => ({
-      ...day,
-      showRate: day.scheduled > 0 ? ((day.showed / day.scheduled) * 100).toFixed(1) : 0,
-      closeRate: day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek)
+    ).map((day: any) => {
+      // Calculate missing PCNs for this day's appointments
+      const dayAppointments = filteredAppointments.filter(a => {
+        const aptDay = new Date(a.scheduledAt).getDay()
+        return aptDay === day.dayOfWeek
+      })
+      const dayMissingPCNs = dayAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const dayScheduledMinusMissing = day.scheduled - dayMissingPCNs
+      const dayShowRate = dayScheduledMinusMissing > 0
+        ? ((day.showed / dayScheduledMinusMissing) * 100).toFixed(1)
+        : (day.scheduled > 0 ? ((day.showed / day.scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const dayCloseRate = day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : '0'
+      
+      return {
+        ...day,
+        showRate: dayShowRate,
+        closeRate: dayCloseRate
+      }
+    }).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek)
     
     // Group by objection type
     const byObjection = Object.entries(
@@ -347,11 +383,28 @@ export async function GET(request: NextRequest) {
         
         return acc
       }, {})
-    ).map(([calendar, data]: [string, any]) => ({
-      ...data,
-      showRate: data.scheduled > 0 ? ((data.showed / data.scheduled) * 100).toFixed(1) : 0,
-      closeRate: data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => b.revenue - a.revenue)
+    ).map(([calendar, data]: [string, any]) => {
+      // Calculate missing PCNs for this calendar's appointments
+      const calendarAppointments = filteredAppointments.filter(a => 
+        (a.calendar || 'Unknown') === calendar
+      )
+      const calendarMissingPCNs = calendarAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const calendarScheduledMinusMissing = data.scheduled - calendarMissingPCNs
+      const calendarShowRate = calendarScheduledMinusMissing > 0
+        ? ((data.showed / calendarScheduledMinusMissing) * 100).toFixed(1)
+        : (data.scheduled > 0 ? ((data.showed / data.scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const calendarCloseRate = data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : '0'
+      
+      return {
+        ...data,
+        showRate: calendarShowRate,
+        closeRate: calendarCloseRate
+      }
+    }).sort((a: any, b: any) => b.revenue - a.revenue)
     
     // Group by appointment type (first call vs follow up)
     const byAppointmentType = [
@@ -385,11 +438,28 @@ export async function GET(request: NextRequest) {
             return acc
           }, { total: 0, scheduled: 0, showed: 0, signed: 0, revenue: 0 })
       }
-    ].map(type => ({
-      ...type,
-      showRate: type.scheduled > 0 ? ((type.showed / type.scheduled) * 100).toFixed(1) : 0,
-      closeRate: type.showed > 0 ? ((type.signed / type.showed) * 100).toFixed(1) : 0
-    }))
+    ].map(type => {
+      // Calculate missing PCNs for this appointment type
+      const typeAppointments = filteredAppointments.filter(a => 
+        type.type === 'First Call' ? a.isFirstCall : !a.isFirstCall
+      )
+      const typeMissingPCNs = typeAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const typeScheduledMinusMissing = type.scheduled - typeMissingPCNs
+      const typeShowRate = typeScheduledMinusMissing > 0
+        ? ((type.showed / typeScheduledMinusMissing) * 100).toFixed(1)
+        : (type.scheduled > 0 ? ((type.showed / type.scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const typeCloseRate = type.showed > 0 ? ((type.signed / type.showed) * 100).toFixed(1) : '0'
+      
+      return {
+        ...type,
+        showRate: typeShowRate,
+        closeRate: typeCloseRate
+      }
+    })
     
     // Time of day analysis
     const byTimeOfDay = ['morning', 'afternoon', 'evening', 'night'].map(period => {
@@ -410,14 +480,26 @@ export async function GET(request: NextRequest) {
       const showed = periodAppointments.filter(a => a.status === 'showed' || a.status === 'signed').length
       const signed = periodAppointments.filter(a => a.status === 'signed').length
       
+      // Calculate missing PCNs for this period
+      const periodMissingPCNs = periodAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const periodScheduledMinusMissing = scheduled - periodMissingPCNs
+      const periodShowRate = periodScheduledMinusMissing > 0
+        ? ((showed / periodScheduledMinusMissing) * 100).toFixed(1)
+        : (scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const periodCloseRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
+      
       return {
         period: period.charAt(0).toUpperCase() + period.slice(1),
         total: periodAppointments.length,
         scheduled,
         showed,
         signed,
-        showRate: scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : 0,
-        closeRate: showed > 0 ? ((signed / showed) * 100).toFixed(1) : 0
+        showRate: periodShowRate,
+        closeRate: periodCloseRate
       }
     })
     
@@ -446,11 +528,28 @@ export async function GET(request: NextRequest) {
         
         return acc
       }, {})
-    ).map((source: any) => ({
-      ...source,
-      showRate: source.scheduled > 0 ? ((source.showed / source.scheduled) * 100).toFixed(1) : 0,
-      closeRate: source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => b.revenue - a.revenue)
+    ).map((source: any) => {
+      // Calculate missing PCNs for this traffic source's appointments
+      const sourceAppointments = filteredAppointments.filter(a => 
+        (a.attributionSource || 'Unknown') === source.trafficSource
+      )
+      const sourceMissingPCNs = sourceAppointments.filter(isPCNOverdue).length
+      
+      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
+      const sourceScheduledMinusMissing = source.scheduled - sourceMissingPCNs
+      const sourceShowRate = sourceScheduledMinusMissing > 0
+        ? ((source.showed / sourceScheduledMinusMissing) * 100).toFixed(1)
+        : (source.scheduled > 0 ? ((source.showed / source.scheduled) * 100).toFixed(1) : '0')
+      
+      // Close Rate: Excel uses Closed / Shown
+      const sourceCloseRate = source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : '0'
+      
+      return {
+        ...source,
+        showRate: sourceShowRate,
+        closeRate: sourceCloseRate
+      }
+    }).sort((a: any, b: any) => b.revenue - a.revenue)
     
     return NextResponse.json({
       totalAppointments,
