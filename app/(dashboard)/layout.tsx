@@ -85,7 +85,7 @@ export default async function DashboardLayout({
                 </Link>
                 
                 {isAdmin && (
-                  <div className="relative group">
+                  <div className="relative group flex items-center">
                     <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
                       Admin
                       <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,10 +127,10 @@ export default async function DashboardLayout({
                 )}
                 
                 {isSuperAdmin && (
-                  <div className="relative group">
+                  <div className="relative group flex items-center">
                     <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
                       <span className="text-purple-600">Super Admin</span>
-                      <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="ml-1 h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>

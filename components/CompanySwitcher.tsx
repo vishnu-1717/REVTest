@@ -97,9 +97,9 @@ export default function CompanySwitcher({
       <Button
         onClick={() => setIsOpen(!isOpen)}
         variant="outline"
-        className="text-sm"
+        className="text-sm text-gray-900 border-gray-300 hover:bg-gray-50 hover:text-gray-900"
       >
-{viewingCompanyId !== currentCompanyId ? (
+        {viewingCompanyId !== currentCompanyId ? (
           <>
             <span className="text-purple-600">Viewing:</span> {viewingCompanyName}
           </>
