@@ -63,21 +63,71 @@ export default function AdvancedFilters({
     <div className="space-y-4">
       {/* Basic Filters - Always Visible */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div>
-          <label className="text-sm font-medium mb-2 block">From Date</label>
+        <div 
+          className="cursor-pointer"
+          onClick={(e) => {
+            const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
+            if (input) {
+              if (typeof input.showPicker === 'function') {
+                input.showPicker()
+              } else {
+                input.focus()
+              }
+            }
+          }}
+        >
+          <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateFrom">
+            From Date
+          </label>
           <Input
+            id="dateFrom"
             type="date"
             value={filters.dateFrom}
             onChange={(e) => handleChange('dateFrom', e.target.value)}
+            className="cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              const input = e.currentTarget as HTMLInputElement
+              if (typeof input.showPicker === 'function') {
+                input.showPicker()
+              } else {
+                input.focus()
+              }
+            }}
           />
         </div>
         
-        <div>
-          <label className="text-sm font-medium mb-2 block">To Date</label>
+        <div 
+          className="cursor-pointer"
+          onClick={(e) => {
+            const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
+            if (input) {
+              if (typeof input.showPicker === 'function') {
+                input.showPicker()
+              } else {
+                input.focus()
+              }
+            }
+          }}
+        >
+          <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateTo">
+            To Date
+          </label>
           <Input
+            id="dateTo"
             type="date"
             value={filters.dateTo}
             onChange={(e) => handleChange('dateTo', e.target.value)}
+            className="cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation()
+              const input = e.currentTarget as HTMLInputElement
+              if (typeof input.showPicker === 'function') {
+                input.showPicker()
+              } else {
+                input.focus()
+              }
+            }}
           />
         </div>
         
