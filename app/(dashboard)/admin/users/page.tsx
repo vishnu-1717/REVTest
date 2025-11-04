@@ -425,14 +425,12 @@ export default function UsersPage() {
                       >
                         Edit
                       </Link>
-                      {isSuperAdmin && (
-                        <button
-                          onClick={() => handleDeleteUser(user.id, user.name)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.name)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}

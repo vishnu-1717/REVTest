@@ -25,12 +25,16 @@ export async function GET() {
     const users = await withPrisma(async (prisma) => {
       const where: any = {}
       
-      // If not super admin, filter by company
-      if (!user.superAdmin) {
+      // Check if impersonating - if so, always filter by impersonated user's company
+      const isImpersonating = (user as any)._impersonating === true
+      
+      // If impersonating OR not super admin, filter by company
+      // This ensures that when a super admin impersonates a user, they only see that user's company data
+      if (isImpersonating || !user.superAdmin) {
         where.companyId = user.companyId
       }
       
-      console.log('Users API - Where clause:', where)
+      console.log('Users API - Where clause:', where, 'isImpersonating:', isImpersonating)
       
       return await prisma.user.findMany({
         where,

@@ -238,10 +238,14 @@ export async function DELETE(
     }
     
     const result = await withPrisma(async (prisma) => {
-      // Build where clause - super admins can delete from any company
+      // Check if impersonating - if so, always restrict to impersonated user's company
+      const isImpersonating = (currentUser as any)._impersonating === true
+      
+      // Build where clause
       const whereClause: any = { id }
-      if (!currentUser.superAdmin) {
-        // Regular admins can only delete from their own company
+      // If impersonating OR not super admin, restrict to company
+      // This ensures that when a super admin impersonates, they can only delete from that company
+      if (isImpersonating || !currentUser.superAdmin) {
         whereClause.companyId = currentUser.companyId
       }
       
