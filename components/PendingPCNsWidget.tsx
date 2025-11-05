@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { PendingPCN } from '@/types/pcn'
 import { formatDistanceToNow } from 'date-fns'
+import { formatMinutesOverdue } from '@/lib/utils'
 
 export function PendingPCNsWidget() {
   const router = useRouter()
@@ -86,7 +87,7 @@ export function PendingPCNsWidget() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`h-2 w-2 rounded-full ${getUrgencyColor(apt.urgencyLevel)}`} />
-                  <span className="text-xs text-gray-500">{apt.minutesSinceScheduled}m ago</span>
+                  <span className="text-xs text-gray-500">{formatMinutesOverdue(apt.minutesSinceScheduled)} ago</span>
                 </div>
               </div>
             ))}

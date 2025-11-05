@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
+import { formatMinutesOverdue } from '@/lib/utils'
 
 interface PendingPCN {
   id: string
@@ -122,7 +123,7 @@ export default function AppointmentsPage() {
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${getUrgencyColor(apt.urgencyLevel)}`} />
                       <span className="text-xs text-gray-500">
-                        {apt.minutesSinceScheduled}m ago
+                        {formatMinutesOverdue(apt.minutesSinceScheduled)} ago
                       </span>
                     </div>
                     <Button size="sm" variant="outline">
