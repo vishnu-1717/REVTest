@@ -267,24 +267,28 @@ export default function AnalyticsPage() {
             <Button
               variant={activeView === 'overview' ? 'default' : 'outline'}
               onClick={() => setActiveView('overview')}
+              className={activeView !== 'overview' ? 'text-black' : ''}
             >
               Overview
             </Button>
             <Button
               variant={activeView === 'closers' ? 'default' : 'outline'}
               onClick={() => setActiveView('closers')}
+              className={activeView !== 'closers' ? 'text-black' : ''}
             >
               By Closer
             </Button>
             <Button
               variant={activeView === 'calendars' ? 'default' : 'outline'}
               onClick={() => setActiveView('calendars')}
+              className={activeView !== 'calendars' ? 'text-black' : ''}
             >
               By Calendar/Source
             </Button>
             <Button
               variant={activeView === 'objections' ? 'default' : 'outline'}
               onClick={() => setActiveView('objections')}
+              className={activeView !== 'objections' ? 'text-black' : ''}
             >
               By Objection
             </Button>
