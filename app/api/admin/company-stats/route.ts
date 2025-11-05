@@ -65,7 +65,8 @@ export async function GET(request: Request) {
           companyId: user.companyId,
           role: {
             in: ['rep', 'closer', 'setter']
-          }
+          },
+          isActive: true
         }
       })
       
