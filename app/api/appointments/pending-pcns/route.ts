@@ -10,6 +10,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get query parameters
+    const url = new URL(request.url)
+    const limit = url.searchParams.get('limit')
+    const all = url.searchParams.get('all') === 'true'
+
     const result = await withPrisma(async (prisma) => {
 
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
@@ -30,6 +35,21 @@ export async function GET(request: NextRequest) {
         whereClause.closerId = user.id
       }
 
+      // Get total count first
+      const totalCount = await prisma.appointment.count({
+        where: whereClause
+      })
+
+      // Determine limit
+      let takeLimit: number | undefined = undefined
+      if (!all) {
+        if (limit) {
+          takeLimit = parseInt(limit, 10)
+        } else {
+          takeLimit = 50 // Default limit for dashboard widget
+        }
+      }
+
       const pendingAppointments = await prisma.appointment.findMany({
         where: whereClause,
         include: {
@@ -47,7 +67,7 @@ export async function GET(request: NextRequest) {
         orderBy: {
           scheduledAt: 'desc'
         },
-        take: 50
+        ...(takeLimit !== undefined && { take: takeLimit })
       })
 
       const now = Date.now()
@@ -68,6 +88,7 @@ export async function GET(request: NextRequest) {
 
       return {
         count: formatted.length,
+        totalCount,
         appointments: formatted
       }
     })

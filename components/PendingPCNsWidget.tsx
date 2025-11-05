@@ -12,13 +12,16 @@ import { formatMinutesOverdue } from '@/lib/utils'
 export function PendingPCNsWidget() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<PendingPCN[]>([])
+  const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
   const fetchPending = useCallback(async () => {
     try {
-      const response = await fetch('/api/appointments/pending-pcns')
+      // Fetch limited results for dashboard widget (50 to show accurate count in "View All")
+      const response = await fetch('/api/appointments/pending-pcns?limit=50')
       const data = await response.json()
       setAppointments(data.appointments || [])
+      setTotalCount(data.totalCount || data.appointments?.length || 0)
     } catch (error) {
       console.error('Failed to fetch pending PCNs:', error)
     } finally {
@@ -66,7 +69,7 @@ export function PendingPCNsWidget() {
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-sm text-gray-600">
-                {appointments.length} pending
+                {totalCount > 0 ? totalCount : appointments.length} pending
               </span>
               {appointments.some(a => a.urgencyLevel === 'high') && (
                 <Badge className="bg-red-500 text-white">Urgent!</Badge>
@@ -92,7 +95,7 @@ export function PendingPCNsWidget() {
               </div>
             ))}
             
-            {appointments.length > 5 && (
+            {(totalCount > 5 || appointments.length > 5) && (
               <div className="text-center pt-2">
                 <Button
                   variant="outline"
@@ -100,7 +103,7 @@ export function PendingPCNsWidget() {
                   onClick={() => router.push('/appointments')}
                   className="text-xs"
                 >
-                  View All ({appointments.length})
+                  View All ({totalCount > 0 ? totalCount : appointments.length})
                 </Button>
               </div>
             )}

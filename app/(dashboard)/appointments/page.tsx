@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { formatDistanceToNow } from 'date-fns'
 import { formatMinutesOverdue } from '@/lib/utils'
 
@@ -21,7 +22,9 @@ interface PendingPCN {
 export default function AppointmentsPage() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<PendingPCN[]>([])
+  const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetchAppointments()
@@ -30,20 +33,34 @@ export default function AppointmentsPage() {
   const fetchAppointments = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/appointments/pending-pcns', {
+      // Fetch all pending PCNs when on the appointments page
+      const response = await fetch('/api/appointments/pending-pcns?all=true', {
         credentials: 'include'
       })
       const data = await response.json()
       
-      // For now, show pending PCNs (the endpoint only returns pending)
-      // In the future, we can add an endpoint to fetch all appointments
       setAppointments(data.appointments || [])
+      setTotalCount(data.totalCount || 0)
     } catch (error) {
       console.error('Failed to fetch appointments:', error)
     } finally {
       setLoading(false)
     }
   }
+
+  // Filter appointments based on search query
+  const filteredAppointments = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return appointments
+    }
+
+    const query = searchQuery.toLowerCase().trim()
+    return appointments.filter(apt => {
+      const contactMatch = apt.contactName?.toLowerCase().includes(query)
+      const closerMatch = apt.closerName?.toLowerCase().includes(query)
+      return contactMatch || closerMatch
+    })
+  }, [appointments, searchQuery])
 
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)
@@ -87,19 +104,50 @@ export default function AppointmentsPage() {
       {/* Appointments List */}
       <Card>
         <CardHeader>
-          <CardTitle>Pending Post-Call Notes</CardTitle>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Pending Post-Call Notes</CardTitle>
+              {totalCount > 0 && (
+                <p className="text-sm text-gray-500 mt-1">
+                  {totalCount} total pending {searchQuery && `(${filteredAppointments.length} matching)`}
+                </p>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
+          {/* Search Input */}
+          <div className="mb-6">
+            <Input
+              type="text"
+              placeholder="Search by contact name or closer name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-md"
+            />
+          </div>
+
           {loading ? (
             <p className="text-gray-500 text-sm">Loading...</p>
-          ) : appointments.length === 0 ? (
+          ) : filteredAppointments.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-green-600 font-semibold">All caught up! 🎉</p>
-              <p className="text-gray-500 text-sm mt-1">No appointments need PCNs</p>
+              {searchQuery ? (
+                <>
+                  <p className="text-gray-600 font-semibold">No matches found</p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Try a different search term
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-green-600 font-semibold">All caught up! 🎉</p>
+                  <p className="text-gray-500 text-sm mt-1">No appointments need PCNs</p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
-              {appointments.map((apt) => (
+              {filteredAppointments.map((apt) => (
                 <div
                   key={apt.id}
                   className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer border border-gray-200"

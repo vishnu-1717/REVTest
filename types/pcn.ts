@@ -120,6 +120,7 @@ export interface PendingPCN {
 
 export interface PendingPCNsResponse {
   count: number
+  totalCount?: number
   appointments: PendingPCN[]
 }
 
