@@ -65,12 +65,7 @@ export async function calculateInclusionFlag(
                 { outcome: null }
               ]
             },
-            {
-              OR: [
-                { status: { not: 'cancelled' } },
-                { status: null }
-              ]
-            }
+            { status: { not: 'cancelled' } }
           ]
         },
         select: { id: true, scheduledAt: true }
@@ -143,12 +138,7 @@ export async function calculateInclusionFlag(
               { outcome: null }
             ]
           },
-          {
-            OR: [
-              { status: { not: 'cancelled' } },
-              { status: null }
-            ]
-          }
+          { status: { not: 'cancelled' } }
         ]
       },
       select: {
