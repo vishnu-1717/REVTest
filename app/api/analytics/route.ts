@@ -342,9 +342,9 @@ export async function GET(request: NextRequest) {
       ...filteredSales.map(s => s.appointmentId).filter(Boolean)
     ]).size
     
-    // Close Rate: Percent of qualified calls that closed
-    const closeRate = qualifiedCalls > 0
-      ? ((totalUnitsClosed / qualifiedCalls) * 100).toFixed(1)
+    // Close Rate: Percent of showed calls that closed
+    const closeRate = callsShown > 0
+      ? ((totalUnitsClosed / callsShown) * 100).toFixed(1)
       : '0'
     
     // Scheduled Calls to Closed: Total Units Closed ÷ Scheduled Calls to Date (as percentage)
