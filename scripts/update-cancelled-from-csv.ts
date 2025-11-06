@@ -84,8 +84,22 @@ async function updateCancelledFromCSV() {
     
     const appointmentIds = cancelledAppointments.map(a => a.appointmentId)
     
+    // Define a consistent type for all matched appointments
+    type MatchedAppointment = {
+      id: string
+      ghlAppointmentId: string | null
+      status: string
+      pcnSubmitted: boolean
+      scheduledAt: Date
+      contact: {
+        name: string
+        email: string | null
+        phone: string | null
+      }
+    }
+
     // First, try matching by ghlAppointmentId
-    const matchedByGhlId = await prisma.appointment.findMany({
+    const matchedByGhlId: MatchedAppointment[] = await prisma.appointment.findMany({
       where: {
         ghlAppointmentId: {
           in: appointmentIds
@@ -100,7 +114,8 @@ async function updateCancelledFromCSV() {
         contact: {
           select: {
             name: true,
-            email: true
+            email: true,
+            phone: true
           }
         }
       }
@@ -114,7 +129,7 @@ async function updateCancelledFromCSV() {
     
     console.log(`🔍 Trying to match ${unmatchedFromCSV.length} unmatched appointments by email and date...`)
     
-    const matchedByEmail: typeof matchedByGhlId = []
+    const matchedByEmail: MatchedAppointment[] = []
     const processedIds = new Set(matchedByGhlId.map(a => a.id))
     
     for (const csvAppt of unmatchedFromCSV) {
@@ -155,7 +170,8 @@ async function updateCancelledFromCSV() {
           contact: {
             select: {
               name: true,
-              email: true
+              email: true,
+              phone: true
             }
           }
         },
@@ -182,18 +198,7 @@ async function updateCancelledFromCSV() {
     
     console.log(`🔍 Trying to match ${unmatchedAfterEmail.length} unmatched appointments by phone and date...`)
     
-    const matchedByPhone: Array<{
-      id: string
-      ghlAppointmentId: string | null
-      status: string
-      pcnSubmitted: boolean
-      scheduledAt: Date
-      contact: {
-        name: string
-        email: string | null
-        phone: string | null
-      }
-    }> = []
+    const matchedByPhone: MatchedAppointment[] = []
     
     for (const csvAppt of unmatchedAfterEmail) {
       if (!csvAppt.phone || !csvAppt.startTime) continue
@@ -302,7 +307,7 @@ async function updateCancelledFromCSV() {
     
     console.log(`🔍 Trying to match ${unmatchedAfterPhone.length} unmatched appointments by name and date...`)
     
-    const matchedByName: typeof matchedByGhlId = []
+    const matchedByName: MatchedAppointment[] = []
     
     for (const csvAppt of unmatchedAfterPhone) {
       if (!csvAppt.name || !csvAppt.startTime) continue
