@@ -308,6 +308,10 @@ model Appointment {
   // Signed specific
   signedNotes String? @db.Text
 
+  // Appointment inclusion flag for metrics
+  // 0 or null = don't count (superseded), 1 = first countable, 2+ = follow-up
+  appointmentInclusionFlag Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -329,6 +333,8 @@ model Appointment {
   @@index([attributionSource])
   @@index([pcnSubmitted])
   @@index([pcnSubmittedAt])
+  @@index([appointmentInclusionFlag])
+  @@index([contactId, scheduledAt])
 }
 
 model CommissionRole {

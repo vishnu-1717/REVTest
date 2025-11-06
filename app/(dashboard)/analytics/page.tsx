@@ -133,21 +133,67 @@ export default function AnalyticsPage() {
       {/* Key Metrics */}
       {analytics && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          {/* Primary Metrics Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Total Appointments
+                  Calls Created
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{analytics.totalAppointments}</div>
+                <div className="text-3xl font-bold">{analytics.callsCreated || 0}</div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {analytics.noShows} no-shows
+                  Appointments created in time frame
                 </p>
               </CardContent>
             </Card>
             
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Scheduled Calls to Date
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.scheduledCallsToDate || 0}</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Scheduled in time frame
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Cancellation Rate
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.cancellationRate || 0}%</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Percent of scheduled calls canceled
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  No Show Rate
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{analytics.noShowRate || 0}%</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Percent of expected calls that no-showed
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Performance Metrics Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -155,9 +201,9 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{analytics.showRate}%</div>
+                <div className="text-3xl font-bold">{analytics.showRate || 0}%</div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {analytics.showed} / {analytics.scheduled} showed
+                  {analytics.callsShown || 0} calls shown
                 </p>
               </CardContent>
             </Card>
@@ -165,13 +211,13 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Close Rate
+                  Qualified Calls
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{analytics.closeRate}%</div>
+                <div className="text-3xl font-bold">{analytics.qualifiedCalls || 0}</div>
                 <p className="text-xs text-gray-500 mt-1">
-                  {analytics.signed} / {analytics.showed} closed
+                  Qualified Rate: {analytics.qualifiedRate || 0}%
                 </p>
               </CardContent>
             </Card>
@@ -179,42 +225,46 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Total Revenue
+                  Total Units Closed
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">
-                  ${analytics.totalRevenue?.toLocaleString()}
-                </div>
+                <div className="text-3xl font-bold">{analytics.totalUnitsClosed || 0}</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Close Rate: {analytics.closeRate || 0}%
+                </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Avg Deal Size
+                  Scheduled Calls to Closed
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">
-                  ${analytics.avgDealSize?.toLocaleString()}
-                </div>
+                <div className="text-3xl font-bold">{analytics.scheduledCallsToClosed || 0}</div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Closed ÷ Scheduled
+                </p>
               </CardContent>
             </Card>
           </div>
           
-          {/* New Metrics Row */}
+          {/* Revenue Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Scheduled Call/Close %
+                  Cash Collected
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{analytics.scheduledCallCloseRate || 0}%</div>
+                <div className="text-3xl font-bold">
+                  ${(analytics.cashCollected || 0).toLocaleString()}
+                </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Closed deals / Scheduled calls
+                  Total cash collected
                 </p>
               </CardContent>
             </Card>
@@ -222,26 +272,32 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Revenue per Scheduled Call
+                  Dollars over Scheduled
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  ${analytics.revenuePerScheduledCall?.toLocaleString() || 0}
+                  ${(analytics.dollarsOverScheduledCallsToDate || 0).toLocaleString()}
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cash ÷ Scheduled Calls
+                </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Revenue per Showed Call
+                  Dollars over Show
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  ${analytics.revenuePerShowedCall?.toLocaleString() || 0}
+                  ${(analytics.dollarsOverShow || 0).toLocaleString()}
                 </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Cash ÷ Calls Shown
+                </p>
               </CardContent>
             </Card>
             

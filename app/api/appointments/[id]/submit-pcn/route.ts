@@ -3,6 +3,7 @@ import { withPrisma } from '@/lib/db'
 import { getEffectiveUser } from '@/lib/auth'
 import { calculateCommission } from '@/lib/payment-matcher'
 import { PCNSubmission } from '@/types/pcn'
+import { recalculateContactInclusionFlags } from '@/lib/appointment-inclusion-flag'
 
 export async function POST(
   request: NextRequest,
@@ -214,6 +215,15 @@ export async function POST(
           processedAt: new Date()
         }
       })
+
+      // Recalculate inclusion flags for this contact (PCN outcome affects flag)
+      try {
+        await recalculateContactInclusionFlags(updatedAppointment.contactId, user.companyId)
+        console.log(`[PCN] Recalculated inclusion flags for contact ${updatedAppointment.contactId}`)
+      } catch (flagError: any) {
+        console.error('[PCN] Error calculating inclusion flag:', flagError)
+        // Don't fail the PCN submission if flag calculation fails
+      }
 
       console.log(`[PCN] Submitted for ${id} by ${user.name} - Outcome: ${body.callOutcome}`)
 

@@ -15,7 +15,13 @@ export async function GET(request: NextRequest) {
     // Get the effective company ID (respects viewAs for super admins)
     const effectiveCompanyId = await getEffectiveCompanyId(request.url)
     
+    // Store date range for Calls Created calculation (uses createdAt)
+    const dateFrom = searchParams.get('dateFrom') ? new Date(searchParams.get('dateFrom')!) : null
+    const dateTo = searchParams.get('dateTo') ? new Date(searchParams.get('dateTo')!) : null
+    
     // Build where clause based on filters
+    // Note: Date filters apply to scheduledAt for "Scheduled Calls to Date"
+    // "Calls Created" will be calculated separately using createdAt
     const where: any = {
       companyId: effectiveCompanyId
     }
@@ -25,14 +31,14 @@ export async function GET(request: NextRequest) {
       where.closerId = user.id
     }
     
-    // Date filters
-    if (searchParams.get('dateFrom') || searchParams.get('dateTo')) {
+    // Date filters for scheduledAt (for "Scheduled Calls to Date")
+    if (dateFrom || dateTo) {
       where.scheduledAt = {}
-      if (searchParams.get('dateFrom')) {
-        where.scheduledAt.gte = new Date(searchParams.get('dateFrom')!)
+      if (dateFrom) {
+        where.scheduledAt.gte = dateFrom
       }
-      if (searchParams.get('dateTo')) {
-        where.scheduledAt.lte = new Date(searchParams.get('dateTo')!)
+      if (dateTo) {
+        where.scheduledAt.lte = dateTo
       }
     }
     
@@ -98,10 +104,18 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    // Get all appointments matching filters
+    // Get all appointments matching filters (including those with null flag for backwards compatibility)
     const appointments = await withPrisma(async (prisma) => {
       return await prisma.appointment.findMany({
-        where,
+        where: {
+          ...where,
+          // Only include appointments that should be counted (flag = 1 or null for backwards compatibility)
+          // Exclude appointments with flag = 0 (superseded)
+          OR: [
+            { appointmentInclusionFlag: 1 },
+            { appointmentInclusionFlag: null }
+          ]
+        },
         include: {
           closer: true,
           contact: true,
@@ -138,16 +152,124 @@ export async function GET(request: NextRequest) {
       })
     }
     
-    // Calculate metrics
-    const totalAppointments = filteredAppointments.length
-    const scheduled = filteredAppointments.filter(a => a.status !== 'cancelled').length
-    const showed = filteredAppointments.filter(a => a.status === 'showed' || a.status === 'signed').length
-    const signed = filteredAppointments.filter(a => a.status === 'signed').length
-    const noShows = filteredAppointments.filter(a => a.status === 'no_show').length
+    // Calculate metrics using inclusion flag
+    // Filter to only include appointments with flag = 1 (or null for backwards compatibility)
+    const countableAppointments = filteredAppointments.filter((a: any) => 
+      (a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null) &&
+      (a.appointmentInclusionFlag !== 0)
+    )
+    
+    // Calls Created: Number of calls with a Create Date inside the selected time frame
+    // This requires a separate query using createdAt instead of scheduledAt
+    // Apply all the same filters except date (which uses createdAt)
+    let callsCreated = 0
+    const createdWhereClause: any = {
+      companyId: effectiveCompanyId,
+      OR: [
+        { appointmentInclusionFlag: 1 },
+        { appointmentInclusionFlag: null }
+      ]
+    }
+    
+    if (!canViewAllData(user)) {
+      createdWhereClause.closerId = user.id
+    }
+    
+    // Apply createdAt date filter for Calls Created
+    if (dateFrom || dateTo) {
+      createdWhereClause.createdAt = {}
+      if (dateFrom) {
+        createdWhereClause.createdAt.gte = dateFrom
+      }
+      if (dateTo) {
+        createdWhereClause.createdAt.lte = dateTo
+      }
+    }
+    
+    // Apply other filters (status, closer, calendar, etc.)
+    if (where.status) createdWhereClause.status = where.status
+    if (where.closerId && canViewAllData(user)) createdWhereClause.closerId = where.closerId
+    if (where.objectionType) createdWhereClause.objectionType = where.objectionType
+    if (where.isFirstCall !== undefined) createdWhereClause.isFirstCall = where.isFirstCall
+    if (where.followUpScheduled !== undefined) createdWhereClause.followUpScheduled = where.followUpScheduled
+    if (where.nurtureType) createdWhereClause.nurtureType = where.nurtureType
+    if (where.cashCollected) createdWhereClause.cashCollected = where.cashCollected
+    if (where.calendar) createdWhereClause.calendar = where.calendar
+    if (where.attributionSource) createdWhereClause.attributionSource = where.attributionSource
+    
+    callsCreated = await withPrisma(async (prisma) => {
+      return await prisma.appointment.count({
+        where: createdWhereClause
+      })
+    })
+    
+    // Scheduled Calls to Date: Number of calls with a Scheduled Start inside the time frame (flag = 1)
+    const scheduledCallsToDate = countableAppointments.length
+    
+    // Cancelled appointments (within scheduled calls)
+    const cancelled = countableAppointments.filter(a => 
+      a.status === 'cancelled' || 
+      a.outcome === 'Cancelled' || 
+      a.outcome === 'cancelled'
+    ).length
+    
+    // Cancellation Rate: Percent of scheduled calls that were canceled
+    const cancellationRate = scheduledCallsToDate > 0
+      ? ((cancelled / scheduledCallsToDate) * 100).toFixed(1)
+      : '0'
+    
+    // Expected calls: Scheduled minus cancellations
+    const expectedCalls = scheduledCallsToDate - cancelled
+    
+    // Calls Shown: Count of calls that occurred (status = showed)
+    const callsShown = countableAppointments.filter(a => a.status === 'showed' || a.status === 'signed').length
+    
+    // No shows: Appointments with no-show status
+    const noShows = countableAppointments.filter(a => 
+      a.status === 'no_show' || 
+      a.outcome === 'No-showed' || 
+      a.outcome === 'no_show'
+    ).length
+    
+    // No Show Rate: Percent of expected calls (scheduled minus cancellations) that did not show
+    const noShowRate = expectedCalls > 0
+      ? ((noShows / expectedCalls) * 100).toFixed(1)
+      : '0'
+    
+    // Show Rate: Percent of expected calls that showed
+    const showRate = expectedCalls > 0
+      ? ((callsShown / expectedCalls) * 100).toFixed(1)
+      : '0'
+    
+    // Qualified Calls: Calls where the closer/sales rep made an offer (wasOfferMade = true)
+    const qualifiedCalls = countableAppointments.filter(a => a.wasOfferMade === true).length
+    
+    // Qualified Rate: Qualified Calls ÷ Calls Shown
+    const qualifiedRate = callsShown > 0
+      ? ((qualifiedCalls / callsShown) * 100).toFixed(1)
+      : '0'
+    
+    // Signed appointments (for backward compatibility)
+    const signed = countableAppointments.filter(a => a.status === 'signed').length
+    
+    // Legacy metrics (for backward compatibility)
+    const totalAppointments = countableAppointments.length
+    const scheduled = countableAppointments.filter(a => a.status !== 'cancelled').length
+    const showed = callsShown
     
     // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
     const isPCNOverdue = (appointment: any): boolean => {
-      if (appointment.pcnSubmitted || appointment.status === 'cancelled') return false
+      // Exclude if PCN already submitted
+      if (appointment.pcnSubmitted) return false
+      
+      // Exclude cancelled appointments (check both status and outcome)
+      if (appointment.status === 'cancelled' || 
+          appointment.outcome === 'Cancelled' || 
+          appointment.outcome === 'cancelled') return false
+      
+      // Exclude appointments with flag = 0 (superseded by another appointment)
+      // Only count appointments that should be included (flag = 1 or null for backwards compatibility)
+      if (appointment.appointmentInclusionFlag === 0) return false
       
       const scheduledDate = new Date(appointment.scheduledAt)
       const now = new Date()
@@ -173,22 +295,12 @@ export async function GET(request: NextRequest) {
     
     const missingPCNs = filteredAppointments.filter(isPCNOverdue).length
     
-    // Show Rate calculation: Excel uses Shown / (Scheduled - Missing PCNs)
-    // This represents the percentage of processed appointments that showed up
-    const scheduledMinusMissingPCNs = scheduled - missingPCNs
-    const showRate = scheduledMinusMissingPCNs > 0 
-      ? ((showed / scheduledMinusMissingPCNs) * 100).toFixed(1) 
-      : (scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0')
-    
-    // Close Rate: Excel uses Closed / Shown
-    const closeRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
-    
     // Calculate revenue from appointments and matched sales
-    const revenueFromAppointments = filteredAppointments
+    const revenueFromAppointments = countableAppointments
       .reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
     
     // Get matched sales for appointments in this date range
-    const appointmentIds = filteredAppointments.map(a => a.id)
+    const appointmentIds = countableAppointments.map(a => a.id)
     const matchedSales = await withPrisma(async (prisma) => {
       if (appointmentIds.length === 0) return []
       return await prisma.sale.findMany({
@@ -199,46 +311,82 @@ export async function GET(request: NextRequest) {
         },
         select: {
           amount: true,
-          appointmentId: true
+          appointmentId: true,
+          paidAt: true
         }
       })
     })
     
-    const revenueFromSales = matchedSales.reduce((sum, sale) => {
+    // Filter sales by date range if provided
+    let filteredSales = matchedSales
+    if (dateFrom || dateTo) {
+      filteredSales = matchedSales.filter(sale => {
+        if (!sale.paidAt) return false
+        const paidDate = new Date(sale.paidAt)
+        if (dateFrom && paidDate < dateFrom) return false
+        if (dateTo && paidDate > dateTo) return false
+        return true
+      })
+    }
+    
+    const revenueFromSales = filteredSales.reduce((sum, sale) => {
       return sum + Number(sale.amount)
     }, 0)
     
-    const totalRevenue = revenueFromAppointments + revenueFromSales
+    // Cash Collected: Total cash collected in the time frame
+    const cashCollected = revenueFromAppointments + revenueFromSales
     
-    const avgDealSize = signed > 0 
-      ? (totalRevenue / signed).toFixed(0)
-      : '0'
-    
-    // Calculate closed deals (signed appointments OR appointments with matched sales)
-    const closedDeals = new Set([
-      ...filteredAppointments.filter(a => a.status === 'signed').map(a => a.id),
-      ...matchedSales.map(s => s.appointmentId).filter(Boolean)
+    // Total Units Closed: Number of closed deals with a confirmed payment in the time frame
+    const totalUnitsClosed = new Set([
+      ...countableAppointments.filter(a => a.status === 'signed').map(a => a.id),
+      ...filteredSales.map(s => s.appointmentId).filter(Boolean)
     ]).size
     
-    // Calculate scheduled call/close %
-    const scheduledCallCloseRate = scheduled > 0 
-      ? ((closedDeals / scheduled) * 100).toFixed(1)
+    // Close Rate: Percent of qualified calls that closed
+    const closeRate = qualifiedCalls > 0
+      ? ((totalUnitsClosed / qualifiedCalls) * 100).toFixed(1)
       : '0'
     
-    // Revenue per scheduled call
-    const revenuePerScheduledCall = scheduled > 0
-      ? (totalRevenue / scheduled).toFixed(2)
+    // Scheduled Calls to Closed: Total Units Closed ÷ Scheduled Calls to Date
+    const scheduledCallsToClosed = scheduledCallsToDate > 0
+      ? (totalUnitsClosed / scheduledCallsToDate).toFixed(2)
       : '0'
     
-    // Revenue per showed call
-    const revenuePerShowedCall = showed > 0
-      ? (totalRevenue / showed).toFixed(2)
+    // Dollars over Scheduled Calls to Date: Cash Collected ÷ Scheduled Calls to Date
+    const dollarsOverScheduledCallsToDate = scheduledCallsToDate > 0
+      ? (cashCollected / scheduledCallsToDate).toFixed(2)
+      : '0'
+    
+    // Dollars over Show: Cash Collected ÷ Calls Shown
+    const dollarsOverShow = callsShown > 0
+      ? (cashCollected / callsShown).toFixed(2)
+      : '0'
+    
+    // Legacy metrics (for backward compatibility)
+    const totalRevenue = cashCollected
+    const avgDealSize = signed > 0 
+      ? (cashCollected / signed).toFixed(0)
+      : '0'
+    
+    // Calculate scheduled call/close % (legacy)
+    const scheduledCallCloseRate = scheduledCallsToDate > 0 
+      ? ((totalUnitsClosed / scheduledCallsToDate) * 100).toFixed(1)
+      : '0'
+    
+    // Revenue per scheduled call (legacy)
+    const revenuePerScheduledCall = scheduledCallsToDate > 0
+      ? (cashCollected / scheduledCallsToDate).toFixed(2)
+      : '0'
+    
+    // Revenue per showed call (legacy)
+    const revenuePerShowedCall = callsShown > 0
+      ? (cashCollected / callsShown).toFixed(2)
       : '0'
     
     
-    // Group by closer
+    // Group by closer (using countable appointments)
     const byCloser = Object.values(
-      filteredAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: any, apt) => {
         if (!apt.closer) return acc
         
         const key = apt.closer.email
@@ -267,7 +415,7 @@ export async function GET(request: NextRequest) {
       }, {})
     ).map((closer: any) => {
       // Calculate missing PCNs for this closer's appointments
-      const closerAppointments = filteredAppointments.filter(a => 
+      const closerAppointments = countableAppointments.filter(a => 
         a.closer && a.closer.email === closer.closerEmail
       )
       const closerMissingPCNs = closerAppointments.filter(isPCNOverdue).length
@@ -278,7 +426,7 @@ export async function GET(request: NextRequest) {
         ? ((closer.showed / closerScheduledMinusMissing) * 100).toFixed(1)
         : (closer.scheduled > 0 ? ((closer.showed / closer.scheduled) * 100).toFixed(1) : '0')
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed (legacy calculation for backward compatibility)
       const closerCloseRate = closer.showed > 0 ? ((closer.signed / closer.showed) * 100).toFixed(1) : '0'
       
       return {
@@ -288,10 +436,10 @@ export async function GET(request: NextRequest) {
       }
     }).sort((a: any, b: any) => b.revenue - a.revenue)
     
-    // Group by day of week
+    // Group by day of week (using countable appointments)
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const byDayOfWeek = Object.values(
-      filteredAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: any, apt) => {
         const day = new Date(apt.scheduledAt).getDay()
         
         if (!acc[day]) {
@@ -318,7 +466,7 @@ export async function GET(request: NextRequest) {
       }, {})
     ).map((day: any) => {
       // Calculate missing PCNs for this day's appointments
-      const dayAppointments = filteredAppointments.filter(a => {
+      const dayAppointments = countableAppointments.filter(a => {
         const aptDay = new Date(a.scheduledAt).getDay()
         return aptDay === day.dayOfWeek
       })
@@ -340,9 +488,9 @@ export async function GET(request: NextRequest) {
       }
     }).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek)
     
-    // Group by objection type
+    // Group by objection type - using countable appointments
     const byObjection = Object.entries(
-      filteredAppointments
+      countableAppointments
         .filter(a => a.objectionType && a.status === 'showed')
         .reduce((acc: any, apt) => {
           const key = apt.objectionType || 'None'
@@ -358,9 +506,9 @@ export async function GET(request: NextRequest) {
       conversionRate: data.count > 0 ? ((data.converted / data.count) * 100).toFixed(1) : 0
     })).sort((a: any, b: any) => b.count - a.count)
     
-    // Group by calendar (traffic source)
+    // Group by calendar (traffic source) - using countable appointments
     const byCalendar = Object.entries(
-      filteredAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: any, apt) => {
         const key = apt.calendar || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -385,7 +533,7 @@ export async function GET(request: NextRequest) {
       }, {})
     ).map(([calendar, data]: [string, any]) => {
       // Calculate missing PCNs for this calendar's appointments
-      const calendarAppointments = filteredAppointments.filter(a => 
+      const calendarAppointments = countableAppointments.filter(a => 
         (a.calendar || 'Unknown') === calendar
       )
       const calendarMissingPCNs = calendarAppointments.filter(isPCNOverdue).length
@@ -406,11 +554,11 @@ export async function GET(request: NextRequest) {
       }
     }).sort((a: any, b: any) => b.revenue - a.revenue)
     
-    // Group by appointment type (first call vs follow up)
+    // Group by appointment type (first call vs follow up) - using countable appointments
     const byAppointmentType = [
       {
         type: 'First Call',
-        ...filteredAppointments
+        ...countableAppointments
           .filter(a => a.isFirstCall)
           .reduce((acc, apt) => {
             acc.total++
@@ -425,7 +573,7 @@ export async function GET(request: NextRequest) {
       },
       {
         type: 'Follow Up',
-        ...filteredAppointments
+        ...countableAppointments
           .filter(a => !a.isFirstCall)
           .reduce((acc, apt) => {
             acc.total++
@@ -440,7 +588,7 @@ export async function GET(request: NextRequest) {
       }
     ].map(type => {
       // Calculate missing PCNs for this appointment type
-      const typeAppointments = filteredAppointments.filter(a => 
+      const typeAppointments = countableAppointments.filter(a => 
         type.type === 'First Call' ? a.isFirstCall : !a.isFirstCall
       )
       const typeMissingPCNs = typeAppointments.filter(isPCNOverdue).length
@@ -461,9 +609,9 @@ export async function GET(request: NextRequest) {
       }
     })
     
-    // Time of day analysis
+    // Time of day analysis - using countable appointments
     const byTimeOfDay = ['morning', 'afternoon', 'evening', 'night'].map(period => {
-      const periodAppointments = filteredAppointments.filter(apt => {
+      const periodAppointments = countableAppointments.filter(apt => {
         // Use startTime if available, otherwise fall back to scheduledAt
         const timeToCheck = apt.startTime || apt.scheduledAt
         const hour = new Date(timeToCheck).getHours()
@@ -503,9 +651,9 @@ export async function GET(request: NextRequest) {
       }
     })
     
-    // Group by traffic source
+    // Group by traffic source - using countable appointments
     const byTrafficSource = Object.values(
-      filteredAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: any, apt) => {
         const key = apt.attributionSource || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -530,7 +678,7 @@ export async function GET(request: NextRequest) {
       }, {})
     ).map((source: any) => {
       // Calculate missing PCNs for this traffic source's appointments
-      const sourceAppointments = filteredAppointments.filter(a => 
+      const sourceAppointments = countableAppointments.filter(a => 
         (a.attributionSource || 'Unknown') === source.trafficSource
       )
       const sourceMissingPCNs = sourceAppointments.filter(isPCNOverdue).length
@@ -552,19 +700,36 @@ export async function GET(request: NextRequest) {
     }).sort((a: any, b: any) => b.revenue - a.revenue)
     
     return NextResponse.json({
+      // New metrics
+      callsCreated,
+      scheduledCallsToDate,
+      cancellationRate: parseFloat(cancellationRate),
+      noShowRate: parseFloat(noShowRate),
+      showRate: parseFloat(showRate),
+      callsShown,
+      qualifiedCalls,
+      qualifiedRate: parseFloat(qualifiedRate),
+      totalUnitsClosed,
+      closeRate: parseFloat(closeRate),
+      scheduledCallsToClosed: parseFloat(scheduledCallsToClosed),
+      dollarsOverScheduledCallsToDate: parseFloat(dollarsOverScheduledCallsToDate),
+      dollarsOverShow: parseFloat(dollarsOverShow),
+      cashCollected,
+      missingPCNs,
+      
+      // Legacy metrics (for backward compatibility)
       totalAppointments,
       scheduled,
       showed,
       signed,
       noShows,
-      showRate: parseFloat(showRate),
-      closeRate: parseFloat(closeRate),
       totalRevenue,
       avgDealSize: parseFloat(avgDealSize),
       scheduledCallCloseRate: parseFloat(scheduledCallCloseRate),
       revenuePerScheduledCall: parseFloat(revenuePerScheduledCall),
       revenuePerShowedCall: parseFloat(revenuePerShowedCall),
-      missingPCNs,
+      
+      // Breakdowns
       byCloser,
       byDayOfWeek,
       byObjection,
