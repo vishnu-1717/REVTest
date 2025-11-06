@@ -182,7 +182,18 @@ async function updateCancelledFromCSV() {
     
     console.log(`🔍 Trying to match ${unmatchedAfterEmail.length} unmatched appointments by phone and date...`)
     
-    const matchedByPhone: typeof matchedByGhlId = []
+    const matchedByPhone: Array<{
+      id: string
+      ghlAppointmentId: string | null
+      status: string
+      pcnSubmitted: boolean
+      scheduledAt: Date
+      contact: {
+        name: string
+        email: string | null
+        phone: string | null
+      }
+    }> = []
     
     for (const csvAppt of unmatchedAfterEmail) {
       if (!csvAppt.phone || !csvAppt.startTime) continue
