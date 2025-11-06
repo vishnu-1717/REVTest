@@ -347,17 +347,17 @@ export async function GET(request: NextRequest) {
       ? ((totalUnitsClosed / qualifiedCalls) * 100).toFixed(1)
       : '0'
     
-    // Scheduled Calls to Closed: Total Units Closed ÷ Scheduled Calls to Date
+    // Scheduled Calls to Closed: Total Units Closed ÷ Scheduled Calls to Date (as percentage)
     const scheduledCallsToClosed = scheduledCallsToDate > 0
-      ? (totalUnitsClosed / scheduledCallsToDate).toFixed(2)
+      ? ((totalUnitsClosed / scheduledCallsToDate) * 100).toFixed(1)
       : '0'
     
-    // Dollars over Scheduled Calls to Date: Cash Collected ÷ Scheduled Calls to Date
+    // Dollars per Scheduled Call: Cash Collected ÷ Scheduled Calls to Date
     const dollarsOverScheduledCallsToDate = scheduledCallsToDate > 0
       ? (cashCollected / scheduledCallsToDate).toFixed(2)
       : '0'
     
-    // Dollars over Show: Cash Collected ÷ Calls Shown
+    // Dollars per Showed Call: Cash Collected ÷ Calls Shown
     const dollarsOverShow = callsShown > 0
       ? (cashCollected / callsShown).toFixed(2)
       : '0'

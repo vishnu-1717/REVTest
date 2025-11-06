@@ -243,7 +243,7 @@ export default function AnalyticsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{analytics.scheduledCallsToClosed || 0}</div>
+                <div className="text-3xl font-bold">{(analytics.scheduledCallsToClosed || 0).toFixed(1)}%</div>
                 <p className="text-xs text-gray-500 mt-1">
                   Closed ÷ Scheduled
                 </p>
@@ -272,12 +272,15 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Dollars over Scheduled
+                  $ per Scheduled Call
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  ${(analytics.dollarsOverScheduledCallsToDate || 0).toLocaleString()}
+                  ${parseFloat(analytics.dollarsOverScheduledCallsToDate || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Cash ÷ Scheduled Calls
@@ -288,12 +291,15 @@ export default function AnalyticsPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Dollars over Show
+                  $ per Showed Call
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  ${(analytics.dollarsOverShow || 0).toLocaleString()}
+                  ${parseFloat(analytics.dollarsOverShow || 0).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Cash ÷ Calls Shown
