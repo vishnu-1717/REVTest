@@ -25,19 +25,12 @@ export async function GET(request: NextRequest) {
         scheduledAt: {
           lte: tenMinutesAgo
         },
-        status: {
-          not: 'cancelled'
-        },
-        // Exclude cancelled appointments by outcome (but allow null outcomes)
+        // Only include appointments with status "scheduled"
+        // All other statuses (signed, showed, no_show, cancelled, rescheduled) should not need PCNs
+        status: 'scheduled',
+        // Only include appointments that should be counted (flag = 1 or null for backwards compatibility)
+        // Exclude appointments with flag = 0 (superseded)
         AND: [
-          {
-            OR: [
-              { outcome: { notIn: ['Cancelled', 'cancelled'] } },
-              { outcome: null }
-            ]
-          },
-          // Only include appointments that should be counted (flag = 1 or null for backwards compatibility)
-          // Exclude appointments with flag = 0 (superseded)
           {
             OR: [
               { appointmentInclusionFlag: 1 },

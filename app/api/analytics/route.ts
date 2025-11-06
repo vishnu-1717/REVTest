@@ -258,14 +258,14 @@ export async function GET(request: NextRequest) {
     const showed = callsShown
     
     // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
+    // Only count appointments with status "scheduled" - all other statuses don't need PCNs
     const isPCNOverdue = (appointment: any): boolean => {
       // Exclude if PCN already submitted
       if (appointment.pcnSubmitted) return false
       
-      // Exclude cancelled appointments (check both status and outcome)
-      if (appointment.status === 'cancelled' || 
-          appointment.outcome === 'Cancelled' || 
-          appointment.outcome === 'cancelled') return false
+      // Only include appointments with status "scheduled"
+      // All other statuses (signed, showed, no_show, cancelled, rescheduled) should not need PCNs
+      if (appointment.status !== 'scheduled') return false
       
       // Exclude appointments with flag = 0 (superseded by another appointment)
       // Only count appointments that should be included (flag = 1 or null for backwards compatibility)
