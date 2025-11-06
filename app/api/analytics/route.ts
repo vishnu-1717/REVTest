@@ -399,13 +399,19 @@ export async function GET(request: NextRequest) {
             showed: 0,
             signed: 0,
             scheduled: 0,
+            cancelled: 0,
             revenue: 0
           }
         }
         
         acc[key].total++
-        if (apt.status !== 'cancelled') acc[key].scheduled++
-        if (apt.status === 'showed' || apt.status === 'signed') acc[key].showed++
+        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+          acc[key].cancelled++
+        }
+        if (apt.status === 'showed' || apt.status === 'signed') {
+          acc[key].showed++
+        }
         if (apt.status === 'signed') {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
@@ -414,17 +420,13 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
     ).map((closer: any) => {
-      // Calculate missing PCNs for this closer's appointments
-      const closerAppointments = countableAppointments.filter(a => 
-        a.closer && a.closer.email === closer.closerEmail
-      )
-      const closerMissingPCNs = closerAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const closerExpectedCalls = closer.scheduled - closer.cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const closerScheduledMinusMissing = closer.scheduled - closerMissingPCNs
-      const closerShowRate = closerScheduledMinusMissing > 0
-        ? ((closer.showed / closerScheduledMinusMissing) * 100).toFixed(1)
-        : (closer.scheduled > 0 ? ((closer.showed / closer.scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const closerShowRate = closerExpectedCalls > 0
+        ? ((closer.showed / closerExpectedCalls) * 100).toFixed(1)
+        : '0'
       
       // Close Rate: Percent of qualified calls that closed (legacy calculation for backward compatibility)
       const closerCloseRate = closer.showed > 0 ? ((closer.signed / closer.showed) * 100).toFixed(1) : '0'
@@ -450,13 +452,19 @@ export async function GET(request: NextRequest) {
             showed: 0,
             signed: 0,
             scheduled: 0,
+            cancelled: 0,
             revenue: 0
           }
         }
         
         acc[day].total++
-        if (apt.status !== 'cancelled') acc[day].scheduled++
-        if (apt.status === 'showed' || apt.status === 'signed') acc[day].showed++
+        acc[day].scheduled++ // All appointments in countableAppointments are scheduled
+        if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+          acc[day].cancelled++
+        }
+        if (apt.status === 'showed' || apt.status === 'signed') {
+          acc[day].showed++
+        }
         if (apt.status === 'signed') {
           acc[day].signed++
           acc[day].revenue += apt.cashCollected || 0
@@ -465,20 +473,15 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
     ).map((day: any) => {
-      // Calculate missing PCNs for this day's appointments
-      const dayAppointments = countableAppointments.filter(a => {
-        const aptDay = new Date(a.scheduledAt).getDay()
-        return aptDay === day.dayOfWeek
-      })
-      const dayMissingPCNs = dayAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const dayExpectedCalls = day.scheduled - day.cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const dayScheduledMinusMissing = day.scheduled - dayMissingPCNs
-      const dayShowRate = dayScheduledMinusMissing > 0
-        ? ((day.showed / dayScheduledMinusMissing) * 100).toFixed(1)
-        : (day.scheduled > 0 ? ((day.showed / day.scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const dayShowRate = dayExpectedCalls > 0
+        ? ((day.showed / dayExpectedCalls) * 100).toFixed(1)
+        : '0'
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed
       const dayCloseRate = day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : '0'
       
       return {
@@ -517,13 +520,19 @@ export async function GET(request: NextRequest) {
             showed: 0,
             signed: 0,
             scheduled: 0,
+            cancelled: 0,
             revenue: 0
           }
         }
         
         acc[key].total++
-        if (apt.status !== 'cancelled') acc[key].scheduled++
-        if (apt.status === 'showed' || apt.status === 'signed') acc[key].showed++
+        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+          acc[key].cancelled++
+        }
+        if (apt.status === 'showed' || apt.status === 'signed') {
+          acc[key].showed++
+        }
         if (apt.status === 'signed') {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
@@ -532,19 +541,15 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
     ).map(([calendar, data]: [string, any]) => {
-      // Calculate missing PCNs for this calendar's appointments
-      const calendarAppointments = countableAppointments.filter(a => 
-        (a.calendar || 'Unknown') === calendar
-      )
-      const calendarMissingPCNs = calendarAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const calendarExpectedCalls = data.scheduled - data.cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const calendarScheduledMinusMissing = data.scheduled - calendarMissingPCNs
-      const calendarShowRate = calendarScheduledMinusMissing > 0
-        ? ((data.showed / calendarScheduledMinusMissing) * 100).toFixed(1)
-        : (data.scheduled > 0 ? ((data.showed / data.scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const calendarShowRate = calendarExpectedCalls > 0
+        ? ((data.showed / calendarExpectedCalls) * 100).toFixed(1)
+        : '0'
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed
       const calendarCloseRate = data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : '0'
       
       return {
@@ -562,14 +567,19 @@ export async function GET(request: NextRequest) {
           .filter(a => a.isFirstCall)
           .reduce((acc, apt) => {
             acc.total++
-            if (apt.status !== 'cancelled') acc.scheduled++
-            if (apt.status === 'showed' || apt.status === 'signed') acc.showed++
+            acc.scheduled++ // All appointments in countableAppointments are scheduled
+            if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+              acc.cancelled++
+            }
+            if (apt.status === 'showed' || apt.status === 'signed') {
+              acc.showed++
+            }
             if (apt.status === 'signed') {
               acc.signed++
               acc.revenue += apt.cashCollected || 0
             }
             return acc
-          }, { total: 0, scheduled: 0, showed: 0, signed: 0, revenue: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0 })
       },
       {
         type: 'Follow Up',
@@ -577,29 +587,30 @@ export async function GET(request: NextRequest) {
           .filter(a => !a.isFirstCall)
           .reduce((acc, apt) => {
             acc.total++
-            if (apt.status !== 'cancelled') acc.scheduled++
-            if (apt.status === 'showed' || apt.status === 'signed') acc.showed++
+            acc.scheduled++ // All appointments in countableAppointments are scheduled
+            if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+              acc.cancelled++
+            }
+            if (apt.status === 'showed' || apt.status === 'signed') {
+              acc.showed++
+            }
             if (apt.status === 'signed') {
               acc.signed++
               acc.revenue += apt.cashCollected || 0
             }
             return acc
-          }, { total: 0, scheduled: 0, showed: 0, signed: 0, revenue: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0 })
       }
     ].map(type => {
-      // Calculate missing PCNs for this appointment type
-      const typeAppointments = countableAppointments.filter(a => 
-        type.type === 'First Call' ? a.isFirstCall : !a.isFirstCall
-      )
-      const typeMissingPCNs = typeAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const typeExpectedCalls = type.scheduled - type.cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const typeScheduledMinusMissing = type.scheduled - typeMissingPCNs
-      const typeShowRate = typeScheduledMinusMissing > 0
-        ? ((type.showed / typeScheduledMinusMissing) * 100).toFixed(1)
-        : (type.scheduled > 0 ? ((type.showed / type.scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const typeShowRate = typeExpectedCalls > 0
+        ? ((type.showed / typeExpectedCalls) * 100).toFixed(1)
+        : '0'
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed
       const typeCloseRate = type.showed > 0 ? ((type.signed / type.showed) * 100).toFixed(1) : '0'
       
       return {
@@ -624,20 +635,24 @@ export async function GET(request: NextRequest) {
         }
       })
       
-      const scheduled = periodAppointments.filter(a => a.status !== 'cancelled').length
+      const scheduled = periodAppointments.length // All appointments in countableAppointments are scheduled
+      const cancelled = periodAppointments.filter(a => 
+        a.status === 'cancelled' || 
+        a.outcome === 'Cancelled' || 
+        a.outcome === 'cancelled'
+      ).length
       const showed = periodAppointments.filter(a => a.status === 'showed' || a.status === 'signed').length
       const signed = periodAppointments.filter(a => a.status === 'signed').length
       
-      // Calculate missing PCNs for this period
-      const periodMissingPCNs = periodAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const periodExpectedCalls = scheduled - cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const periodScheduledMinusMissing = scheduled - periodMissingPCNs
-      const periodShowRate = periodScheduledMinusMissing > 0
-        ? ((showed / periodScheduledMinusMissing) * 100).toFixed(1)
-        : (scheduled > 0 ? ((showed / scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const periodShowRate = periodExpectedCalls > 0
+        ? ((showed / periodExpectedCalls) * 100).toFixed(1)
+        : '0'
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed
       const periodCloseRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
       
       return {
@@ -662,13 +677,19 @@ export async function GET(request: NextRequest) {
             showed: 0,
             signed: 0,
             scheduled: 0,
+            cancelled: 0,
             revenue: 0
           }
         }
         
         acc[key].total++
-        if (apt.status !== 'cancelled') acc[key].scheduled++
-        if (apt.status === 'showed' || apt.status === 'signed') acc[key].showed++
+        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
+          acc[key].cancelled++
+        }
+        if (apt.status === 'showed' || apt.status === 'signed') {
+          acc[key].showed++
+        }
         if (apt.status === 'signed') {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
@@ -677,19 +698,15 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
     ).map((source: any) => {
-      // Calculate missing PCNs for this traffic source's appointments
-      const sourceAppointments = countableAppointments.filter(a => 
-        (a.attributionSource || 'Unknown') === source.trafficSource
-      )
-      const sourceMissingPCNs = sourceAppointments.filter(isPCNOverdue).length
+      // Calculate expected calls: scheduled - cancelled
+      const sourceExpectedCalls = source.scheduled - source.cancelled
       
-      // Show Rate: Excel uses Shown / (Scheduled - Missing PCNs)
-      const sourceScheduledMinusMissing = source.scheduled - sourceMissingPCNs
-      const sourceShowRate = sourceScheduledMinusMissing > 0
-        ? ((source.showed / sourceScheduledMinusMissing) * 100).toFixed(1)
-        : (source.scheduled > 0 ? ((source.showed / source.scheduled) * 100).toFixed(1) : '0')
+      // Show Rate: Percent of expected calls that showed (same as main metric)
+      const sourceShowRate = sourceExpectedCalls > 0
+        ? ((source.showed / sourceExpectedCalls) * 100).toFixed(1)
+        : '0'
       
-      // Close Rate: Excel uses Closed / Shown
+      // Close Rate: Percent of qualified calls that closed
       const sourceCloseRate = source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : '0'
       
       return {
