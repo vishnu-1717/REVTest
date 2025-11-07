@@ -32,6 +32,8 @@ export default function AppointmentsPage() {
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
 
   useEffect(() => {
@@ -62,11 +64,22 @@ export default function AppointmentsPage() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
-      results = appointments.filter(apt => {
+      results = results.filter(apt => {
         const contactMatch = apt.contactName?.toLowerCase().includes(query)
         const closerMatch = apt.closerName?.toLowerCase().includes(query)
         return contactMatch || closerMatch
       })
+    }
+
+    if (dateFrom) {
+      const fromDate = new Date(dateFrom)
+      results = results.filter(apt => new Date(apt.scheduledAt) >= fromDate)
+    }
+
+    if (dateTo) {
+      const toDate = new Date(dateTo)
+      toDate.setHours(23, 59, 59, 999)
+      results = results.filter(apt => new Date(apt.scheduledAt) <= toDate)
     }
 
     return [...results].sort((a, b) => {
@@ -79,7 +92,7 @@ export default function AppointmentsPage() {
 
       return dateB - dateA
     })
-  }, [appointments, searchQuery, dateSort])
+  }, [appointments, searchQuery, dateFrom, dateTo, dateSort])
 
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)
@@ -136,7 +149,7 @@ export default function AppointmentsPage() {
         </CardHeader>
         <CardContent>
           {/* Search & Filters */}
-          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="mb-6 space-y-3 md:space-y-0 md:grid md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end md:gap-4">
             <Input
               type="text"
               placeholder="Search by contact name or closer name..."
@@ -145,7 +158,75 @@ export default function AppointmentsPage() {
               className="max-w-md"
             />
 
-            <div className="flex items-center gap-2">
+            <div
+              className="cursor-pointer"
+              onClick={(e) => {
+                const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
+                if (input) {
+                  if (typeof input.showPicker === 'function') {
+                    input.showPicker()
+                  } else {
+                    input.focus()
+                  }
+                }
+              }}
+            >
+              <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateFrom">
+                From date
+              </label>
+              <Input
+                id="dateFrom"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const input = e.currentTarget as HTMLInputElement
+                  if (typeof input.showPicker === 'function') {
+                    input.showPicker()
+                  } else {
+                    input.focus()
+                  }
+                }}
+              />
+            </div>
+
+            <div
+              className="cursor-pointer"
+              onClick={(e) => {
+                const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
+                if (input) {
+                  if (typeof input.showPicker === 'function') {
+                    input.showPicker()
+                  } else {
+                    input.focus()
+                  }
+                }
+              }}
+            >
+              <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateTo">
+                To date
+              </label>
+              <Input
+                id="dateTo"
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const input = e.currentTarget as HTMLInputElement
+                  if (typeof input.showPicker === 'function') {
+                    input.showPicker()
+                  } else {
+                    input.focus()
+                  }
+                }}
+              />
+            </div>
+
+            <div className="flex items-center gap-2 md:justify-end">
               <span className="text-sm text-gray-600">Sort by date:</span>
               <Select value={dateSort} onValueChange={(value: 'asc' | 'desc') => setDateSort(value)}>
                 <SelectTrigger className="w-44">
