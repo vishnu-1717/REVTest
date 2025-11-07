@@ -156,3 +156,81 @@ export async function GET(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getEffectiveUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (user.role !== 'admin' && !user.superAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { id } = await params
+
+    const result = await withPrisma(async (prisma) => {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const appointment = await tx.appointment.findFirst({
+            where: {
+              id,
+              companyId: user.companyId
+            },
+            include: {
+              matchedSales: {
+                select: {
+                  id: true
+                }
+              }
+            }
+          })
+
+          if (!appointment) {
+            return { error: 'Appointment not found', status: 404 }
+          }
+
+          // Detach any sales matched to this appointment to avoid FK violations
+          if (appointment.matchedSales.length > 0) {
+            await tx.sale.updateMany({
+              where: {
+                id: {
+                  in: appointment.matchedSales.map((sale) => sale.id)
+                }
+              },
+              data: {
+                appointmentId: null
+              }
+            })
+          }
+
+          await tx.appointment.delete({
+            where: { id }
+          })
+
+          return { success: true }
+        })
+      } catch (error: any) {
+        console.error('[API] Error deleting appointment:', error)
+        return { error: 'Failed to delete appointment', status: 500 }
+      }
+    })
+
+    if (result && 'error' in result && result.error) {
+      return NextResponse.json({ error: result.error }, { status: result.status || 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('[API] Error deleting appointment:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete appointment', details: error.message },
+      { status: 500 }
+    )
+  }
+}
+

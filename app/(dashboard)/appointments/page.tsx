@@ -35,8 +35,12 @@ export default function AppointmentsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
+    fetchUser()
     fetchAppointments()
   }, [])
 
@@ -55,6 +59,54 @@ export default function AppointmentsPage() {
       console.error('Failed to fetch appointments:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchUser = async () => {
+    try {
+      const response = await fetch('/api/admin/users/me', {
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        return
+      }
+
+      const user = await response.json()
+      if (user?.role === 'admin' || user?.superAdmin) {
+        setIsAdmin(true)
+      }
+    } catch (error) {
+      console.error('Failed to fetch user:', error)
+    }
+  }
+  const handleDelete = async (appointmentId: string) => {
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this appointment and its PCN? This action cannot be undone.'
+    )
+
+    if (!confirmDelete) return
+
+    setDeletingId(appointmentId)
+    setDeleteError(null)
+
+    try {
+      const response = await fetch(`/api/appointments/${appointmentId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to delete appointment')
+      }
+
+      setAppointments(prev => prev.filter(apt => apt.id !== appointmentId))
+      setTotalCount(prev => Math.max(prev - 1, 0))
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to delete appointment')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -240,6 +292,12 @@ export default function AppointmentsPage() {
             </div>
           </div>
 
+          {deleteError && (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {deleteError}
+            </div>
+          )}
+
           {loading ? (
             <p className="text-gray-500 text-sm">Loading...</p>
           ) : filteredAppointments.length === 0 ? (
@@ -280,16 +338,31 @@ export default function AppointmentsPage() {
                       Scheduled {formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${getUrgencyColor(apt.urgencyLevel)}`} />
                       <span className="text-xs text-gray-500">
                         {formatMinutesOverdue(apt.minutesSinceScheduled)} ago
                       </span>
                     </div>
-                    <Button size="sm" variant="outline">
-                      Submit PCN
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline">
+                        Submit PCN
+                      </Button>
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(apt.id)
+                          }}
+                          disabled={deletingId === apt.id}
+                        >
+                          {deletingId === apt.id ? 'Deleting...' : 'Delete'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
