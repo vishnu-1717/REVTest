@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { formatDistanceToNow } from 'date-fns'
 import { formatMinutesOverdue } from '@/lib/utils'
 
@@ -25,6 +32,7 @@ export default function AppointmentsPage() {
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
 
   useEffect(() => {
     fetchAppointments()
@@ -48,19 +56,30 @@ export default function AppointmentsPage() {
     }
   }
 
-  // Filter appointments based on search query
+  // Filter and sort appointments based on search query and date sort order
   const filteredAppointments = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return appointments
+    let results = appointments
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      results = appointments.filter(apt => {
+        const contactMatch = apt.contactName?.toLowerCase().includes(query)
+        const closerMatch = apt.closerName?.toLowerCase().includes(query)
+        return contactMatch || closerMatch
+      })
     }
 
-    const query = searchQuery.toLowerCase().trim()
-    return appointments.filter(apt => {
-      const contactMatch = apt.contactName?.toLowerCase().includes(query)
-      const closerMatch = apt.closerName?.toLowerCase().includes(query)
-      return contactMatch || closerMatch
+    return [...results].sort((a, b) => {
+      const dateA = new Date(a.scheduledAt).getTime()
+      const dateB = new Date(b.scheduledAt).getTime()
+
+      if (dateSort === 'asc') {
+        return dateA - dateB
+      }
+
+      return dateB - dateA
     })
-  }, [appointments, searchQuery])
+  }, [appointments, searchQuery, dateSort])
 
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)
@@ -116,8 +135,8 @@ export default function AppointmentsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          {/* Search Input */}
-          <div className="mb-6">
+          {/* Search & Filters */}
+          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <Input
               type="text"
               placeholder="Search by contact name or closer name..."
@@ -125,6 +144,19 @@ export default function AppointmentsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-md"
             />
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Sort by date:</span>
+              <Select value={dateSort} onValueChange={(value: 'asc' | 'desc') => setDateSort(value)}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Newest first" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="desc">Newest first</SelectItem>
+                  <SelectItem value="asc">Oldest first</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {loading ? (
