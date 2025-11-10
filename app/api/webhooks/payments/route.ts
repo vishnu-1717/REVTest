@@ -10,6 +10,9 @@ type IncomingPayment = {
   customerEmail?: string
   customerName?: string
   closerEmail?: string
+  companyId?: string
+  company_id?: string
+  company?: string
   paidAt?: string
   contactPhone?: string
   contactName?: string
@@ -75,10 +78,23 @@ export async function POST(request: NextRequest) {
   const contactName = normalizeString(payload.contactName)
   const contactPhone = normalizeString(payload.contactPhone)?.replace(/\D/g, '')
   const appointmentIdHint = normalizeString(payload.appointmentId)
+  const metadata =
+    payload.metadata && typeof payload.metadata === 'object'
+      ? (payload.metadata as Record<string, unknown>)
+      : undefined
+  const providedCompanyId = normalizeString(payload.companyId ?? payload.company_id ?? payload.company)
+  const metadataCompanyId = metadata
+    ? normalizeString(
+        (metadata.companyId as string | undefined) ??
+          (metadata.company_id as string | undefined) ??
+          (metadata.company as string | undefined)
+      )
+    : null
+  const initialCompanyId = providedCompanyId ?? metadataCompanyId
 
-  if (!processor || !paymentId || amount === null || !customerEmail || !closerEmail) {
+  if (!processor || !paymentId || amount === null || !customerEmail) {
     return NextResponse.json(
-      { error: 'processor, paymentId, amount, customerEmail, and closerEmail are required' },
+      { error: 'processor, paymentId, amount, and customerEmail are required' },
       { status: 400 }
     )
   }
@@ -98,27 +114,61 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const closer = await prisma.user.findFirst({
-        where: {
-          email: {
-            equals: closerEmail,
-            mode: 'insensitive',
-          },
-        },
-        select: {
-          id: true,
-          companyId: true,
-        },
-      })
+      let companyId = initialCompanyId ?? null
+      let matchedAppointment: {
+        id: string
+        contactId: string | null
+        closerId: string | null
+        companyId: string
+      } | null = null
+      let closer: { id: string; companyId: string } | null = null
 
-      if (!closer) {
-        return {
-          status: 'ignored',
-          error: `Closer with email ${closerEmail} not found`,
+      if (appointmentIdHint) {
+        matchedAppointment = await prisma.appointment.findUnique({
+          where: {
+            id: appointmentIdHint,
+          },
+          select: {
+            id: true,
+            contactId: true,
+            closerId: true,
+            companyId: true,
+          },
+        })
+
+        if (matchedAppointment) {
+          companyId = companyId ?? matchedAppointment.companyId
         }
       }
 
-      const companyId = closer.companyId
+      if (closerEmail) {
+        closer = await prisma.user.findFirst({
+          where: {
+            email: {
+              equals: closerEmail,
+              mode: 'insensitive',
+            },
+            ...(companyId ? { companyId } : {}),
+          },
+          select: {
+            id: true,
+            companyId: true,
+          },
+        })
+
+        if (!closer) {
+          return {
+            status: 'ignored',
+            error: `Closer with email ${closerEmail} not found`,
+          }
+        }
+
+        companyId = companyId ?? closer.companyId
+      }
+
+      if (!companyId) {
+        throw new Error('Unable to determine company for payment')
+      }
 
       const contact = await prisma.contact.findFirst({
         where: {
@@ -137,21 +187,6 @@ export async function POST(request: NextRequest) {
           id: true,
         },
       })
-
-      let matchedAppointment = null
-
-      if (appointmentIdHint) {
-        matchedAppointment = await prisma.appointment.findFirst({
-          where: {
-            id: appointmentIdHint,
-            companyId,
-          },
-          select: {
-            id: true,
-            contactId: true,
-          },
-        })
-      }
 
       if (!matchedAppointment) {
         const candidates = await prisma.appointment.findMany({
@@ -172,7 +207,7 @@ export async function POST(request: NextRequest) {
 
         if (candidates.length) {
           matchedAppointment =
-            candidates.find((apt) => apt.closerId === closer.id) ??
+            candidates.find((apt) => closer && apt.closerId === closer.id) ??
             candidates[0]
         }
       }
@@ -187,7 +222,7 @@ export async function POST(request: NextRequest) {
         companyId,
         appointmentId: matchedAppointment?.id ?? null,
         contactId: matchedAppointment?.contactId ?? contact?.id ?? null,
-        repId: closer.id,
+        repId: closer?.id ?? matchedAppointment?.closerId ?? null,
         customerEmail,
         customerName: customerName ?? undefined,
         matchedBy: matchedAppointment ? 'webhook' : null,
@@ -233,6 +268,9 @@ export async function POST(request: NextRequest) {
     const status = result.status === 'matched' ? 200 : result.status === 'duplicate' ? 200 : 202
     return NextResponse.json(result, { status })
   } catch (error) {
+    if (error instanceof Error && error.message === 'Unable to determine company for payment') {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('[Payment Webhook] Error processing payment:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
