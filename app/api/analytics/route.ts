@@ -466,17 +466,19 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        acc[key]!.total++
-        acc[key]!.scheduled++ // All appointments in countableAppointments are scheduled
+        // Store reference to help TypeScript's control flow analysis
+        const closerData = acc[key]!
+        closerData.total++
+        closerData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key]!.cancelled++
+          closerData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key]!.showed++
+          closerData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key]!.signed++
-          acc[key]!.revenue += apt.cashCollected || 0
+          closerData.signed++
+          closerData.revenue += apt.cashCollected || 0
         }
 
         return acc
