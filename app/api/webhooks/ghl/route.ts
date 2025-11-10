@@ -224,14 +224,14 @@ export async function POST(request: NextRequest) {
         appointmentId: appointmentData.appointmentId,
         startTime: appointmentData.startTime,
         endTime: appointmentData.endTime,
-        appointmentStatus: appointmentData.appointmentStatus || body.appointmentStatus || body.status,
+        appointmentStatus: appointmentData.appointmentStatus || getStringValue(body.appointmentStatus) || getStringValue(body.status),
         calendarId: appointmentData.calendarId,
         calendarName: appointmentData.calendarName,
         assignedUserId: appointmentData.assignedUserId,
-        title: appointmentData.title || body.title,
-        notes: appointmentData.notes || body.notes,
-        locationId: body.locationId,
-        contactId: body.contactId || body.contact_id,
+        title: appointmentData.title || getStringValue(body.title),
+        notes: appointmentData.notes || getStringValue(body.notes),
+        locationId: getStringValue(body.locationId),
+        contactId: getStringValue(body.contactId) || getStringValue(body.contact_id),
         // Parse dates to ISO strings for database storage
         startTimeParsed: appointmentData.startTime ? parseGHLDate(appointmentData.startTime) : null,
         endTimeParsed: appointmentData.endTime ? parseGHLDate(appointmentData.endTime) : null,
@@ -240,11 +240,20 @@ export async function POST(request: NextRequest) {
     // Check if data is in customData (GHL workflow format)
     else if (body.customData && typeof body.customData === 'object') {
       console.log('[GHL Webhook] Data found nested in body.customData')
+      const customData = body.customData as Record<string, unknown>
+
+      // Get location ID from various sources
+      let locationId = getStringValue(customData.locationId) || getStringValue(body.locationId)
+      if (!locationId && body.location && typeof body.location === 'object' && !Array.isArray(body.location)) {
+        const location = body.location as Record<string, unknown>
+        locationId = getStringValue(location.id)
+      }
+
       // Merge customData with location from root level if available
       webhookData = {
         ...body.customData,
-        locationId: body.customData.locationId || body.location?.id || body.locationId,
-        contactId: body.customData.contactId || body.contact_id,
+        locationId,
+        contactId: getStringValue(customData.contactId) || getStringValue(body.contact_id),
         // Use extracted appointment data
         appointmentId: appointmentData.appointmentId,
         startTime: appointmentData.startTime,
@@ -259,45 +268,63 @@ export async function POST(request: NextRequest) {
         startTimeParsed: appointmentData.startTime ? parseGHLDate(appointmentData.startTime) : null,
         endTimeParsed: appointmentData.endTime ? parseGHLDate(appointmentData.endTime) : null,
         // Also include other root-level data that might be useful
-        contactEmail: body.email,
-        contactPhone: body.phone,
-        contactName: body.full_name || `${body.first_name || ''} ${body.last_name || ''}`.trim(),
-        firstName: body.first_name,
-        lastName: body.last_name,
+        contactEmail: getStringValue(body.email),
+        contactPhone: getStringValue(body.phone),
+        contactName: getStringValue(body.full_name) || `${getStringValue(body.first_name)} ${getStringValue(body.last_name)}`.trim(),
+        firstName: getStringValue(body.first_name),
+        lastName: getStringValue(body.last_name),
         // Store all custom fields for attribution resolution
         allCustomFields: body
       }
     }
     // Check if data is nested in body.data
-    else if (body.data && typeof body.data === 'object') {
+    else if (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
       console.log('[GHL Webhook] Data found nested in body.data')
-      webhookData = { 
-        ...body.data, 
-        locationId: body.locationId || body.data.locationId || body.location?.id,
+      const data = body.data as Record<string, unknown>
+
+      // Get location ID from various sources
+      let locationId = getStringValue(body.locationId) || getStringValue(data.locationId)
+      if (!locationId && body.location && typeof body.location === 'object' && !Array.isArray(body.location)) {
+        const location = body.location as Record<string, unknown>
+        locationId = getStringValue(location.id)
+      }
+
+      webhookData = {
+        ...body.data,
+        locationId,
         // Merge extracted appointment data
-        appointmentId: appointmentData.appointmentId || body.data.appointmentId,
-        startTime: appointmentData.startTime || body.data.startTime,
-        endTime: appointmentData.endTime || body.data.endTime,
-        appointmentStatus: appointmentData.appointmentStatus || body.data.appointmentStatus,
-        calendarId: appointmentData.calendarId || body.data.calendarId,
+        appointmentId: appointmentData.appointmentId || getStringValue(data.appointmentId),
+        startTime: appointmentData.startTime || getStringValue(data.startTime),
+        endTime: appointmentData.endTime || getStringValue(data.endTime),
+        appointmentStatus: appointmentData.appointmentStatus || getStringValue(data.appointmentStatus),
+        calendarId: appointmentData.calendarId || getStringValue(data.calendarId),
         calendarName: appointmentData.calendarName,
-        assignedUserId: appointmentData.assignedUserId || body.data.assignedUserId,
+        assignedUserId: appointmentData.assignedUserId || getStringValue(data.assignedUserId),
       }
     }
     // Check if event is nested
-    else if (body.event && typeof body.event === 'object') {
+    else if (body.event && typeof body.event === 'object' && !Array.isArray(body.event)) {
       console.log('[GHL Webhook] Data found nested in body.event')
-      webhookData = { 
-        ...body.event, 
-        locationId: body.locationId || body.event.locationId || body.location?.id,
+      const event = body.event as Record<string, unknown>
+
+      // Get location ID from various sources
+      let locationId = getStringValue(body.locationId) || getStringValue(event.locationId)
+      if (!locationId && body.location && typeof body.location === 'object' && !Array.isArray(body.location)) {
+        const location = body.location as Record<string, unknown>
+        locationId = getStringValue(location.id)
+      }
+
+      webhookData = {
+        ...body.event,
+        locationId,
         // Merge extracted appointment data
-        appointmentId: appointmentData.appointmentId || body.event.appointmentId,
-        startTime: appointmentData.startTime || body.event.startTime,
-        endTime: appointmentData.endTime || body.event.endTime,
-        appointmentStatus: appointmentData.appointmentStatus || body.event.appointmentStatus,
-        calendarId: appointmentData.calendarId || body.event.calendarId,
+        appointmentId: appointmentData.appointmentId || getStringValue(event.appointmentId),
+        startTime: appointmentData.startTime || getStringValue(event.startTime),
+        endTime: appointmentData.endTime || getStringValue(event.endTime),
+        appointmentStatus: appointmentData.appointmentStatus || getStringValue(event.appointmentStatus),
+        calendarId: appointmentData.calendarId || getStringValue(event.calendarId),
         calendarName: appointmentData.calendarName,
-        assignedUserId: appointmentData.assignedUserId || body.event.assignedUserId,
+        assignedUserId: appointmentData.assignedUserId || getStringValue(event.assignedUserId),
       }
     }
     // Check if location is at root and might need extraction (direct format)
