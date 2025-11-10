@@ -3,6 +3,7 @@ import { withPrisma } from '@/lib/db'
 import { getEffectiveUser } from '@/lib/auth'
 import { getCompanyTimezone } from '@/lib/timezone'
 import { Prisma } from '@prisma/client'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,9 +26,18 @@ export async function GET(request: NextRequest) {
           ? closerIdParam
           : undefined
 
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && user.companyId !== effectiveCompanyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to view this company' },
+        { status: 403 }
+      )
+    }
+
     const result = await withPrisma(async (prisma) => {
       const company = await prisma.company.findUnique({
-        where: { id: user.companyId },
+        where: { id: effectiveCompanyId },
         select: { timezone: true }
       })
       const timezone = getCompanyTimezone(company)
@@ -35,7 +45,7 @@ export async function GET(request: NextRequest) {
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
       
       const baseWhereClause: Prisma.AppointmentWhereInput = {
-        companyId: user.companyId,
+        companyId: effectiveCompanyId,
         pcnSubmitted: false,
         scheduledAt: {
           lte: tenMinutesAgo

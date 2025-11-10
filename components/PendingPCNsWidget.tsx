@@ -8,6 +8,15 @@ import { Badge } from '@/components/ui/badge'
 import { PendingPCNCloserSummary, PendingPCNsResponse } from '@/types/pcn'
 import { formatMinutesOverdue } from '@/lib/utils'
 
+const withViewAs = (url: string) => {
+  if (typeof window === 'undefined') return url
+  const params = new URLSearchParams(window.location.search)
+  const viewAs = params.get('viewAs')
+  if (!viewAs) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}viewAs=${viewAs}`
+}
+
 export function PendingPCNsWidget() {
   const router = useRouter()
   const [closerSummaries, setCloserSummaries] = useState<PendingPCNCloserSummary[]>([])
@@ -17,7 +26,7 @@ export function PendingPCNsWidget() {
 
   const fetchPending = useCallback(async () => {
     try {
-      const response = await fetch('/api/appointments/pending-pcns?groupBy=closer')
+      const response = await fetch(withViewAs('/api/appointments/pending-pcns?groupBy=closer'))
       const data: PendingPCNsResponse = await response.json()
       setCloserSummaries(data.byCloser || [])
       setTotalCount(
