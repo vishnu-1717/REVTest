@@ -38,8 +38,12 @@ export async function POST(req: Request) {
     return new Response('Error: Verification error', { status: 400 })
   }
 
-  const { id, email_addresses, first_name, last_name } = evt.data as any
+  const { id, email_addresses, first_name, last_name, public_metadata } = evt.data as any
   const eventType = evt.type
+  const metadata = (public_metadata || {}) as Record<string, unknown>
+  const companyIdFromMetadata = typeof metadata.companyId === 'string' ? metadata.companyId : null
+  const invitedByUserId = typeof metadata.invitedByUserId === 'string' ? metadata.invitedByUserId : null
+  const nowIso = new Date().toISOString()
 
   if (eventType === 'user.created') {
     // When a user signs up, we need to link them to existing User record
@@ -55,25 +59,44 @@ export async function POST(req: Request) {
         })
         
         if (existingUser) {
+          const existingCustomFields = (existingUser.customFields as any) || {}
+          const existingInvitation = (existingCustomFields?.invitation as any) || {}
           // Link Clerk ID to existing user
           await prisma.user.update({
             where: { id: existingUser.id },
             data: {
               clerkId: id, // Update clerkId field directly
+              isActive: true,
               customFields: {
-                ...(existingUser.customFields as any || {}),
-                clerkId: id // Also keep in customFields for backward compatibility
+                ...existingCustomFields,
+                clerkId: id, // Also keep in customFields for backward compatibility
+                invitation: {
+                  ...existingInvitation,
+                  status: 'accepted',
+                  acceptedAt: nowIso,
+                  invitedBy: invitedByUserId ?? existingInvitation?.invitedBy ?? null
+                }
               }
             }
           })
         } else {
           // Find or create a default company
-          let defaultCompany = await prisma.company.findFirst({
-            where: { email: DEFAULT_COMPANY_EMAIL }
-          })
+          let targetCompany = null
+          
+          if (companyIdFromMetadata) {
+            targetCompany = await prisma.company.findUnique({
+              where: { id: companyIdFromMetadata }
+            })
+          }
+          
+          if (!targetCompany) {
+            targetCompany = await prisma.company.findFirst({
+              where: { email: DEFAULT_COMPANY_EMAIL }
+            })
+          }
 
-          if (!defaultCompany) {
-            defaultCompany = await prisma.company.create({
+          if (!targetCompany) {
+            targetCompany = await prisma.company.create({
               data: {
                 name: 'Default Company',
                 email: DEFAULT_COMPANY_EMAIL,
@@ -88,10 +111,15 @@ export async function POST(req: Request) {
               email,
               name: `${first_name || ''} ${last_name || ''}`.trim() || email.split('@')[0],
               role: 'user',
-              companyId: defaultCompany.id,
+              companyId: targetCompany.id,
               clerkId: id, // Set clerkId directly
               customFields: {
-                clerkId: id // Also keep in customFields for backward compatibility
+                clerkId: id, // Also keep in customFields for backward compatibility
+                invitation: {
+                  status: 'accepted',
+                  acceptedAt: nowIso,
+                  invitedBy: invitedByUserId ?? null
+                }
               }
             }
           })

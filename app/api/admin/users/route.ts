@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { clerkClient } from '@clerk/nextjs/server'
 import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
@@ -100,7 +101,15 @@ export async function POST(request: Request) {
           commissionRoleId: commissionRoleId || null,
           customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
           canViewTeamMetrics: canViewTeamMetrics || false,
-          isActive: true
+          isActive: false,
+          customFields: {
+            ...(user.superAdmin ? { invitedBySuperAdmin: true } : {}),
+            invitation: {
+              status: 'pending',
+              invitedAt: new Date().toISOString(),
+              invitedBy: user.id
+            }
+          }
         },
         include: {
           commissionRole: true
@@ -108,8 +117,49 @@ export async function POST(request: Request) {
       })
     })
     
-    // TODO: Send invite email via Clerk
-    // For now, user needs to sign up with this email
+    // Send invite email via Clerk (if configured)
+    let invitationId: string | null = null
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    
+    if (!process.env.CLERK_SECRET_KEY) {
+      console.warn('[Users API] CLERK_SECRET_KEY not set; skipping automatic invite email.')
+    } else {
+      try {
+        const invitation = await clerkClient.invitations.createInvitation({
+          emailAddress: email,
+          redirectUrl: `${appUrl}/sign-in?redirect_url=/`,
+          inviterUserId: user.superAdmin ? undefined : user.clerkId ?? undefined,
+          publicMetadata: {
+            companyId: user.companyId,
+            invitedByUserId: user.id
+          },
+        })
+        invitationId = invitation.id
+      } catch (error) {
+        console.error('[Users API] Failed to send Clerk invitation:', error)
+      }
+    }
+    
+    if (invitationId) {
+      await withPrisma(async (prisma) => {
+        const existingCustomFields = (newUser.customFields as Record<string, unknown> | null) ?? {}
+        await prisma.user.update({
+          where: { id: newUser.id },
+          data: {
+            customFields: {
+              ...existingCustomFields,
+              invitation: {
+                ...(existingCustomFields as any)?.invitation,
+                status: 'pending',
+                invitedAt: new Date().toISOString(),
+                invitedBy: user.id,
+                invitationId
+              }
+            }
+          }
+        })
+      })
+    }
     
     return NextResponse.json(newUser)
   } catch (error: any) {

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { withPrisma } from '@/lib/db'
 import crypto from 'crypto'
+import { SUPER_ADMIN_EMAILS } from '@/lib/constants'
 
 export async function POST(request: Request) {
   try {
@@ -12,6 +13,16 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    
+    const clerkUser = await currentUser()
+    if (!clerkUser) {
+      return NextResponse.json({ error: 'Unable to load Clerk user' }, { status: 401 })
+    }
+    
+    const primaryEmail =
+      clerkUser.emailAddresses.find((email) => email.id === clerkUser.primaryEmailAddressId)?.emailAddress ??
+      clerkUser.emailAddresses[0]?.emailAddress ??
+      null
     
     // Generate a unique webhook secret for this company
     const webhookSecret = crypto.randomBytes(32).toString('hex')
@@ -30,9 +41,35 @@ export async function POST(request: Request) {
         }
       })
       
-      // TODO: Get Clerk user details and create admin user
-      // For now, create a placeholder admin user
-      // In production, you'd sync Clerk user data
+      const existingUser = await prisma.user.findFirst({
+        where: { clerkId: userId }
+      })
+      
+      const isSuperAdminEmail = primaryEmail ? SUPER_ADMIN_EMAILS.includes(primaryEmail) : false
+      
+      if (existingUser) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            companyId: company.id,
+            role: 'admin',
+            superAdmin: existingUser.superAdmin || isSuperAdminEmail,
+            isActive: true
+          }
+        })
+      } else if (primaryEmail) {
+        await prisma.user.create({
+          data: {
+            name: clerkUser.fullName || primaryEmail.split('@')[0],
+            email: primaryEmail,
+            role: 'admin',
+            companyId: company.id,
+            clerkId: userId,
+            superAdmin: isSuperAdminEmail,
+            isActive: true
+          }
+        })
+      }
       
       return company
     })
