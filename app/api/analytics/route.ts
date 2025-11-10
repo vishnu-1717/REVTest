@@ -598,7 +598,7 @@ export async function GET(request: NextRequest) {
 
         return acc
       }, {} as DayBreakdownAccumulator)
-    ).map((day: DayBreakdownItem): AnalyticsBreakdownItem => {
+    ).map((day: DayBreakdownItem) => {
       // Calculate expected calls: scheduled - cancelled
       const dayExpectedCalls = day.scheduled - day.cancelled
 
@@ -668,7 +668,7 @@ export async function GET(request: NextRequest) {
 
         return acc
       }, {} as CalendarBreakdownAccumulator)
-    ).map(([_calendar, data]: [string, CalendarBreakdownItem]): AnalyticsBreakdownItem => {
+    ).map(([_calendar, data]: [string, CalendarBreakdownItem]) => {
       // Calculate expected calls: scheduled - cancelled
       const calendarExpectedCalls = data.scheduled - data.cancelled
 
@@ -827,7 +827,7 @@ export async function GET(request: NextRequest) {
 
         return acc
       }, {} as SourceBreakdownAccumulator)
-    ).map((source: SourceBreakdownItem): AnalyticsBreakdownItem => {
+    ).map((source: SourceBreakdownItem) => {
       // Calculate expected calls: scheduled - cancelled
       const sourceExpectedCalls = source.scheduled - source.cancelled
 
