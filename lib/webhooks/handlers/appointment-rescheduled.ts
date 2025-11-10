@@ -36,10 +36,10 @@ export async function handleAppointmentRescheduled(webhook: GHLWebhookExtended, 
       endTime: endTimeDate,
       status: 'scheduled',
       notes: webhook.notes || webhook.title || existing.notes,
-      customFields: {
+      customFields: JSON.parse(JSON.stringify({
           ...existingCustomFields,
         rescheduledCount
-      }
+      }))
     }
     })
 

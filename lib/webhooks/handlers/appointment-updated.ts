@@ -36,7 +36,7 @@ export async function handleAppointmentUpdated(webhook: GHLWebhookExtended, comp
         startTime: startTimeDate || undefined,
         endTime: endTimeDate || undefined,
         notes: webhook.notes || webhook.title || undefined,
-      customFields: webhook.customFields
+      customFields: webhook.customFields ? JSON.parse(JSON.stringify(webhook.customFields)) : undefined
     }
     })
 

@@ -46,7 +46,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
         email: webhook.contactEmail,
         phone: webhook.contactPhone,
         tags: [],
-        customFields: webhook.allCustomFields || {}
+        customFields: JSON.parse(JSON.stringify(webhook.allCustomFields || {}))
       }
     })
     console.log('[GHL Webhook] Contact created:', contact.id)
@@ -225,7 +225,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
           closerId: closer?.id,
           calendarId: calendar?.id,
           notes: webhook.notes || webhook.title || undefined,
-          customFields: webhook.customFields || {},
+          customFields: JSON.parse(JSON.stringify(webhook.customFields || {})),
           // Ensure PCN is still available if not submitted
           pcnSubmitted: appointment.pcnSubmitted || false
         }
@@ -250,7 +250,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
       pcnSubmitted: false, // PCN is automatically "created" when appointment exists
 
       notes: webhook.notes,
-      customFields: webhook.customFields || {}
+      customFields: JSON.parse(JSON.stringify(webhook.customFields || {}))
         }
       })
     }
@@ -264,10 +264,10 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     data: {
       attributionSource: attribution.trafficSource,
       leadSource: attribution.leadSource,
-      customFields: {
+      customFields: JSON.parse(JSON.stringify({
           ...(appointment.customFields as Record<string, unknown> || {}),
         attributionConfidence: attribution.confidence
-      }
+      }))
     }
   })
 

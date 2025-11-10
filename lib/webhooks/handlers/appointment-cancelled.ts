@@ -73,7 +73,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
             email: webhook.contactEmail,
             phone: webhook.contactPhone,
             tags: [],
-            customFields: webhook.allCustomFields || {}
+            customFields: JSON.parse(JSON.stringify(webhook.allCustomFields || {}))
           }
         })
         console.log('[GHL Webhook] Created contact for cancelled appointment:', contact.id)
@@ -113,7 +113,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
           outcome: 'Cancelled',
           pcnSubmitted: false,
           notes: webhook.notes || webhook.title,
-          customFields: webhook.customFields || {}
+          customFields: JSON.parse(JSON.stringify(webhook.customFields || {}))
         }
       })
 
