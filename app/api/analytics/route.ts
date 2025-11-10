@@ -4,6 +4,31 @@ import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
 import { AppointmentWhereClause, AppointmentWithRelations, CloserBreakdownAccumulator, AnalyticsBreakdownItem } from '@/types'
 
+// Helper types for analytics aggregations
+interface ObjectionData {
+  type: string
+  count: number
+  converted: number
+  conversionRate?: string | number
+}
+
+interface CalendarBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  calendar: string
+  total: number
+}
+
+interface DayBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  dayOfWeek: number
+}
+
+interface TimeBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  hour: number
+}
+
+interface SourceData extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  source: string
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getEffectiveUser()
@@ -501,31 +526,31 @@ export async function GET(request: NextRequest) {
         }
         
         return acc
-      }, {})
-    ).map((day: any) => {
+      }, {} as Record<string, DayBreakdown>)
+    ).map(([_dayStr, day]: [string, DayBreakdown]): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const dayExpectedCalls = day.scheduled - day.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const dayShowRate = dayExpectedCalls > 0
         ? ((day.showed / dayExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const dayCloseRate = day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...day,
         showRate: dayShowRate,
         closeRate: dayCloseRate
       }
-    }).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek)
+    }).sort((a, b) => a.dayOfWeek - b.dayOfWeek)
     
     // Group by objection type - using countable appointments
     const byObjection = Object.entries(
       countableAppointments
         .filter(a => a.objectionType && a.status === 'showed')
-        .reduce((acc: any, apt) => {
+        .reduce((acc: Record<string, ObjectionData>, apt) => {
           const key = apt.objectionType || 'None'
           if (!acc[key]) {
             acc[key] = { type: key, count: 0, converted: 0 }
@@ -534,14 +559,14 @@ export async function GET(request: NextRequest) {
           if (apt.status === 'signed') acc[key].converted++
           return acc
         }, {})
-    ).map(([type, data]: [string, any]) => ({
+    ).map(([_type, data]: [string, ObjectionData]): ObjectionData => ({
       ...data,
       conversionRate: data.count > 0 ? ((data.converted / data.count) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => b.count - a.count)
+    })).sort((a, b) => b.count - a.count)
     
     // Group by calendar (traffic source) - using countable appointments
     const byCalendar = Object.entries(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: Record<string, CalendarBreakdown>, apt) => {
         const key = apt.calendar || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -554,7 +579,7 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
+
         acc[key].total++
         acc[key].scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
@@ -567,27 +592,27 @@ export async function GET(request: NextRequest) {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
         }
-        
+
         return acc
       }, {})
-    ).map(([calendar, data]: [string, any]) => {
+    ).map(([_calendar, data]: [string, CalendarBreakdown]): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const calendarExpectedCalls = data.scheduled - data.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const calendarShowRate = calendarExpectedCalls > 0
         ? ((data.showed / calendarExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const calendarCloseRate = data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...data,
         showRate: calendarShowRate,
         closeRate: calendarCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
+    }).sort((a, b) => b.revenue - a.revenue)
     
     // Group by appointment type (first call vs follow up) - using countable appointments
     const byAppointmentType = [
@@ -698,11 +723,11 @@ export async function GET(request: NextRequest) {
     
     // Group by traffic source - using countable appointments
     const byTrafficSource = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: Record<string, SourceData>, apt) => {
         const key = apt.attributionSource || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
-            trafficSource: key,
+            source: key,
             total: 0,
             showed: 0,
             signed: 0,
@@ -711,7 +736,7 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
+
         acc[key].total++
         acc[key].scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
@@ -724,27 +749,27 @@ export async function GET(request: NextRequest) {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
         }
-        
+
         return acc
       }, {})
-    ).map((source: any) => {
+    ).map((source: SourceData): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const sourceExpectedCalls = source.scheduled - source.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const sourceShowRate = sourceExpectedCalls > 0
         ? ((source.showed / sourceExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const sourceCloseRate = source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...source,
         showRate: sourceShowRate,
         closeRate: sourceCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
+    }).sort((a, b) => b.revenue - a.revenue)
     
     return NextResponse.json({
       // New metrics
@@ -786,10 +811,11 @@ export async function GET(request: NextRequest) {
       byTrafficSource
     })
     
-  } catch (error: any) {
+  } catch (error) {
     console.error('Analytics error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json(
-      { error: error.message },
+      { error: errorMessage },
       { status: 500 }
     )
   }
