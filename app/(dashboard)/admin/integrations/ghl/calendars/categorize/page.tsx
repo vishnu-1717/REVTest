@@ -20,13 +20,22 @@ export default function CategorizeCalendarsPage() {
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   
+  const withViewAs = (url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
+  
   useEffect(() => {
     fetchCalendars()
   }, [])
   
   const fetchCalendars = async () => {
     try {
-      const res = await fetch('/api/admin/integrations/ghl/calendars')
+      const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'))
       const data = await res.json()
       setCalendars(data)
     } catch (error) {
@@ -38,7 +47,7 @@ export default function CategorizeCalendarsPage() {
   const handleSyncCalendars = async () => {
     setSyncing(true)
     try {
-      const res = await fetch('/api/admin/integrations/ghl/calendars', {
+      const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'), {
         method: 'POST'
       })
       
@@ -67,7 +76,7 @@ export default function CategorizeCalendarsPage() {
       // Update each calendar
       await Promise.all(
         calendars.map(cal =>
-          fetch(`/api/admin/integrations/ghl/calendars/${cal.id}`, {
+          fetch(withViewAs(`/api/admin/integrations/ghl/calendars/${cal.id}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

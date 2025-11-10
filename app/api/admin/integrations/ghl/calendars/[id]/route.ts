@@ -1,14 +1,24 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 // Update individual calendar
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireAdmin()
+    const companyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to modify this company' },
+        { status: 403 }
+      )
+    }
+
     const updates = await request.json()
     const { id } = await params
     
@@ -26,7 +36,7 @@ export async function PATCH(
       return await prisma.calendar.update({
         where: {
           id: id,
-          companyId: user.companyId // Security: only update own calendars
+          companyId // Security: ensure calendar belongs to target company
         },
         data: filteredUpdates
       })

@@ -1,16 +1,25 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 // Fetch GHL users for mapping
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireAdmin()
+    const companyId = await getEffectiveCompanyId(request.url)
     
+    if (!user.superAdmin && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to view this company' },
+        { status: 403 }
+      )
+    }
+
     const company = await withPrisma(async (prisma) => {
       return await prisma.company.findUnique({
-        where: { id: user.companyId }
+        where: { id: companyId }
       })
     })
     
@@ -25,7 +34,7 @@ export async function GET() {
     const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
     const users = await ghl.getUsers()
     
-    console.log(`Fetched ${users.length} GHL users for company ${user.companyId}`)
+    console.log(`Fetched ${users.length} GHL users for company ${companyId}`)
     
     return NextResponse.json({
       success: true,

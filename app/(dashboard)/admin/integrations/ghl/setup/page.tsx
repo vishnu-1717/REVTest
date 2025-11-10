@@ -10,6 +10,15 @@ export default function GHLSetupPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
   
+  const withViewAs = (url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
+
   // Step 1: GHL Credentials
   const [apiKey, setApiKey] = useState('')
   const [locationId, setLocationId] = useState('')
@@ -23,7 +32,7 @@ export default function GHLSetupPage() {
     setSaving(true)
     try {
       // Save API key and location ID
-      const res1 = await fetch('/api/admin/integrations/ghl', {
+      const res1 = await fetch(withViewAs('/api/admin/integrations/ghl'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey, locationId })
@@ -37,7 +46,7 @@ export default function GHLSetupPage() {
       }
       
       // Sync calendars
-      const res2 = await fetch('/api/admin/integrations/ghl/calendars', {
+      const res2 = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'), {
         method: 'POST'
       })
       
@@ -61,7 +70,7 @@ export default function GHLSetupPage() {
   const handleSaveAttribution = async () => {
     setSaving(true)
     try {
-      const res = await fetch('/api/admin/integrations/ghl/attribution', {
+      const res = await fetch(withViewAs('/api/admin/integrations/ghl/attribution'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,18 +1,27 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 // Save GHL credentials
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const user = await requireAdmin()
     const { apiKey, locationId } = await request.json()
+    const companyId = await getEffectiveCompanyId(request.url)
     
     if (!apiKey || !locationId) {
       return NextResponse.json(
         { error: 'API key and location ID are required' },
         { status: 400 }
+      )
+    }
+
+    if (!user.superAdmin && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to modify this company' },
+        { status: 403 }
       )
     }
     
@@ -86,7 +95,7 @@ export async function POST(request: Request) {
     // Update company with GHL credentials
     await withPrisma(async (prisma) => {
       return await prisma.company.update({
-        where: { id: user.companyId },
+        where: { id: companyId },
         data: {
           ghlApiKey: apiKey,
           ghlLocationId: locationId,
@@ -104,13 +113,21 @@ export async function POST(request: Request) {
 }
 
 // Get current GHL setup status
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireAdmin()
+    const companyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to view this company' },
+        { status: 403 }
+      )
+    }
     
     const company = await withPrisma(async (prisma) => {
       return await prisma.company.findUnique({
-        where: { id: user.companyId },
+        where: { id: companyId },
         select: {
           ghlApiKey: true,
           ghlLocationId: true,

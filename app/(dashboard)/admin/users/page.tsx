@@ -78,7 +78,7 @@ export default function UsersPage() {
   
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/users')
+      const res = await fetch(withViewAs('/api/admin/users'))
       const data = await res.json()
       setUsers(data)
     } catch (error) {
@@ -97,10 +97,19 @@ export default function UsersPage() {
     }
   }
 
+  const withViewAs = (url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
+
   const fetchCompanies = async () => {
     try {
       setCompaniesLoading(true)
-      const res = await fetch('/api/admin/companies')
+      const res = await fetch(withViewAs('/api/admin/companies'))
       if (!res.ok) {
         return
       }
@@ -121,7 +130,7 @@ export default function UsersPage() {
     e.preventDefault()
     
     try {
-      const res = await fetch('/api/admin/users', {
+      const res = await fetch(withViewAs('/api/admin/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

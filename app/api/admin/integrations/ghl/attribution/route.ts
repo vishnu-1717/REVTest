@@ -1,10 +1,20 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const user = await requireAdmin()
+    const companyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to modify this company' },
+        { status: 403 }
+      )
+    }
+
     const { 
       attributionStrategy, 
       attributionSourceField,
@@ -23,7 +33,7 @@ export async function POST(request: Request) {
     // Update company
     await withPrisma(async (prisma) => {
       return await prisma.company.update({
-        where: { id: user.companyId },
+        where: { id: companyId },
         data: {
           attributionStrategy,
           attributionSourceField: attributionStrategy === 'ghl_fields' 

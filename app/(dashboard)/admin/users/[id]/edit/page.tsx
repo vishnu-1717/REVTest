@@ -89,11 +89,20 @@ export default function EditUserPage() {
       console.error('Failed to fetch roles:', error)
     }
   }
-  
+
+  const withViewAs = (url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
+
   const fetchGhlUsers = async () => {
     setLoadingGhlUsers(true)
     try {
-      const res = await fetch('/api/admin/integrations/ghl/users')
+      const res = await fetch(withViewAs('/api/admin/integrations/ghl/users'))
       const data = await res.json()
       if (data.success) {
         setGhlUsers(data.users || [])
