@@ -129,7 +129,6 @@ export async function POST(request: Request) {
         const invitation = await clerk.invitations.createInvitation({
           emailAddress: email,
           redirectUrl: `${appUrl}/sign-in?redirect_url=/`,
-          inviterUserId: user.superAdmin ? undefined : user.clerkId ?? undefined,
           publicMetadata: {
             companyId: user.companyId,
             invitedByUserId: user.id
