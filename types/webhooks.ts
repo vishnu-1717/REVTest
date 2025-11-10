@@ -21,6 +21,28 @@ export interface GHLWebhook {
   customFields?: Record<string, unknown>
 }
 
+/**
+ * Extended webhook with additional fields that may be present in payload
+ */
+export interface GHLWebhookExtended extends GHLWebhook {
+  // Contact fields
+  firstName?: string
+  lastName?: string
+  contactName?: string
+  contactEmail?: string
+  contactPhone?: string
+
+  // Calendar fields
+  calendarName?: string
+
+  // Parsed dates (added during processing)
+  startTimeParsed?: Date | null
+  endTimeParsed?: Date | null
+
+  // All custom fields from the original payload
+  allCustomFields?: Record<string, unknown>
+}
+
 export interface GHLWebhookPayload {
   type?: string
   customData?: {

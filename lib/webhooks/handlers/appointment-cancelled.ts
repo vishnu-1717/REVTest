@@ -2,12 +2,13 @@
  * Handle appointment cancelled webhook event
  */
 
-import { GHLWebhook, GHLCompany } from '@/types'
+import { GHLWebhookExtended, GHLCompany } from '@/types'
 import { withPrisma } from '@/lib/db'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import { recalculateContactInclusionFlags } from '@/lib/appointment-inclusion-flag'
+import { Calendar } from '@prisma/client'
 
-export async function handleAppointmentCancelled(webhook: GHLWebhook, company: GHLCompany) {
+export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, company: GHLCompany) {
   console.log('[GHL Webhook] handleAppointmentCancelled called with:', {
     appointmentId: webhook.appointmentId,
     contactId: webhook.contactId,
@@ -38,7 +39,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhook, company: G
       try {
         await recalculateContactInclusionFlags(appointment.contactId, appointment.companyId)
         console.log('[GHL Webhook] ✅ Recalculated inclusion flags for contact')
-      } catch (flagError: any) {
+      } catch (flagError) {
         console.error('[GHL Webhook] Error calculating inclusion flag after cancellation:', flagError)
       }
     } else {
@@ -60,19 +61,19 @@ export async function handleAppointmentCancelled(webhook: GHLWebhook, company: G
       })
 
       if (!contact && webhook.contactId) {
-        const firstName = (webhook as any).firstName || ''
-        const lastName = (webhook as any).lastName || ''
-        const fullName = (webhook as any).contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
+        const firstName = webhook.firstName || ''
+        const lastName = webhook.lastName || ''
+        const fullName = webhook.contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
 
         contact = await prisma.contact.create({
           data: {
             companyId: company.id,
             ghlContactId: webhook.contactId,
             name: fullName,
-            email: (webhook as any).contactEmail,
-            phone: (webhook as any).contactPhone,
+            email: webhook.contactEmail,
+            phone: webhook.contactPhone,
             tags: [],
-            customFields: (webhook as any).allCustomFields || {}
+            customFields: webhook.allCustomFields || {}
           }
         })
         console.log('[GHL Webhook] Created contact for cancelled appointment:', contact.id)
@@ -88,7 +89,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhook, company: G
       const endTimeDate = webhook.endTime ? parseGHLDate(webhook.endTime) : null
 
       // Find calendar if provided
-      let calendar: any = null
+      let calendar: Calendar | null = null
       if (webhook.calendarId) {
         calendar = await prisma.calendar.findFirst({
           where: {
@@ -111,7 +112,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhook, company: G
           status: 'cancelled',
           outcome: 'Cancelled',
           pcnSubmitted: false,
-          notes: webhook.notes || (webhook as any).title,
+          notes: webhook.notes || webhook.title,
           customFields: webhook.customFields || {}
         }
       })
@@ -122,7 +123,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhook, company: G
       try {
         await recalculateContactInclusionFlags(contact.id, company.id)
         console.log('[GHL Webhook] ✅ Recalculated inclusion flags for contact')
-      } catch (flagError: any) {
+      } catch (flagError) {
         console.error('[GHL Webhook] Error calculating inclusion flag after cancellation:', flagError)
       }
     }

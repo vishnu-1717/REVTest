@@ -2,13 +2,13 @@
  * Handle appointment updated webhook event
  */
 
-import { GHLWebhook, GHLCompany } from '@/types'
+import { GHLWebhookExtended, GHLCompany } from '@/types'
 import { withPrisma } from '@/lib/db'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import { recalculateContactInclusionFlags } from '@/lib/appointment-inclusion-flag'
 import { handleAppointmentCreated } from './appointment-created'
 
-export async function handleAppointmentUpdated(webhook: GHLWebhook, company: GHLCompany) {
+export async function handleAppointmentUpdated(webhook: GHLWebhookExtended, company: GHLCompany) {
   await withPrisma(async (prisma) => {
     const appointment = await prisma.appointment.findFirst({
       where: {
@@ -26,8 +26,8 @@ export async function handleAppointmentUpdated(webhook: GHLWebhook, company: GHL
     }
 
     // Parse dates from webhook
-    const startTimeDate = (webhook as any).startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
-    const endTimeDate = (webhook as any).endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
+    const startTimeDate = webhook.startTimeParsed || (webhook.startTime ? parseGHLDate(webhook.startTime) : null)
+    const endTimeDate = webhook.endTimeParsed || (webhook.endTime ? parseGHLDate(webhook.endTime) : null)
 
   await prisma.appointment.update({
     where: { id: appointment.id },
@@ -35,7 +35,7 @@ export async function handleAppointmentUpdated(webhook: GHLWebhook, company: GHL
         scheduledAt: startTimeDate || undefined,
         startTime: startTimeDate || undefined,
         endTime: endTimeDate || undefined,
-        notes: webhook.notes || (webhook as any).title || undefined,
+        notes: webhook.notes || webhook.title || undefined,
       customFields: webhook.customFields
     }
     })
@@ -44,7 +44,7 @@ export async function handleAppointmentUpdated(webhook: GHLWebhook, company: GHL
     if (startTimeDate) {
       try {
         await recalculateContactInclusionFlags(appointment.contactId, appointment.companyId)
-      } catch (flagError: any) {
+      } catch (flagError) {
         console.error('[GHL Webhook] Error calculating inclusion flag after update:', flagError)
       }
     }

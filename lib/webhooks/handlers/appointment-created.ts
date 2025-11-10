@@ -2,13 +2,16 @@
  * Handle appointment created/confirmed webhook event
  */
 
-import { GHLWebhook, GHLCompany } from '@/types'
+import { GHLWebhookExtended, GHLCompany } from '@/types'
 import { withPrisma } from '@/lib/db'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import { resolveAttribution } from '@/lib/attribution'
 import { recalculateContactInclusionFlags } from '@/lib/appointment-inclusion-flag'
+import { Calendar, User } from '@prisma/client'
 
-export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHLCompany) {
+type CalendarWithCloser = Calendar & { defaultCloser: User | null }
+
+export async function handleAppointmentCreated(webhook: GHLWebhookExtended, company: GHLCompany) {
   console.log('[GHL Webhook] handleAppointmentCreated called with:', {
     appointmentId: webhook.appointmentId,
     contactId: webhook.contactId,
@@ -29,9 +32,9 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
 
   // Create or update contact from webhook data
   if (!contact && webhook.contactId) {
-    const firstName = (webhook as any).firstName || ''
-    const lastName = (webhook as any).lastName || ''
-    const fullName = (webhook as any).contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
+    const firstName = webhook.firstName || ''
+    const lastName = webhook.lastName || ''
+    const fullName = webhook.contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
 
     console.log('[GHL Webhook] Creating contact with name:', fullName, 'from', { firstName, lastName })
 
@@ -40,25 +43,25 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
           companyId: company.id,
         ghlContactId: webhook.contactId,
         name: fullName,
-        email: (webhook as any).contactEmail,
-        phone: (webhook as any).contactPhone,
+        email: webhook.contactEmail,
+        phone: webhook.contactPhone,
         tags: [],
-        customFields: (webhook as any).allCustomFields || {}
+        customFields: webhook.allCustomFields || {}
       }
     })
     console.log('[GHL Webhook] Contact created:', contact.id)
   } else if (contact) {
     // Update existing contact name if it's "Unknown"
-    if (contact.name === 'Unknown' && (webhook as any).contactName) {
-      const fullName = (webhook as any).contactName || `${(webhook as any).firstName} ${(webhook as any).lastName}`.trim()
+    if (contact.name === 'Unknown' && webhook.contactName) {
+      const fullName = webhook.contactName || `${webhook.firstName} ${webhook.lastName}`.trim()
       if (fullName && fullName !== 'Unknown') {
         console.log('[GHL Webhook] Updating contact name from "Unknown" to:', fullName)
         contact = await prisma.contact.update({
           where: { id: contact.id },
           data: {
             name: fullName,
-            email: (webhook as any).contactEmail || contact.email,
-            phone: (webhook as any).contactPhone || contact.phone
+            email: webhook.contactEmail || contact.email,
+            phone: webhook.contactPhone || contact.phone
           }
         })
       }
@@ -73,7 +76,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
   // Find calendar
   console.log('[GHL Webhook] Looking for calendar with ghlCalendarId:', webhook.calendarId || 'NONE')
 
-  let calendar: any = null
+  let calendar: CalendarWithCloser | null = null
   if (webhook.calendarId) {
     calendar = await prisma.calendar.findFirst({
       where: {
@@ -99,21 +102,22 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
       }
 
       // Auto-create calendar if we have both ID and name from webhook
-      if (webhook.calendarId && (webhook as any).calendarName) {
-        console.log('[GHL Webhook] 🆕 Auto-creating missing calendar:', (webhook as any).calendarName)
+      if (webhook.calendarId && webhook.calendarName) {
+        console.log('[GHL Webhook] 🆕 Auto-creating missing calendar:', webhook.calendarName)
         try {
           calendar = await prisma.calendar.create({
             data: {
               companyId: company.id,
               ghlCalendarId: webhook.calendarId,
-              name: (webhook as any).calendarName,
+              name: webhook.calendarName,
               isActive: true
             },
             include: { defaultCloser: true }
           })
           console.log('[GHL Webhook] ✅ Calendar auto-created successfully')
-        } catch (createError: any) {
-          console.error('[GHL Webhook] Failed to auto-create calendar:', createError.message)
+        } catch (createError) {
+          const errorMessage = createError instanceof Error ? createError.message : 'Unknown error'
+          console.error('[GHL Webhook] Failed to auto-create calendar:', errorMessage)
         }
       } else {
         console.log('[GHL Webhook] Cannot auto-create calendar - missing calendarId or calendarName')
@@ -124,8 +128,8 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
   }
 
   // Find setter and closer - intelligently determine which role
-  let setter: any = null
-  let closer: any = null
+  let setter: User | null = null
+  let closer: User | null = null
 
   console.log('[GHL Webhook] Determining setter vs closer assignment...')
 
@@ -143,8 +147,8 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
 
       // Determine role based on multiple signals:
       // 1. GHL custom fields that might indicate role
-      const customFields = (webhook as any).allCustomFields || webhook.customFields || {}
-      const roleField = customFields['Role'] || customFields['Assignment Type'] || customFields['Team']
+      const customFields = webhook.allCustomFields || webhook.customFields || {}
+      const roleField = (customFields as Record<string, unknown>)['Role'] || (customFields as Record<string, unknown>)['Assignment Type'] || (customFields as Record<string, unknown>)['Team']
 
       // 2. Calendar type (e.g., "Setter Call" vs "Closer Call")
       const calendarHint = calendar?.calendarType?.toLowerCase() || ''
@@ -154,15 +158,16 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
       const userRole = assignedUser.role?.toLowerCase() || ''
 
       // Determine if this is a SETTER
+      const roleFieldStr = typeof roleField === 'string' ? roleField : ''
       const isSetter =
-        roleField?.toLowerCase().includes('setter') ||
+        roleFieldStr.toLowerCase().includes('setter') ||
         calendarHint.includes('setter') ||
         calendarName.includes('setter') ||
         userRole === 'setter'
 
       // Determine if this is a CLOSER
       const isCloser =
-        roleField?.toLowerCase().includes('closer') ||
+        roleFieldStr.toLowerCase().includes('closer') ||
         calendarHint.includes('closer') ||
         calendarName.includes('closer') ||
         userRole === 'closer'
@@ -203,8 +208,8 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
     console.log('[GHL Webhook] Existing appointment found:', !!appointment, appointment?.id)
 
     // Parse dates from webhook (use parsed date if available, otherwise parse raw string)
-    const startTimeDate = (webhook as any).startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
-    const endTimeDate = (webhook as any).endTimeParsed || parseGHLDate(webhook.endTime) || null
+    const startTimeDate = webhook.startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
+    const endTimeDate = webhook.endTimeParsed || parseGHLDate(webhook.endTime) || null
 
     console.log('[GHL Webhook] Parsed dates - startTime:', startTimeDate, 'endTime:', endTimeDate)
 
@@ -219,7 +224,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
           setterId: setter?.id,
           closerId: closer?.id,
           calendarId: calendar?.id,
-          notes: webhook.notes || (webhook as any).title || undefined,
+          notes: webhook.notes || webhook.title || undefined,
           customFields: webhook.customFields || {},
           // Ensure PCN is still available if not submitted
           pcnSubmitted: appointment.pcnSubmitted || false
@@ -260,7 +265,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
       attributionSource: attribution.trafficSource,
       leadSource: attribution.leadSource,
       customFields: {
-          ...(appointment.customFields as Record<string, any> || {}),
+          ...(appointment.customFields as Record<string, unknown> || {}),
         attributionConfidence: attribution.confidence
       }
     }
@@ -276,7 +281,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhook, company: GHL
   try {
     await recalculateContactInclusionFlags(contact.id, company.id)
     console.log('[GHL Webhook] ✅ Calculated inclusion flags for contact')
-  } catch (flagError: any) {
+  } catch (flagError) {
     console.error('[GHL Webhook] Error calculating inclusion flag:', flagError)
     // Don't fail the webhook if flag calculation fails
   }

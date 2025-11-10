@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
-import { GHLWebhook } from '@/types'
+import { GHLWebhookExtended, GHLWebhookPayload } from '@/types'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import {
   handleAppointmentCreated,
@@ -10,6 +10,18 @@ import {
   handleAppointmentUpdated
 } from '@/lib/webhooks/handlers'
 
+interface AppointmentData {
+  appointmentId: string
+  startTime: string
+  endTime: string
+  appointmentStatus: string
+  calendarId: string
+  calendarName: string
+  assignedUserId: string
+  title: string
+  notes: string
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Log the raw request for debugging
@@ -17,22 +29,22 @@ export async function POST(request: NextRequest) {
     console.log('[GHL Webhook] Raw payload received:', rawBody)
     
     // Parse JSON payload
-    let body: any
+    let body: GHLWebhookPayload
     try {
-      body = JSON.parse(rawBody)
+      body = JSON.parse(rawBody) as GHLWebhookPayload
     } catch (parseError) {
       console.error('[GHL Webhook] JSON parse error:', parseError)
       console.error('[GHL Webhook] Raw body that failed to parse:', rawBody)
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
     }
-    
+
     // Log the parsed payload structure
     console.log('[GHL Webhook] Parsed payload:', JSON.stringify(body, null, 2))
     console.log('[GHL Webhook] Payload keys:', Object.keys(body))
     console.log('[GHL Webhook] Payload type:', typeof body)
-    
+
     // Deep search for appointment-related fields (might be anywhere in the payload)
-    const searchForAppointmentFields = (obj: any, path: string = ''): void => {
+    const searchForAppointmentFields = (obj: Record<string, unknown>, path: string = ''): void => {
       if (!obj || typeof obj !== 'object') return
       
       Object.keys(obj).forEach(key => {
@@ -79,13 +91,13 @@ export async function POST(request: NextRequest) {
     // 3. Nested in data: { data: { type: "Appointment", ... } }
     // 4. Nested in event: { event: { type: "...", ... }, locationId: "..." }
     // 5. Workflow format: { customData: {...}, location: { id: "..." }, contact_id: "..." }
-    
-    let webhookData: any = body
-    
+
+    let webhookData: Partial<GHLWebhookExtended> = body as Partial<GHLWebhookExtended>
+
     // Extract appointment data from multiple possible locations
     // PRIORITY ORDER: Root level first (actual GHL appointment payload structure),
     // then nested structures, then custom fields
-    const extractAppointmentData = (body: any) => {
+    const extractAppointmentData = (body: GHLWebhookPayload): AppointmentData => {
       let appointmentId = ''
       let startTime = ''
       let endTime = ''
@@ -292,9 +304,9 @@ export async function POST(request: NextRequest) {
     
     console.log('[GHL Webhook] Extracted webhook data:', JSON.stringify(webhookData, null, 2))
     console.log('[GHL Webhook] Type:', webhookData.type, '| ID:', webhookData.id, '| AppointmentId:', webhookData.appointmentId, '| LocationId:', webhookData.locationId)
-    
+
     // Type guard - check if this looks like our expected format
-    const webhook = webhookData as GHLWebhook
+    const webhook = webhookData as GHLWebhookExtended
     
     // Check if this is an appointment webhook
     // Handle cases where type is in customData but appointment data might be sparse
@@ -383,31 +395,32 @@ export async function POST(request: NextRequest) {
             console.log(`[GHL Webhook] Found ${appointments.length} appointments after retries`)
             // Get the most recent appointment (usually the one that triggered this webhook)
             // Sort by startTime or dateCreated descending
-            const sortedAppointments = appointments.sort((a: any, b: any) => {
-              const dateA = new Date(a.startTime || a.scheduledAt || a.createdAt || 0).getTime()
-              const dateB = new Date(b.startTime || b.scheduledAt || b.createdAt || 0).getTime()
+            const sortedAppointments = appointments.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+              const dateA = new Date((a.startTime || a.scheduledAt || a.createdAt || 0) as string | number).getTime()
+              const dateB = new Date((b.startTime || b.scheduledAt || b.createdAt || 0) as string | number).getTime()
               return dateB - dateA
             })
-            
+
             const latestAppointment = sortedAppointments[0]
             console.log('[GHL Webhook] Found appointment via API:', latestAppointment.id)
-            
+
             // Populate webhook data from API response
-            webhook.appointmentId = latestAppointment.id || latestAppointment.appointmentId
-            webhook.startTime = latestAppointment.startTime || latestAppointment.scheduledAt || latestAppointment.start_time
-            webhook.endTime = latestAppointment.endTime || latestAppointment.end_time
-            webhook.appointmentStatus = latestAppointment.status || latestAppointment.appointmentStatus || 'scheduled'
-            webhook.calendarId = latestAppointment.calendarId || latestAppointment.calendar_id || ''
-            webhook.assignedUserId = latestAppointment.assignedUserId || latestAppointment.assigned_user_id || ''
-            webhook.title = latestAppointment.title || latestAppointment.name || ''
-            webhook.notes = latestAppointment.notes || latestAppointment.description || ''
-            
+            webhook.appointmentId = (latestAppointment.id || latestAppointment.appointmentId) as string
+            webhook.startTime = (latestAppointment.startTime || latestAppointment.scheduledAt || latestAppointment.start_time) as string
+            webhook.endTime = (latestAppointment.endTime || latestAppointment.end_time) as string
+            webhook.appointmentStatus = (latestAppointment.status || latestAppointment.appointmentStatus || 'scheduled') as string
+            webhook.calendarId = (latestAppointment.calendarId || latestAppointment.calendar_id || '') as string
+            webhook.assignedUserId = (latestAppointment.assignedUserId || latestAppointment.assigned_user_id || '') as string
+            webhook.title = (latestAppointment.title || latestAppointment.name || '') as string
+            webhook.notes = (latestAppointment.notes || latestAppointment.description || '') as string
+
             console.log('[GHL Webhook] Successfully populated appointment data from GHL API')
           } else {
             console.warn('[GHL Webhook] No appointments found for contact via API. Proceeding with contact sync only.')
           }
-        } catch (apiError: any) {
-          console.error('[GHL Webhook] Failed to fetch appointment from GHL API:', apiError.message)
+        } catch (apiError) {
+          const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error'
+          console.error('[GHL Webhook] Failed to fetch appointment from GHL API:', errorMessage)
           console.log('[GHL Webhook] Proceeding with contact sync only...')
         }
       }
@@ -415,11 +428,12 @@ export async function POST(request: NextRequest) {
       // If we still don't have appointmentId after API fetch, proceed with contact sync only
       if (!webhook.appointmentId && company && webhook.contactId) {
         // Sync/update contact with available data
-        const contactData: any = {
-          name: (webhook as any).contactName || body.full_name || `${body.first_name || ''} ${body.last_name || ''}`.trim(),
-          email: (webhook as any).contactEmail || body.email,
-          phone: (webhook as any).contactPhone || body.phone,
-          tags: body.tags ? body.tags.split(',').map((t: string) => t.trim()) : [],
+        const tags = typeof body.tags === 'string' ? body.tags.split(',').map((t) => t.trim()) : []
+        const contactData = {
+          name: webhookData.contactName || (body.full_name as string) || `${(body.first_name as string) || ''} ${(body.last_name as string) || ''}`.trim(),
+          email: webhookData.contactEmail || (body.email as string),
+          phone: webhookData.contactPhone || (body.phone as string),
+          tags,
           customFields: body // Store all custom fields for attribution
         }
         
@@ -509,11 +523,14 @@ export async function POST(request: NextRequest) {
     
     console.log('[GHL Webhook] Successfully processed webhook')
     return NextResponse.json({ received: true })
-    
-  } catch (error: any) {
+
+  } catch (error) {
     console.error('[GHL Webhook] Error processing webhook:', error)
-    console.error('[GHL Webhook] Error stack:', error.stack)
-    console.error('[GHL Webhook] Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error instanceof Error) {
+      console.error('[GHL Webhook] Error stack:', error.stack)
+      console.error('[GHL Webhook] Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)))
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json({ error: 'Unknown error occurred' }, { status: 500 })
   }
 }

@@ -2,13 +2,13 @@
  * Handle appointment rescheduled webhook event
  */
 
-import { GHLWebhook, GHLCompany } from '@/types'
+import { GHLWebhookExtended, GHLCompany } from '@/types'
 import { withPrisma } from '@/lib/db'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import { recalculateContactInclusionFlags } from '@/lib/appointment-inclusion-flag'
 import { handleAppointmentCreated } from './appointment-created'
 
-export async function handleAppointmentRescheduled(webhook: GHLWebhook, company: GHLCompany) {
+export async function handleAppointmentRescheduled(webhook: GHLWebhookExtended, company: GHLCompany) {
   await withPrisma(async (prisma) => {
     const existing = await prisma.appointment.findFirst({
     where: { ghlAppointmentId: webhook.appointmentId }
@@ -21,10 +21,13 @@ export async function handleAppointmentRescheduled(webhook: GHLWebhook, company:
   }
 
   // Parse dates from webhook
-  const startTimeDate = (webhook as any).startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
-  const endTimeDate = (webhook as any).endTimeParsed || parseGHLDate(webhook.endTime) || null
+  const startTimeDate = webhook.startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
+  const endTimeDate = webhook.endTimeParsed || parseGHLDate(webhook.endTime) || null
 
   // Update existing appointment
+  const existingCustomFields = (existing.customFields as Record<string, unknown>) || {}
+  const rescheduledCount = (typeof existingCustomFields.rescheduledCount === 'number' ? existingCustomFields.rescheduledCount : 0) + 1
+
   await prisma.appointment.update({
     where: { id: existing.id },
     data: {
@@ -32,10 +35,10 @@ export async function handleAppointmentRescheduled(webhook: GHLWebhook, company:
       startTime: startTimeDate,
       endTime: endTimeDate,
       status: 'scheduled',
-      notes: webhook.notes || (webhook as any).title || existing.notes,
+      notes: webhook.notes || webhook.title || existing.notes,
       customFields: {
-          ...(existing.customFields as Record<string, any> || {}),
-        rescheduledCount: ((existing.customFields as any)?.rescheduledCount || 0) + 1
+          ...existingCustomFields,
+        rescheduledCount
       }
     }
     })
@@ -43,7 +46,7 @@ export async function handleAppointmentRescheduled(webhook: GHLWebhook, company:
     // Recalculate inclusion flags for this contact (rescheduling affects ordering)
     try {
       await recalculateContactInclusionFlags(existing.contactId, existing.companyId)
-    } catch (flagError: any) {
+    } catch (flagError) {
       console.error('[GHL Webhook] Error calculating inclusion flag after reschedule:', flagError)
     }
   })
