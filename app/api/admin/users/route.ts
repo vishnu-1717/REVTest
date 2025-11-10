@@ -125,7 +125,8 @@ export async function POST(request: Request) {
       console.warn('[Users API] CLERK_SECRET_KEY not set; skipping automatic invite email.')
     } else {
       try {
-        const invitation = await clerkClient.invitations.createInvitation({
+        const clerk = await clerkClient()
+        const invitation = await clerk.invitations.createInvitation({
           emailAddress: email,
           redirectUrl: `${appUrl}/sign-in?redirect_url=/`,
           inviterUserId: user.superAdmin ? undefined : user.clerkId ?? undefined,
