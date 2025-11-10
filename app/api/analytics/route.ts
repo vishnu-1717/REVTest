@@ -69,42 +69,47 @@ export async function GET(request: NextRequest) {
     }
     
     // Status filter
-    if (searchParams.get('status')) {
-      where.status = searchParams.get('status')
+    const statusParam = searchParams.get('status')
+    if (statusParam) {
+      where.status = statusParam
     }
-    
+
     // Closer filter
-    if (searchParams.get('closer')) {
-      where.closerId = searchParams.get('closer')
+    const closerParam = searchParams.get('closer')
+    if (closerParam) {
+      where.closerId = closerParam
     }
-    
+
     // Objection type filter
-    if (searchParams.get('objectionType')) {
+    const objectionTypeParam = searchParams.get('objectionType')
+    if (objectionTypeParam) {
       where.objectionType = {
-        contains: searchParams.get('objectionType'),
+        contains: objectionTypeParam,
         mode: 'insensitive'
       }
     }
     
     // Appointment type filter (first call vs follow up)
-    if (searchParams.get('appointmentType')) {
-      where.isFirstCall = searchParams.get('appointmentType') === 'first_call'
+    const appointmentTypeParam = searchParams.get('appointmentType')
+    if (appointmentTypeParam) {
+      where.isFirstCall = appointmentTypeParam === 'first_call'
     }
-    
+
     // Follow-up needed filter
     if (searchParams.get('followUpNeeded') === 'true') {
       where.followUpScheduled = true
       where.status = { notIn: ['signed', 'cancelled'] }
     }
-    
+
     // Nurture type filter
-    if (searchParams.get('nurtureType')) {
+    const nurtureTypeParam = searchParams.get('nurtureType')
+    if (nurtureTypeParam) {
       where.nurtureType = {
-        contains: searchParams.get('nurtureType'),
+        contains: nurtureTypeParam,
         mode: 'insensitive'
       }
     }
-    
+
     // Deal size range filter
     const minDealSize = searchParams.get('minDealSize')
     const maxDealSize = searchParams.get('maxDealSize')
@@ -113,19 +118,21 @@ export async function GET(request: NextRequest) {
       if (minDealSize) where.cashCollected.gte = parseFloat(minDealSize)
       if (maxDealSize) where.cashCollected.lte = parseFloat(maxDealSize)
     }
-    
+
     // Calendar filter (traffic source proxy)
-    if (searchParams.get('calendar')) {
+    const calendarParam = searchParams.get('calendar')
+    if (calendarParam) {
       where.calendar = {
-        contains: searchParams.get('calendar'),
+        contains: calendarParam,
         mode: 'insensitive'
       }
     }
-    
+
     // Traffic source filter
-    if (searchParams.get('trafficSource')) {
+    const trafficSourceParam = searchParams.get('trafficSource')
+    if (trafficSourceParam) {
       where.attributionSource = {
-        contains: searchParams.get('trafficSource'),
+        contains: trafficSourceParam,
         mode: 'insensitive'
       }
     }
