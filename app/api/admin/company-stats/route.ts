@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +18,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
+    // Determine company context (respects viewAs for super admins)
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && effectiveCompanyId !== user.companyId) {
+      return NextResponse.json({ error: 'Access denied for this company' }, { status: 403 })
+    }
+    
     // Get date range from query params
     const url = new URL(request.url)
     const dateFrom = url.searchParams.get('dateFrom')
@@ -28,7 +36,7 @@ export async function GET(request: Request) {
       if (dateTo) dateFilter.lte = new Date(dateTo)
 
       const baseWhere = {
-        companyId: user.companyId,
+        companyId: effectiveCompanyId,
         ...(Object.keys(dateFilter).length > 0 && {
           scheduledAt: dateFilter
         })
@@ -87,7 +95,7 @@ export async function GET(request: Request) {
         // Get active reps
         prisma.user.findMany({
           where: {
-            companyId: user.companyId,
+            companyId: effectiveCompanyId,
             role: { in: ['rep', 'closer', 'setter'] },
             isActive: true
           },
@@ -109,7 +117,7 @@ export async function GET(request: Request) {
 
         // Only fetch 5 most recent commissions for display
         prisma.commission.findMany({
-          where: { companyId: user.companyId },
+          where: { companyId: effectiveCompanyId },
           include: { Sale: true },
           orderBy: { calculatedAt: 'desc' },
           take: 5
@@ -127,12 +135,12 @@ export async function GET(request: Request) {
       // OPTIMIZED: Get commission stats using database aggregation
       const [commissionsTotalAgg, commissionsPending, commissionsReleased, commissionsPaid] = await Promise.all([
         prisma.commission.aggregate({
-          where: { companyId: user.companyId },
+          where: { companyId: effectiveCompanyId },
           _sum: { totalAmount: true }
         }),
         prisma.commission.aggregate({
           where: {
-            companyId: user.companyId,
+            companyId: effectiveCompanyId,
             releaseStatus: { in: ['pending', 'partial'] }
           },
           _sum: {
@@ -142,14 +150,14 @@ export async function GET(request: Request) {
         }),
         prisma.commission.aggregate({
           where: {
-            companyId: user.companyId,
+            companyId: effectiveCompanyId,
             releaseStatus: 'released'
           },
           _sum: { releasedAmount: true }
         }),
         prisma.commission.aggregate({
           where: {
-            companyId: user.companyId,
+            companyId: effectiveCompanyId,
             releaseStatus: 'paid'
           },
           _sum: { totalAmount: true }
@@ -182,7 +190,7 @@ export async function GET(request: Request) {
         // Per-rep commission stats
         prisma.commission.groupBy({
           by: ['repId'],
-          where: { companyId: user.companyId },
+          where: { companyId: effectiveCompanyId },
           _sum: { totalAmount: true }
         }),
 
@@ -190,7 +198,7 @@ export async function GET(request: Request) {
         prisma.appointment.groupBy({
           by: ['closerId'],
           where: {
-            companyId: user.companyId,
+            companyId: effectiveCompanyId,
             closerId: { not: null },
             scheduledAt: { gte: thirtyDaysAgo }
           },

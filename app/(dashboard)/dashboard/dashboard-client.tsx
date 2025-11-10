@@ -43,6 +43,15 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('30') // days
   
+  const withViewAs = useCallback((url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }, [])
+  
   const fetchStats = useCallback(async () => {
     try {
       const dateFrom = new Date()
@@ -54,7 +63,8 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       
       // Use different endpoint based on role
       const endpoint = isCompanyAdmin ? '/api/admin/company-stats' : '/api/rep/stats'
-      const res = await fetch(`${endpoint}?${params}`, {
+      const url = `${endpoint}?${params}`
+      const res = await fetch(isCompanyAdmin ? withViewAs(url) : url, {
         credentials: 'include'
       })
       const data = await res.json()
@@ -63,7 +73,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       console.error('Failed to fetch stats:', error)
     }
     setLoading(false)
-  }, [dateRange, isCompanyAdmin])
+  }, [dateRange, isCompanyAdmin, withViewAs])
   
   useEffect(() => {
     fetchStats()
