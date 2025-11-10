@@ -77,14 +77,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
-    const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics } = await request.json()
+    const {
+      name,
+      email,
+      role,
+      commissionRoleId,
+      customCommissionRate,
+      canViewTeamMetrics,
+      companyId
+    } = await request.json()
+
+    const targetCompanyId =
+      user.superAdmin && companyId ? companyId : user.companyId
+
+    if (!targetCompanyId) {
+      return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
+    }
+
+    if (!user.superAdmin && companyId && companyId !== user.companyId) {
+      return NextResponse.json(
+        { error: 'You do not have permission to assign users to that company' },
+        { status: 403 }
+      )
+    }
     
     const newUser = await withPrisma(async (prisma) => {
+      const company = await prisma.company.findUnique({
+        where: { id: targetCompanyId }
+      })
+
+      if (!company) {
+        throw new Error('Selected company not found')
+      }
+
       // Check if user already exists
       const existing = await prisma.user.findFirst({
         where: {
           email,
-          companyId: user.companyId
+          companyId: targetCompanyId
         }
       })
       
@@ -97,7 +127,7 @@ export async function POST(request: Request) {
           name,
           email,
           role: role || 'rep',
-          companyId: user.companyId,
+          companyId: targetCompanyId,
           commissionRoleId: commissionRoleId || null,
           customCommissionRate: customCommissionRate ? parseFloat(customCommissionRate) / 100 : null,
           canViewTeamMetrics: canViewTeamMetrics || false,
@@ -130,7 +160,7 @@ export async function POST(request: Request) {
           emailAddress: email,
           redirectUrl: `${appUrl}/sign-in?redirect_url=/`,
           publicMetadata: {
-            companyId: user.companyId,
+            companyId: targetCompanyId,
             invitedByUserId: user.id
           },
         })

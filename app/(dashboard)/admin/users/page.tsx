@@ -4,6 +4,13 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import Link from 'next/link'
 
 interface User {
@@ -40,6 +47,8 @@ interface CommissionRole {
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<CommissionRole[]>([])
+  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([])
+  const [companiesLoading, setCompaniesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
@@ -50,12 +59,14 @@ export default function UsersPage() {
     role: 'rep',
     commissionRoleId: '',
     customCommissionRate: '',
-    canViewTeamMetrics: false
+    canViewTeamMetrics: false,
+    companyId: ''
   })
   
   useEffect(() => {
     fetchUsers()
     fetchRoles()
+    fetchCompanies()
   }, [])
   
   useEffect(() => {
@@ -85,6 +96,26 @@ export default function UsersPage() {
       console.error('Failed to fetch roles:', error)
     }
   }
+
+  const fetchCompanies = async () => {
+    try {
+      setCompaniesLoading(true)
+      const res = await fetch('/api/admin/companies')
+      if (!res.ok) {
+        return
+      }
+      const data = await res.json()
+      setCompanies(data)
+      setFormData((prev) => ({
+        ...prev,
+        companyId: prev.companyId || data?.[0]?.id || ''
+      }))
+    } catch (error) {
+      console.error('Failed to fetch companies:', error)
+    } finally {
+      setCompaniesLoading(false)
+    }
+  }
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,7 +140,8 @@ export default function UsersPage() {
         role: 'rep',
         commissionRoleId: '',
         customCommissionRate: '',
-        canViewTeamMetrics: false
+        canViewTeamMetrics: false,
+        companyId: companies?.[0]?.id || ''
       })
       setShowForm(false)
       
@@ -197,7 +229,15 @@ export default function UsersPage() {
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Team Members</h1>
-        <Button onClick={() => setShowForm(true)}>
+        <Button
+          onClick={() => {
+            setShowForm(true)
+            setFormData((prev) => ({
+              ...prev,
+              companyId: prev.companyId || companies?.[0]?.id || ''
+            }))
+          }}
+        >
           + Add User
         </Button>
       </div>
@@ -237,6 +277,35 @@ export default function UsersPage() {
                 </div>
               </div>
               
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Assign to Company *
+                </label>
+                <Select
+                  value={formData.companyId}
+                  onValueChange={(value) => setFormData({ ...formData, companyId: value })}
+                  disabled={companiesLoading || companies.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={companiesLoading ? 'Loading companies...' : 'Select company'}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {companies.length === 0 && !companiesLoading && (
+                  <p className="text-xs text-red-500 mt-1">
+                    No companies available. Create a company first.
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -305,11 +374,27 @@ export default function UsersPage() {
               </div>
               
               <div className="flex gap-2">
-                <Button type="submit">Create User</Button>
+                <Button
+                  type="submit"
+                  disabled={!formData.companyId || companiesLoading}
+                >
+                  Create User
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowForm(false)}
+                  onClick={() => {
+                    setShowForm(false)
+                    setFormData({
+                      name: '',
+                      email: '',
+                      role: 'rep',
+                      commissionRoleId: '',
+                      customCommissionRate: '',
+                      canViewTeamMetrics: false,
+                      companyId: companies?.[0]?.id || ''
+                    })
+                  }}
                 >
                   Cancel
                 </Button>
