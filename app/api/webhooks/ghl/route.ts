@@ -121,44 +121,57 @@ export async function POST(request: NextRequest) {
       appointmentStatus = getStringValue(body.appointmentStatus) || getStringValue(body.status) || getStringValue(body.appointment_status)
 
       // Check for calendarId in calendar object (GHL sends calendar data in body.calendar)
-      calendarId = getStringValue(body.calendarId) || getStringValue(body.calendar_id) || getStringValue(body.calendar?.id)
-      calendarName = getStringValue(body.calendarName) || getStringValue(body.calendar?.calendarName) || getStringValue(body.calendar?.name)
+      calendarId = getStringValue(body.calendarId) || getStringValue(body.calendar_id)
+      calendarName = getStringValue(body.calendarName)
+
+      // Safely access calendar object properties
+      if (body.calendar && typeof body.calendar === 'object' && !Array.isArray(body.calendar)) {
+        const calendar = body.calendar as Record<string, unknown>
+        calendarId = calendarId || getStringValue(calendar.id)
+        calendarName = calendarName || getStringValue(calendar.calendarName) || getStringValue(calendar.name)
+      }
 
       assignedUserId = getStringValue(body.assignedUserId) || getStringValue(body.assigned_user_id) || getStringValue(body.assignedUser)
       title = getStringValue(body.title) || getStringValue(body.name)
       notes = getStringValue(body.notes) || getStringValue(body.description)
       
       // PRIORITY 2: Check appointment object (if GHL wraps it in an appointment property)
-      if (body.appointment && typeof body.appointment === 'object') {
-        appointmentId = appointmentId || getStringValue(body.appointment.id) || getStringValue(body.appointment.appointmentId) || getStringValue(body.appointment.appointment_id)
-        startTime = startTime || getStringValue(body.appointment.startTime) || getStringValue(body.appointment.start_time) || getStringValue(body.appointment.scheduledAt)
-        endTime = endTime || getStringValue(body.appointment.endTime) || getStringValue(body.appointment.end_time)
-        appointmentStatus = appointmentStatus || getStringValue(body.appointment.appointmentStatus) || getStringValue(body.appointment.status)
-        calendarId = calendarId || getStringValue(body.appointment.calendarId) || getStringValue(body.appointment.calendar_id)
-        assignedUserId = assignedUserId || getStringValue(body.appointment.assignedUserId) || getStringValue(body.appointment.assigned_user_id)
-        title = title || getStringValue(body.appointment.title) || getStringValue(body.appointment.name)
-        notes = notes || getStringValue(body.appointment.notes) || getStringValue(body.appointment.description)
+      if (body.appointment && typeof body.appointment === 'object' && !Array.isArray(body.appointment)) {
+        const appointment = body.appointment as Record<string, unknown>
+        appointmentId = appointmentId || getStringValue(appointment.id) || getStringValue(appointment.appointmentId) || getStringValue(appointment.appointment_id)
+        startTime = startTime || getStringValue(appointment.startTime) || getStringValue(appointment.start_time) || getStringValue(appointment.scheduledAt)
+        endTime = endTime || getStringValue(appointment.endTime) || getStringValue(appointment.end_time)
+        appointmentStatus = appointmentStatus || getStringValue(appointment.appointmentStatus) || getStringValue(appointment.status)
+        calendarId = calendarId || getStringValue(appointment.calendarId) || getStringValue(appointment.calendar_id)
+        assignedUserId = assignedUserId || getStringValue(appointment.assignedUserId) || getStringValue(appointment.assigned_user_id)
+        title = title || getStringValue(appointment.title) || getStringValue(appointment.name)
+        notes = notes || getStringValue(appointment.notes) || getStringValue(appointment.description)
       }
 
       // PRIORITY 3: Check triggerData (trigger-specific data)
-      if (body.triggerData?.appointment) {
-        appointmentId = appointmentId || getStringValue(body.triggerData.appointment.id) || getStringValue(body.triggerData.appointment.appointmentId)
-        startTime = startTime || getStringValue(body.triggerData.appointment.startTime) || getStringValue(body.triggerData.appointment.start_time)
-        endTime = endTime || getStringValue(body.triggerData.appointment.endTime) || getStringValue(body.triggerData.appointment.end_time)
-        appointmentStatus = appointmentStatus || getStringValue(body.triggerData.appointment.status) || getStringValue(body.triggerData.appointment.appointmentStatus)
-        calendarId = calendarId || getStringValue(body.triggerData.appointment.calendarId) || getStringValue(body.triggerData.appointment.calendar_id)
+      if (body.triggerData && typeof body.triggerData === 'object' && !Array.isArray(body.triggerData)) {
+        const triggerData = body.triggerData as Record<string, unknown>
+        if (triggerData.appointment && typeof triggerData.appointment === 'object' && !Array.isArray(triggerData.appointment)) {
+          const triggerAppointment = triggerData.appointment as Record<string, unknown>
+          appointmentId = appointmentId || getStringValue(triggerAppointment.id) || getStringValue(triggerAppointment.appointmentId)
+          startTime = startTime || getStringValue(triggerAppointment.startTime) || getStringValue(triggerAppointment.start_time)
+          endTime = endTime || getStringValue(triggerAppointment.endTime) || getStringValue(triggerAppointment.end_time)
+          appointmentStatus = appointmentStatus || getStringValue(triggerAppointment.status) || getStringValue(triggerAppointment.appointmentStatus)
+          calendarId = calendarId || getStringValue(triggerAppointment.calendarId) || getStringValue(triggerAppointment.calendar_id)
+        }
       }
 
       // PRIORITY 4: Check customData (workflow payload structure - merge fields may be here)
-      if (body.customData && typeof body.customData === 'object') {
-        appointmentId = appointmentId || getStringValue(body.customData.appointmentId) || getStringValue(body.customData.appointment_id) || getStringValue(body.customData.id)
-        startTime = startTime || getStringValue(body.customData.startTime) || getStringValue(body.customData.start_time) || getStringValue(body.customData.scheduledAt)
-        endTime = endTime || getStringValue(body.customData.endTime) || getStringValue(body.customData.end_time)
-        appointmentStatus = appointmentStatus || getStringValue(body.customData.appointmentStatus) || getStringValue(body.customData.status) || getStringValue(body.customData.appointment_status)
-        calendarId = calendarId || getStringValue(body.customData.calendarId) || getStringValue(body.customData.calendar_id)
-        assignedUserId = assignedUserId || getStringValue(body.customData.assignedUserId) || getStringValue(body.customData.assigned_user_id) || getStringValue(body.customData.assignedUser)
-        title = title || getStringValue(body.customData.title)
-        notes = notes || getStringValue(body.customData.notes)
+      if (body.customData && typeof body.customData === 'object' && !Array.isArray(body.customData)) {
+        const customData = body.customData as Record<string, unknown>
+        appointmentId = appointmentId || getStringValue(customData.appointmentId) || getStringValue(customData.appointment_id) || getStringValue(customData.id)
+        startTime = startTime || getStringValue(customData.startTime) || getStringValue(customData.start_time) || getStringValue(customData.scheduledAt)
+        endTime = endTime || getStringValue(customData.endTime) || getStringValue(customData.end_time)
+        appointmentStatus = appointmentStatus || getStringValue(customData.appointmentStatus) || getStringValue(customData.status) || getStringValue(customData.appointment_status)
+        calendarId = calendarId || getStringValue(customData.calendarId) || getStringValue(customData.calendar_id)
+        assignedUserId = assignedUserId || getStringValue(customData.assignedUserId) || getStringValue(customData.assigned_user_id) || getStringValue(customData.assignedUser)
+        title = title || getStringValue(customData.title)
+        notes = notes || getStringValue(customData.notes)
       }
 
       // PRIORITY 5: Check custom field names (company-specific fields as fallback)
@@ -170,8 +183,9 @@ export async function POST(request: NextRequest) {
       }
       
       // PRIORITY 6: Check body.calendar structure for appointmentId (GHL might nest it)
-      if (!appointmentId && body.calendar && typeof body.calendar === 'object') {
-        appointmentId = getStringValue(body.calendar.appointmentId) || getStringValue(body.calendar.id)
+      if (!appointmentId && body.calendar && typeof body.calendar === 'object' && !Array.isArray(body.calendar)) {
+        const calendar = body.calendar as Record<string, unknown>
+        appointmentId = getStringValue(calendar.appointmentId) || getStringValue(calendar.id)
       }
       
       return {
