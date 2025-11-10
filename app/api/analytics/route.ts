@@ -104,8 +104,30 @@ export async function GET(request: NextRequest) {
       }
     }
     
+    // PERFORMANCE NOTE: This endpoint loads appointments into memory for complex aggregations.
+    // For large datasets (>25k appointments), consider using database-level GROUP BY operations.
+    // Current approach prioritizes feature completeness over performance.
+
+    // Safety limit to prevent memory exhaustion
+    const ANALYTICS_SAFETY_LIMIT = parseInt(process.env.ANALYTICS_LIMIT || '50000')
+
     // Get all appointments matching filters (including those with null flag for backwards compatibility)
     const appointments = await withPrisma(async (prisma) => {
+      // First, check count to warn if approaching limits
+      const totalCount = await prisma.appointment.count({
+        where: {
+          ...where,
+          OR: [
+            { appointmentInclusionFlag: 1 },
+            { appointmentInclusionFlag: null }
+          ]
+        }
+      })
+
+      if (totalCount > ANALYTICS_SAFETY_LIMIT) {
+        console.warn(`Analytics query for company ${effectiveCompanyId} exceeds safety limit: ${totalCount} appointments (limit: ${ANALYTICS_SAFETY_LIMIT})`)
+      }
+
       return await prisma.appointment.findMany({
         where: {
           ...where,
@@ -122,7 +144,14 @@ export async function GET(request: NextRequest) {
         },
         orderBy: {
           scheduledAt: 'desc'
-        }
+        },
+        // Apply safety limit to prevent memory exhaustion
+        // If you hit this limit, results will be truncated. Consider:
+        // 1. Narrowing date range
+        // 2. Using more specific filters
+        // 3. Increasing ANALYTICS_LIMIT env var (with caution)
+        // 4. Refactoring to use database aggregations (recommended for 100k+ records)
+        take: ANALYTICS_SAFETY_LIMIT
       })
     })
     
