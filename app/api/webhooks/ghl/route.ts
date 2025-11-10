@@ -366,15 +366,37 @@ export async function POST(request: NextRequest) {
     
     // Check if this is an appointment webhook
     // Handle cases where type is in customData but appointment data might be sparse
-    const isAppointmentWebhook = 
-      webhook.type === 'Appointment' || 
-      webhook.appointmentId || 
+
+    // Check workflow name safely
+    let isWorkflowAppointment = false
+    if (body.workflow && typeof body.workflow === 'object' && !Array.isArray(body.workflow)) {
+      const workflow = body.workflow as Record<string, unknown>
+      const workflowName = getStringValue(workflow.name).toLowerCase()
+      isWorkflowAppointment = workflowName.includes('appointment') || workflowName.includes('webhook')
+    }
+
+    // Check customData type safely
+    let isCustomDataAppointment = false
+    if (body.customData && typeof body.customData === 'object' && !Array.isArray(body.customData)) {
+      const customData = body.customData as Record<string, unknown>
+      isCustomDataAppointment = getStringValue(customData.type) === 'Appointment'
+    }
+
+    const isAppointmentWebhook =
+      webhook.type === 'Appointment' ||
+      webhook.appointmentId ||
       webhook.appointmentStatus ||
-      (body.customData?.type === 'Appointment') ||
-      (body.workflow?.name?.toLowerCase().includes('appointment') || body.workflow?.name?.toLowerCase().includes('webhook'))
+      isCustomDataAppointment ||
+      isWorkflowAppointment
     
     if (!isAppointmentWebhook) {
-      console.log('[GHL Webhook] Not an appointment webhook, ignoring. Type:', webhook.type, '| CustomData type:', body.customData?.type)
+      // Get customData type safely for logging
+      let customDataType = ''
+      if (body.customData && typeof body.customData === 'object' && !Array.isArray(body.customData)) {
+        const customData = body.customData as Record<string, unknown>
+        customDataType = getStringValue(customData.type)
+      }
+      console.log('[GHL Webhook] Not an appointment webhook, ignoring. Type:', webhook.type, '| CustomData type:', customDataType)
       return NextResponse.json({ received: true })
     }
     
@@ -486,9 +508,9 @@ export async function POST(request: NextRequest) {
         // Sync/update contact with available data
         const tags = typeof body.tags === 'string' ? body.tags.split(',').map((t) => t.trim()) : []
         const contactData = {
-          name: webhookData.contactName || (body.full_name as string) || `${(body.first_name as string) || ''} ${(body.last_name as string) || ''}`.trim(),
-          email: webhookData.contactEmail || (body.email as string),
-          phone: webhookData.contactPhone || (body.phone as string),
+          name: webhookData.contactName || getStringValue(body.full_name) || `${getStringValue(body.first_name)} ${getStringValue(body.last_name)}`.trim(),
+          email: webhookData.contactEmail || getStringValue(body.email),
+          phone: webhookData.contactPhone || getStringValue(body.phone),
           tags,
           customFields: body // Store all custom fields for attribution
         }
