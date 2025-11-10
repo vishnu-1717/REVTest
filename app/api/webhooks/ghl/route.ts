@@ -519,7 +519,7 @@ export async function POST(request: NextRequest) {
           email: webhookData.contactEmail || getStringValue(body.email),
           phone: webhookData.contactPhone || getStringValue(body.phone),
           tags,
-          customFields: body // Store all custom fields for attribution
+          customFields: JSON.parse(JSON.stringify(body)) // Store all custom fields for attribution, convert to plain object
         }
         
         // Find or create contact
