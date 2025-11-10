@@ -43,6 +43,7 @@ export default function AnalyticsPage() {
   const [calendars, setCalendars] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [activeView, setActiveView] = useState<'overview' | 'closers' | 'calendars' | 'objections'>('overview')
+  const [timezone, setTimezone] = useState('UTC')
   
   useEffect(() => {
     fetchClosers()
@@ -84,6 +85,9 @@ export default function AnalyticsPage() {
       })
       const data = await res.json()
       setAnalytics(data)
+      if (data.timezone) {
+        setTimezone(data.timezone)
+      }
       
       // Extract unique calendars
       if (data.byCalendar) {
@@ -104,6 +108,7 @@ export default function AnalyticsPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Sales Analytics</h1>
         <p className="text-gray-600">Deep dive into your sales performance</p>
+        <p className="text-sm text-gray-500 mt-1">Reporting in {timezone}</p>
       </div>
       
       {/* Filters */}

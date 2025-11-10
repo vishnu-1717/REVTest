@@ -57,6 +57,7 @@ export interface GHLCompany {
   name: string
   ghlApiKey: string | null
   ghlLocationId: string | null
+  timezone?: string | null
   attributionStrategy: string
   attributionSourceField: string | null
   useCalendarsForAttribution: boolean

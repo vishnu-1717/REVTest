@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,6 +35,7 @@ export default function AppointmentsPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
+  const [timezone, setTimezone] = useState('UTC')
   const [isAdmin, setIsAdmin] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -55,6 +56,9 @@ export default function AppointmentsPage() {
       
       setAppointments(data.appointments || [])
       setTotalCount(data.totalCount || 0)
+      if (data.timezone) {
+        setTimezone(data.timezone)
+      }
     } catch (error) {
       console.error('Failed to fetch appointments:', error)
     } finally {
@@ -145,6 +149,25 @@ export default function AppointmentsPage() {
       return dateB - dateA
     })
   }, [appointments, searchQuery, dateFrom, dateTo, dateSort])
+
+  const scheduledFormatter = useMemo(() => {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }, [timezone])
+
+  const formatScheduledAt = useCallback((iso: string) => {
+    try {
+      return scheduledFormatter.format(new Date(iso))
+    } catch {
+      return new Date(iso).toLocaleString()
+    }
+  }, [scheduledFormatter])
 
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)
@@ -298,6 +321,10 @@ export default function AppointmentsPage() {
             </div>
           )}
 
+          <p className="mb-4 text-xs text-gray-500">
+            Displaying times in <span className="font-medium">{timezone}</span>
+          </p>
+
           {loading ? (
             <p className="text-gray-500 text-sm">Loading...</p>
           ) : filteredAppointments.length === 0 ? (
@@ -335,7 +362,7 @@ export default function AppointmentsPage() {
                       </p>
                     )}
                     <p className="text-xs text-gray-500 mt-1">
-                      Scheduled {formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })}
+                      Scheduled {formatScheduledAt(apt.scheduledAt)} ({formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })})
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">

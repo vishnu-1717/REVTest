@@ -10,6 +10,7 @@ import { handleAppointmentCreated } from './appointment-created'
 
 export async function handleAppointmentRescheduled(webhook: GHLWebhookExtended, company: GHLCompany) {
   await withPrisma(async (prisma) => {
+    const timezone = company.timezone || 'UTC'
     const existing = await prisma.appointment.findFirst({
     where: { ghlAppointmentId: webhook.appointmentId }
   })
@@ -21,8 +22,14 @@ export async function handleAppointmentRescheduled(webhook: GHLWebhookExtended, 
   }
 
   // Parse dates from webhook
-  const startTimeDate = webhook.startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
-  const endTimeDate = webhook.endTimeParsed || parseGHLDate(webhook.endTime) || null
+  const startTimeDate =
+    webhook.startTimeParsed ||
+    parseGHLDate(webhook.startTime, timezone) ||
+    (webhook.startTime ? parseGHLDate(webhook.startTime, 'UTC') : null) ||
+    new Date(webhook.startTime || Date.now())
+  const endTimeDate =
+    webhook.endTimeParsed ||
+    (webhook.endTime ? parseGHLDate(webhook.endTime, timezone) : null)
 
   // Update existing appointment
   const existingCustomFields = (existing.customFields as Record<string, unknown>) || {}

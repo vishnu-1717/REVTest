@@ -3,24 +3,38 @@
  */
 
 import { GHLWebhook, GHLWebhookPayload } from '@/types'
+import { localDateTimeStringToUtc, convertDateToUtc } from '@/lib/timezone'
+
+const isoWithTimezoneRegex = /([zZ]|[+-]\d{2}:?\d{2})$/
 
 /**
  * Parse GHL date format: "Thu, Oct 30th, 2025 | 2:00 pm" or ISO 8601 format
  */
-export function parseGHLDate(dateString: string | null | undefined): Date | null {
+export function parseGHLDate(dateString: string | null | undefined, timezone: string = 'UTC'): Date | null {
   if (!dateString || typeof dateString !== 'string') return null
 
-  // Try ISO 8601 format first (e.g., "2025-10-30T14:00:00.000Z")
-  const isoDate = new Date(dateString)
-  if (!isNaN(isoDate.getTime())) {
-    return isoDate
+  const trimmed = dateString.trim()
+  if (!trimmed) return null
+
+  if (isoWithTimezoneRegex.test(trimmed)) {
+    const isoDate = new Date(trimmed)
+    return isNaN(isoDate.getTime()) ? null : isoDate
+  }
+
+  // Handle ISO-like strings without timezone info (treat as local to company)
+  const normalized = trimmed.replace(' ', 'T')
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/)
+  if (isoMatch) {
+    const [, y, m, d, hh = '00', mm = '00', ss = '00', fractional = '000'] = isoMatch
+    const millis = fractional.padEnd(3, '0').slice(0, 3)
+    return localDateTimeStringToUtc(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${millis}`, timezone)
   }
 
   // Try parsing GHL format: "Thu, Oct 30th, 2025 | 2:00 pm"
   // Pattern: Day, Month Day(th), Year | Hour:Minute am/pm
   try {
     // Extract the date and time parts
-    const parts = dateString.split(' | ')
+    const parts = trimmed.split(' | ')
     if (parts.length === 2) {
       const datePart = parts[0].trim() // "Thu, Oct 30th, 2025"
       const timePart = parts[1].trim() // "2:00 pm"
@@ -39,19 +53,25 @@ export function parseGHLDate(dateString: string | null | undefined): Date | null
             if (ampm.toLowerCase() === 'pm' && hour24 !== 12) hour24 += 12
             if (ampm.toLowerCase() === 'am' && hour24 === 12) hour24 = 0
 
-            const date = new Date(parseInt(year), monthIndex, parseInt(day), hour24, parseInt(minutes))
-            if (!isNaN(date.getTime())) {
-              return date
-            }
+            const iso = `${year}-${(monthIndex + 1).toString().padStart(2, '0')}-${parseInt(day).toString().padStart(2, '0')}T${hour24.toString().padStart(2, '0')}:${parseInt(minutes).toString().padStart(2, '0')}:00.000`
+            return localDateTimeStringToUtc(iso, timezone)
           }
         }
       }
     }
 
     // Fallback: try native Date parsing
-    const fallbackDate = new Date(dateString)
+    const fallbackDate = new Date(trimmed)
     if (!isNaN(fallbackDate.getTime())) {
-      return fallbackDate
+      return convertDateToUtc(new Date(Date.UTC(
+        fallbackDate.getFullYear(),
+        fallbackDate.getMonth(),
+        fallbackDate.getDate(),
+        fallbackDate.getHours(),
+        fallbackDate.getMinutes(),
+        fallbackDate.getSeconds(),
+        fallbackDate.getMilliseconds()
+      )), timezone)
     }
   } catch (error) {
     console.warn('[GHL Webhook] Failed to parse date:', dateString, error)

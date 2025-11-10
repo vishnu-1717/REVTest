@@ -3,6 +3,7 @@ import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
 import { GHLWebhookExtended, GHLWebhookPayload } from '@/types'
 import { parseGHLDate } from '@/lib/webhooks/utils'
+import { getCompanyTimezone } from '@/lib/timezone'
 import {
   handleAppointmentCreated,
   handleAppointmentCancelled,
@@ -569,6 +570,11 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('[GHL Webhook] Found company:', company.id, company.name)
+
+    const companyTimezone = getCompanyTimezone(company)
+
+    webhook.startTimeParsed = parseGHLDate(webhook.startTime, companyTimezone)
+    webhook.endTimeParsed = parseGHLDate(webhook.endTime, companyTimezone)
     
     // Handle different appointment events
     // Note: appointmentStatus might be empty, so check if we have an appointmentId and treat as created

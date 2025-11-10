@@ -2,6 +2,7 @@ import XLSX from 'xlsx'
 import * as fs from 'fs'
 import * as path from 'path'
 import { PrismaClient } from '@prisma/client'
+import { convertDateToUtc, getCompanyTimezone } from '../lib/timezone'
 
 const prisma = new PrismaClient()
 
@@ -76,6 +77,8 @@ async function importData() {
     }
     
     console.log(`Found BudgetDog company: ${budgetDog.id} (${budgetDog.name})`)
+    const companyTimezone = getCompanyTimezone(budgetDog)
+    console.log(`Using timezone: ${companyTimezone}`)
     
     // Get all users for email mapping
     const users = await prisma.user.findMany({
@@ -232,8 +235,15 @@ async function importData() {
         const status = mapStatus(booking.pcnOutcome || (pcn?.callOutcome || ''), booking.dealClosed || '')
         
         // Determine if PCN is submitted
+        const startDate = booking.startTime ? excelDateToJSDate(booking.startTime) : null
+        const startUtc = startDate ? convertDateToUtc(startDate, companyTimezone) : null
+        const scheduledAt = startUtc || new Date()
+        const createdDate = booking.dateCreated ? excelDateToJSDate(booking.dateCreated) : null
+        const createdAt = createdDate ? convertDateToUtc(createdDate, companyTimezone) : new Date()
+
         const pcnSubmitted = !!(pcn || booking.pcnSubmissionDate)
-        const pcnSubmittedAt = booking.pcnSubmissionDate ? excelDateToJSDate(booking.pcnSubmissionDate) : null
+        const pcnSubmissionDate = booking.pcnSubmissionDate ? excelDateToJSDate(booking.pcnSubmissionDate) : null
+        const pcnSubmittedAt = pcnSubmissionDate ? convertDateToUtc(pcnSubmissionDate, companyTimezone) : null
         
         // Get setter ID if available
         let setterId: string | null = null
@@ -252,9 +262,9 @@ async function importData() {
             contactId: contact.id,
             closerId: closerId,
             setterId: setterId,
-            scheduledAt: booking.startTime ? excelDateToJSDate(booking.startTime) : new Date(),
-            startTime: booking.startTime ? excelDateToJSDate(booking.startTime) : null,
-            createdAt: booking.dateCreated ? excelDateToJSDate(booking.dateCreated) : new Date(),
+            scheduledAt,
+            startTime: startUtc,
+            createdAt,
             status: status,
             calendar: booking.calendar || null,
             isFirstCall: booking.callType === 'First Call',

@@ -48,6 +48,7 @@ model Company {
   ghlApiKey        String?
   ghlLocationId    String?
   ghlWebhookSecret String?
+  timezone         String  @default("UTC")
 
   // Attribution Strategy
   attributionStrategy String @default("ghl_fields")

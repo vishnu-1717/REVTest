@@ -16,6 +16,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
   })
 
   await withPrisma(async (prisma) => {
+    const timezone = company.timezone || 'UTC'
     // First, try to find existing appointment
     let appointment = await prisma.appointment.findFirst({
       where: { ghlAppointmentId: webhook.appointmentId }
@@ -85,8 +86,8 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
       }
 
       // Parse scheduled time from webhook
-      const startTimeDate = parseGHLDate(webhook.startTime) || new Date()
-      const endTimeDate = webhook.endTime ? parseGHLDate(webhook.endTime) : null
+      const startTimeDate = parseGHLDate(webhook.startTime, timezone) || new Date()
+      const endTimeDate = webhook.endTime ? parseGHLDate(webhook.endTime, timezone) : null
 
       // Find calendar if provided
       let calendar: Calendar | null = null

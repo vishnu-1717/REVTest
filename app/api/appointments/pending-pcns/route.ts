@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser } from '@/lib/auth'
+import { getCompanyTimezone } from '@/lib/timezone'
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,11 @@ export async function GET(request: NextRequest) {
     const all = url.searchParams.get('all') === 'true'
 
     const result = await withPrisma(async (prisma) => {
+      const company = await prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: { timezone: true }
+      })
+      const timezone = getCompanyTimezone(company)
 
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
       
@@ -99,7 +105,8 @@ export async function GET(request: NextRequest) {
       return {
         count: formatted.length,
         totalCount,
-        appointments: formatted
+        appointments: formatted,
+        timezone
       }
     })
 

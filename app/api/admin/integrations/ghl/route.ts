@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     }
     
     // Test the API key by validating it (checking if it's valid format and has access)
+    let timezone = 'UTC'
     try {
       const ghl = new GHLClient(apiKey, locationId)
       
@@ -40,6 +41,14 @@ export async function POST(request: Request) {
         // If calendars fail, log warning but don't fail the setup
         // V1 API might not support calendars endpoint
         console.warn(`GHL calendars fetch failed (non-blocking):`, calendarError.message)
+      }
+
+      const locationDetails = await ghl.getLocation(locationId)
+      if (locationDetails?.timezone) {
+        timezone = locationDetails.timezone
+        console.log(`[GHL API] Location timezone detected: ${timezone}`)
+      } else {
+        console.log('[GHL API] Location timezone not provided, defaulting to UTC')
       }
     } catch (error: any) {
       // Log detailed error information for debugging
@@ -80,7 +89,8 @@ export async function POST(request: Request) {
         where: { id: user.companyId },
         data: {
           ghlApiKey: apiKey,
-          ghlLocationId: locationId
+          ghlLocationId: locationId,
+          timezone
         }
       })
     })
@@ -104,6 +114,7 @@ export async function GET() {
         select: {
           ghlApiKey: true,
           ghlLocationId: true,
+          timezone: true,
           attributionStrategy: true,
           attributionSourceField: true,
           useCalendarsForAttribution: true
@@ -114,6 +125,7 @@ export async function GET() {
     return NextResponse.json({
       configured: !!company?.ghlApiKey,
       locationId: company?.ghlLocationId,
+      timezone: company?.timezone || 'UTC',
       attributionStrategy: company?.attributionStrategy,
       attributionSourceField: company?.attributionSourceField,
       useCalendarsForAttribution: company?.useCalendarsForAttribution

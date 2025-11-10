@@ -20,6 +20,7 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
   })
 
   await withPrisma(async (prisma) => {
+    const timezone = company.timezone || 'UTC'
   // Find or create contact
   let contact = await prisma.contact.findFirst({
     where: {
@@ -208,8 +209,14 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     console.log('[GHL Webhook] Existing appointment found:', !!appointment, appointment?.id)
 
     // Parse dates from webhook (use parsed date if available, otherwise parse raw string)
-    const startTimeDate = webhook.startTimeParsed || parseGHLDate(webhook.startTime) || new Date(webhook.startTime || Date.now())
-    const endTimeDate = webhook.endTimeParsed || parseGHLDate(webhook.endTime) || null
+    const startTimeDate =
+      webhook.startTimeParsed ||
+      parseGHLDate(webhook.startTime, timezone) ||
+      (webhook.startTime ? parseGHLDate(webhook.startTime, 'UTC') : null) ||
+      new Date(webhook.startTime || Date.now())
+    const endTimeDate =
+      webhook.endTimeParsed ||
+      (webhook.endTime ? parseGHLDate(webhook.endTime, timezone) : null)
 
     console.log('[GHL Webhook] Parsed dates - startTime:', startTimeDate, 'endTime:', endTimeDate)
 

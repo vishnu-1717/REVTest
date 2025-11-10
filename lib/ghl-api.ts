@@ -25,6 +25,12 @@ interface GHLUser {
   role?: string
 }
 
+interface GHLLocation {
+  id: string
+  name?: string
+  timezone?: string
+}
+
 export class GHLClient {
   private apiKey: string
   private locationId?: string
@@ -184,6 +190,37 @@ export class GHLClient {
     // All endpoints failed - return empty array
     console.warn(`[GHL API] Users endpoint not found. GHL V1 API may not support users endpoint.`)
     return []
+  }
+
+  async getLocation(locationId?: string): Promise<GHLLocation | null> {
+    const idToUse = locationId || this.locationId
+    if (!idToUse) return null
+
+    const url = `${this.baseUrl}/locations/${idToUse}`
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`[GHL API] Location ${idToUse} not found`)
+          return null
+        }
+        const errorText = await response.text().catch(() => response.statusText)
+        throw new Error(`GHL API error: ${response.status} ${response.statusText} - ${errorText}`)
+      }
+
+      const data = await response.json()
+      return data.location || data || null
+    } catch (error: any) {
+      console.warn('[GHL API] Failed to fetch location info:', error.message)
+      return null
+    }
   }
   
   // Fetch single contact

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ export function PendingPCNsWidget() {
   const [appointments, setAppointments] = useState<PendingPCN[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
+  const [timezone, setTimezone] = useState('UTC')
 
   const fetchPending = useCallback(async () => {
     try {
@@ -22,6 +23,9 @@ export function PendingPCNsWidget() {
       const data = await response.json()
       setAppointments(data.appointments || [])
       setTotalCount(data.totalCount || data.appointments?.length || 0)
+      if (data.timezone) {
+        setTimezone(data.timezone)
+      }
     } catch (error) {
       console.error('Failed to fetch pending PCNs:', error)
     } finally {
@@ -52,6 +56,24 @@ export function PendingPCNsWidget() {
     }
   }
 
+  const scheduledFormatter = useMemo(() => {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+  }, [timezone])
+
+  const formatScheduledAt = useCallback((iso: string) => {
+    try {
+      return scheduledFormatter.format(new Date(iso))
+    } catch {
+      return new Date(iso).toLocaleString()
+    }
+  }, [scheduledFormatter])
+
   return (
     <Card>
       <CardHeader>
@@ -74,6 +96,9 @@ export function PendingPCNsWidget() {
               {appointments.some(a => a.urgencyLevel === 'high') && (
                 <Badge className="bg-red-500 text-white">Urgent!</Badge>
               )}
+              <span className="text-xs text-gray-400 ml-auto">
+                Time zone: {timezone}
+              </span>
             </div>
             
             {appointments.slice(0, 5).map((apt) => (
@@ -85,7 +110,7 @@ export function PendingPCNsWidget() {
                 <div className="flex-1">
                   <p className="font-medium text-sm">{apt.contactName}</p>
                   <p className="text-xs text-gray-500">
-                    {formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })}
+                    {formatScheduledAt(apt.scheduledAt)} ({formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })})
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

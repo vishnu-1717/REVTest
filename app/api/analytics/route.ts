@@ -3,6 +3,7 @@ import { withPrisma } from '@/lib/db'
 import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
 import { AppointmentWhereClause, AppointmentWithRelations, AnalyticsBreakdownItem } from '@/types'
+import { convertDateRangeToUtc, getCompanyTimezone } from '@/lib/timezone'
 
 // Helper types for analytics aggregations
 interface ObjectionData {
@@ -96,10 +97,22 @@ export async function GET(request: NextRequest) {
     
     // Get the effective company ID (respects viewAs for super admins)
     const effectiveCompanyId = await getEffectiveCompanyId(request.url)
-    
-    // Store date range for Calls Created calculation (uses createdAt)
-    const dateFrom = searchParams.get('dateFrom') ? new Date(searchParams.get('dateFrom')!) : null
-    const dateTo = searchParams.get('dateTo') ? new Date(searchParams.get('dateTo')!) : null
+
+    const company = await withPrisma(async (prisma) => {
+      return await prisma.company.findUnique({
+        where: { id: effectiveCompanyId },
+        select: { timezone: true }
+      })
+    })
+
+    const companyTimezone = getCompanyTimezone(company)
+    const rawDateFrom = searchParams.get('dateFrom')
+    const rawDateTo = searchParams.get('dateTo')
+    const { start: scheduledFrom, end: scheduledTo } = convertDateRangeToUtc({
+      dateFrom: rawDateFrom,
+      dateTo: rawDateTo,
+      timezone: companyTimezone
+    })
     
     // Build where clause based on filters
     // Note: Date filters apply to scheduledAt for "Scheduled Calls to Date"
@@ -114,13 +127,13 @@ export async function GET(request: NextRequest) {
     }
     
     // Date filters for scheduledAt (for "Scheduled Calls to Date")
-    if (dateFrom || dateTo) {
+    if (scheduledFrom || scheduledTo) {
       where.scheduledAt = {}
-      if (dateFrom) {
-        where.scheduledAt.gte = dateFrom
+      if (scheduledFrom) {
+        where.scheduledAt.gte = scheduledFrom
       }
-      if (dateTo) {
-        where.scheduledAt.lte = dateTo
+      if (scheduledTo) {
+        where.scheduledAt.lte = scheduledTo
       }
     }
     
@@ -294,13 +307,13 @@ export async function GET(request: NextRequest) {
     }
     
     // Apply createdAt date filter for Calls Created
-    if (dateFrom || dateTo) {
+    if (scheduledFrom || scheduledTo) {
       createdWhereClause.createdAt = {}
-      if (dateFrom) {
-        createdWhereClause.createdAt.gte = dateFrom
+      if (scheduledFrom) {
+        createdWhereClause.createdAt.gte = scheduledFrom
       }
-      if (dateTo) {
-        createdWhereClause.createdAt.lte = dateTo
+      if (scheduledTo) {
+        createdWhereClause.createdAt.lte = scheduledTo
       }
     }
     
@@ -437,12 +450,12 @@ export async function GET(request: NextRequest) {
     
     // Filter sales by date range if provided
     let filteredSales = matchedSales
-    if (dateFrom || dateTo) {
+    if (scheduledFrom || scheduledTo) {
       filteredSales = matchedSales.filter(sale => {
         if (!sale.paidAt) return false
         const paidDate = new Date(sale.paidAt)
-        if (dateFrom && paidDate < dateFrom) return false
-        if (dateTo && paidDate > dateTo) return false
+        if (scheduledFrom && paidDate < scheduledFrom) return false
+        if (scheduledTo && paidDate > scheduledTo) return false
         return true
       })
     }
@@ -865,6 +878,7 @@ export async function GET(request: NextRequest) {
       dollarsOverShow: parseFloat(dollarsOverShow),
       cashCollected,
       missingPCNs,
+      timezone: companyTimezone,
       
       // Legacy metrics (for backward compatibility)
       totalAppointments,
