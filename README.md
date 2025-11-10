@@ -39,3 +39,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 # Force Vercel deployment with correct git config
 # Trigger Vercel deployment Thu Oct 23 18:07:01 EDT 2025
 # Fix GitHub status check with correct email
+
+## Payment Webhook
+
+Set `PAYMENT_WEBHOOK_SECRET` in your environment. Zapier (or any processor) must send this value in the `x-webhook-secret` header when calling `POST /api/webhooks/payments`.
