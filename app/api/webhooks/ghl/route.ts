@@ -328,23 +328,33 @@ export async function POST(request: NextRequest) {
       }
     }
     // Check if location is at root and might need extraction (direct format)
-    else if (body.location?.id || body.contact_id) {
-      console.log('[GHL Webhook] Found location.id at root level - using direct format')
-      webhookData = { 
-        ...body, 
-        locationId: body.location?.id || body.locationId,
-        // Merge extracted appointment data
-        appointmentId: appointmentData.appointmentId,
-        startTime: appointmentData.startTime,
-        endTime: appointmentData.endTime,
-        appointmentStatus: appointmentData.appointmentStatus,
-        calendarId: appointmentData.calendarId,
-        calendarName: appointmentData.calendarName,
-        assignedUserId: appointmentData.assignedUserId,
-        contactId: body.contact_id || body.contactId,
-        contactEmail: body.email,
-        contactPhone: body.phone,
-        contactName: body.full_name || `${body.first_name || ''} ${body.last_name || ''}`.trim(),
+    else {
+      // Get location ID from body.location if it exists
+      let locationId = getStringValue(body.locationId)
+      if (!locationId && body.location && typeof body.location === 'object' && !Array.isArray(body.location)) {
+        const location = body.location as Record<string, unknown>
+        locationId = getStringValue(location.id)
+      }
+
+      // Only proceed if we have location or contact data
+      if (locationId || body.contact_id) {
+        console.log('[GHL Webhook] Found location.id at root level - using direct format')
+        webhookData = {
+          ...body,
+          locationId,
+          // Merge extracted appointment data
+          appointmentId: appointmentData.appointmentId,
+          startTime: appointmentData.startTime,
+          endTime: appointmentData.endTime,
+          appointmentStatus: appointmentData.appointmentStatus,
+          calendarId: appointmentData.calendarId,
+          calendarName: appointmentData.calendarName,
+          assignedUserId: appointmentData.assignedUserId,
+          contactId: getStringValue(body.contact_id) || getStringValue(body.contactId),
+          contactEmail: getStringValue(body.email),
+          contactPhone: getStringValue(body.phone),
+          contactName: getStringValue(body.full_name) || `${getStringValue(body.first_name)} ${getStringValue(body.last_name)}`.trim(),
+        }
       }
     }
     
