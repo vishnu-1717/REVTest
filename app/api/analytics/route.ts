@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
+import { AppointmentWhereClause, AppointmentWithRelations, CloserBreakdownAccumulator, AnalyticsBreakdownItem } from '@/types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     // Build where clause based on filters
     // Note: Date filters apply to scheduledAt for "Scheduled Calls to Date"
     // "Calls Created" will be calculated separately using createdAt
-    const where: any = {
+    const where: Partial<AppointmentWhereClause> = {
       companyId: effectiveCompanyId
     }
     
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
     
     // Calculate metrics using inclusion flag
     // Filter to only include appointments with flag = 1 (or null for backwards compatibility)
-    const countableAppointments = filteredAppointments.filter((a: any) => 
+    const countableAppointments = filteredAppointments.filter((a) =>
       (a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null) &&
       (a.appointmentInclusionFlag !== 0)
     )
@@ -192,7 +193,7 @@ export async function GET(request: NextRequest) {
     // This requires a separate query using createdAt instead of scheduledAt
     // Apply all the same filters except date (which uses createdAt)
     let callsCreated = 0
-    const createdWhereClause: any = {
+    const createdWhereClause: Partial<AppointmentWhereClause> = {
       companyId: effectiveCompanyId,
       OR: [
         { appointmentInclusionFlag: 1 },
@@ -288,7 +289,7 @@ export async function GET(request: NextRequest) {
     
     // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
     // Only count appointments with status "scheduled" - all other statuses don't need PCNs
-    const isPCNOverdue = (appointment: any): boolean => {
+    const isPCNOverdue = (appointment: AppointmentWithRelations): boolean => {
       // Exclude if PCN already submitted
       if (appointment.pcnSubmitted) return false
       
@@ -415,9 +416,9 @@ export async function GET(request: NextRequest) {
     
     // Group by closer (using countable appointments)
     const byCloser = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: CloserBreakdownAccumulator, apt) => {
         if (!apt.closer) return acc
-        
+
         const key = apt.closer.email
         if (!acc[key]) {
           acc[key] = {
@@ -432,7 +433,7 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
+
         acc[key].total++
         acc[key].scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
@@ -445,10 +446,10 @@ export async function GET(request: NextRequest) {
           acc[key].signed++
           acc[key].revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {})
-    ).map((closer: any) => {
+      }, {} as CloserBreakdownAccumulator)
+    ).map((closer) => {
       // Calculate expected calls: scheduled - cancelled
       const closerExpectedCalls = closer.scheduled - closer.cancelled
       
@@ -465,12 +466,12 @@ export async function GET(request: NextRequest) {
         showRate: closerShowRate,
         closeRate: closerCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
-    
+    }).sort((a, b) => b.revenue - a.revenue)
+
     // Group by day of week (using countable appointments)
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const byDayOfWeek = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: Record<string, AnalyticsBreakdownItem & { dayOfWeek: number; dayName: string; total: number; noShows: number }>, apt) => {
         const day = new Date(apt.scheduledAt).getDay()
         
         if (!acc[day]) {
