@@ -335,6 +335,8 @@ model Appointment {
   @@index([pcnSubmittedAt])
   @@index([appointmentInclusionFlag])
   @@index([contactId, scheduledAt])
+  // Compound index for pending PCN queries - optimizes WHERE companyId + pcnSubmitted + status + scheduledAt
+  @@index([companyId, pcnSubmitted, status, scheduledAt])
 }
 
 model CommissionRole {

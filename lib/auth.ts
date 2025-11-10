@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { withPrisma } from './db'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
+import { SUPER_ADMIN_EMAILS, DEFAULT_COMPANY_EMAIL } from './constants'
 
 export async function getCurrentUser() {
   const { userId } = await auth()
@@ -25,8 +26,7 @@ export async function getCurrentUser() {
       const email = clerkUser?.emailAddresses[0]?.emailAddress || 'unknown@example.com'
       
       // Check if this is a super admin email
-      const superAdminEmails = ['ben@systemizedsales.com', 'dylan@automatedrev.com', 'jake@systemizedsales.com']
-      const isSuperAdminEmail = superAdminEmails.includes(email)
+      const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(email)
       
       // Check if there are any users in the database
       const userCount = await prisma.user.count()
@@ -78,14 +78,14 @@ export async function getCurrentUser() {
         
         // Get or create a default company
         let defaultCompany = await prisma.company.findFirst({
-          where: { email: 'default@paymaestro.com' }
+          where: { email: DEFAULT_COMPANY_EMAIL }
         })
-        
+
         if (!defaultCompany) {
           defaultCompany = await prisma.company.create({
             data: {
               name: 'Default Company',
-              email: 'default@paymaestro.com',
+              email: DEFAULT_COMPANY_EMAIL,
               processor: 'manual'
             }
           })
@@ -169,14 +169,14 @@ export async function getCurrentUser() {
       // Not first user, return temporary user
       // Get or create default company
       let defaultCompany = await prisma.company.findFirst({
-        where: { email: 'default@paymaestro.com' }
+        where: { email: DEFAULT_COMPANY_EMAIL }
       })
-      
+
       if (!defaultCompany) {
         defaultCompany = await prisma.company.create({
           data: {
             name: 'Default Company',
-            email: 'default@paymaestro.com',
+            email: DEFAULT_COMPANY_EMAIL,
             processor: 'manual'
           }
         })
@@ -196,8 +196,7 @@ export async function getCurrentUser() {
     }
     
     // Check if email should grant superAdmin for existing users
-    const superAdminEmails = ['ben@systemizedsales.com', 'dylan@automatedrev.com', 'jake@systemizedsales.com']
-    const isSuperAdminEmail = superAdminEmails.includes(dbUser.email)
+    const isSuperAdminEmail = SUPER_ADMIN_EMAILS.includes(dbUser.email)
     
     // If email matches but superAdmin is false, update it
     if (isSuperAdminEmail && !dbUser.superAdmin) {

@@ -2,6 +2,7 @@ import { Webhook } from 'svix'
 import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
 import { withPrisma } from '@/lib/db'
+import { DEFAULT_COMPANY_EMAIL } from '@/lib/constants'
 
 export async function POST(req: Request) {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
@@ -68,14 +69,14 @@ export async function POST(req: Request) {
         } else {
           // Find or create a default company
           let defaultCompany = await prisma.company.findFirst({
-            where: { email: 'default@paymaestro.com' }
+            where: { email: DEFAULT_COMPANY_EMAIL }
           })
-          
+
           if (!defaultCompany) {
             defaultCompany = await prisma.company.create({
               data: {
                 name: 'Default Company',
-                email: 'default@paymaestro.com',
+                email: DEFAULT_COMPANY_EMAIL,
                 processor: 'whop'
               }
             })
