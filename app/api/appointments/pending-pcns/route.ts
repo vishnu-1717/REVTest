@@ -152,7 +152,7 @@ export async function GET(request: NextRequest) {
         const closerQueryBase: Prisma.UserWhereInput =
           user.role === 'admin' || user.superAdmin
             ? {
-                companyId: user.companyId,
+                companyId: effectiveCompanyId,
                 isActive: true,
                 superAdmin: false,
                 OR: [
@@ -182,21 +182,33 @@ export async function GET(request: NextRequest) {
           return 'normal'
         }
 
-        byCloser = closers.map((closer) => {
-          const summary = groupMap.get(closer.id) || null
-          const oldestMinutes =
-            summary && summary._min.scheduledAt
-              ? Math.floor((now - summary._min.scheduledAt.getTime()) / (1000 * 60))
-              : null
+        byCloser = closers
+          .map((closer) => {
+            const summary = groupMap.get(closer.id) || null
+            const oldestMinutes =
+              summary && summary._min.scheduledAt
+                ? Math.floor((now - summary._min.scheduledAt.getTime()) / (1000 * 60))
+                : null
 
-          return {
-            closerId: closer.id,
-            closerName: closer.name || 'Unknown rep',
-            pendingCount: summary ? summary._count._all : 0,
-            oldestMinutes,
-            urgencyLevel: computeUrgency(oldestMinutes)
-          }
-        })
+            const pendingCount = summary ? summary._count._all : 0
+
+            return pendingCount > 0
+              ? {
+                  closerId: closer.id,
+                  closerName: closer.name || 'Unknown rep',
+                  pendingCount,
+                  oldestMinutes,
+                  urgencyLevel: computeUrgency(oldestMinutes)
+                }
+              : null
+          })
+          .filter(Boolean) as Array<{
+            closerId: string
+            closerName: string
+            pendingCount: number
+            oldestMinutes: number | null
+            urgencyLevel: 'normal' | 'medium' | 'high'
+          }>
 
         const unassignedSummary = groupMap.get(null)
         if (unassignedSummary) {

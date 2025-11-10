@@ -24,6 +24,13 @@ export function PendingPCNsWidget() {
   const [loading, setLoading] = useState(true)
   const [timezone, setTimezone] = useState('UTC')
 
+  const filteredSummaries = useMemo(
+    () => closerSummaries.filter((summary) => summary.pendingCount > 0),
+    [closerSummaries]
+  )
+
+  const hasPending = totalCount > 0 || filteredSummaries.length > 0
+
   const fetchPending = useCallback(async () => {
     try {
       const response = await fetch(withViewAs('/api/appointments/pending-pcns?groupBy=closer'))
@@ -86,10 +93,10 @@ export function PendingPCNsWidget() {
       <CardContent>
         {loading ? (
           <p className="text-gray-500 text-sm">Loading...</p>
-        ) : totalCount === 0 ? (
+        ) : !hasPending ? (
           <div className="text-center py-4">
-            <p className="text-green-600 font-semibold">All caught up! 🎉</p>
-            <p className="text-gray-500 text-sm mt-1">No appointments need PCNs</p>
+            <p className="text-green-600 font-semibold">Everything is up to date! 🎉</p>
+            <p className="text-gray-500 text-sm mt-1">No pending post-call notes.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -100,7 +107,7 @@ export function PendingPCNsWidget() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {closerSummaries.map((summary) => (
+              {filteredSummaries.map((summary) => (
                 <button
                   type="button"
                   key={summary.closerId ?? 'unassigned'}
