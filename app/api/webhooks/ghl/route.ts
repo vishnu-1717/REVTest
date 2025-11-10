@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
         
         // Recursively search nested objects (but not arrays or null)
         if (value && typeof value === 'object' && !Array.isArray(value)) {
-          searchForAppointmentFields(value, currentPath)
+          searchForAppointmentFields(value as Record<string, unknown>, currentPath)
         }
       })
     }
