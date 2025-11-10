@@ -466,17 +466,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        acc[key]!.total++
+        acc[key]!.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          acc[key]!.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          acc[key]!.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          acc[key]!.signed++
+          acc[key]!.revenue += apt.cashCollected || 0
         }
 
         return acc
