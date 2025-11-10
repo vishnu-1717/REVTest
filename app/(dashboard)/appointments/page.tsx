@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,19 +15,11 @@ import {
 } from '@/components/ui/select'
 import { formatDistanceToNow } from 'date-fns'
 import { formatMinutesOverdue } from '@/lib/utils'
-
-interface PendingPCN {
-  id: string
-  contactName: string
-  scheduledAt: string
-  status: string
-  urgencyLevel: string
-  minutesSinceScheduled: number
-  closerName?: string | null
-}
+import { PendingPCN, PendingPCNCloserSummary, PendingPCNsResponse } from '@/types/pcn'
 
 export default function AppointmentsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [appointments, setAppointments] = useState<PendingPCN[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -37,6 +29,8 @@ export default function AppointmentsPage() {
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc')
   const [timezone, setTimezone] = useState('UTC')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [closers, setClosers] = useState<PendingPCNCloserSummary[]>([])
+  const [closerFilter, setCloserFilter] = useState<string>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -49,15 +43,18 @@ export default function AppointmentsPage() {
     try {
       setLoading(true)
       // Fetch all pending PCNs when on the appointments page
-      const response = await fetch('/api/appointments/pending-pcns?all=true', {
+      const response = await fetch('/api/appointments/pending-pcns?all=true&groupBy=closer', {
         credentials: 'include'
       })
-      const data = await response.json()
+      const data: PendingPCNsResponse = await response.json()
       
       setAppointments(data.appointments || [])
       setTotalCount(data.totalCount || 0)
       if (data.timezone) {
         setTimezone(data.timezone)
+      }
+      if (data.byCloser) {
+        setClosers(data.byCloser)
       }
     } catch (error) {
       console.error('Failed to fetch appointments:', error)
@@ -117,6 +114,14 @@ export default function AppointmentsPage() {
   // Filter and sort appointments based on search query and date sort order
   const filteredAppointments = useMemo(() => {
     let results = appointments
+
+    if (closerFilter !== 'all') {
+      if (closerFilter === 'unassigned') {
+        results = results.filter((apt) => !apt.closerId)
+      } else {
+        results = results.filter((apt) => apt.closerId === closerFilter)
+      }
+    }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim()
@@ -199,6 +204,35 @@ export default function AppointmentsPage() {
     }
   }
 
+  const closerFromQuery = searchParams?.get('closerId')
+
+  useEffect(() => {
+    if (!closerFromQuery) {
+      setCloserFilter('all')
+      return
+    }
+    setCloserFilter(closerFromQuery)
+  }, [closerFromQuery])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const current = new URLSearchParams(window.location.search)
+    const existingValue = current.get('closerId') ?? 'all'
+
+    if (closerFilter === 'all') {
+      if (existingValue !== 'all') {
+        current.delete('closerId')
+        const search = current.toString()
+        router.replace(`/appointments${search ? `?${search}` : ''}`, { scroll: false })
+      }
+    } else if (existingValue !== closerFilter) {
+      current.set('closerId', closerFilter)
+      router.replace(`/appointments?${current.toString()}`, { scroll: false })
+    }
+  }, [closerFilter, router])
+
   return (
     <div className="container mx-auto py-10 max-w-7xl">
       <div className="flex justify-between items-center mb-8">
@@ -224,7 +258,7 @@ export default function AppointmentsPage() {
         </CardHeader>
         <CardContent>
           {/* Search & Filters */}
-          <div className="mb-6 space-y-3 md:space-y-0 md:grid md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end md:gap-4">
+          <div className="mb-6 space-y-3 md:space-y-0 md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-end md:gap-4">
             <Input
               type="text"
               placeholder="Search by contact name or closer name..."
@@ -232,6 +266,26 @@ export default function AppointmentsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-md"
             />
+
+            <div className="flex flex-col">
+              <label className="text-sm font-medium mb-2">Closer</label>
+              <Select value={closerFilter} onValueChange={(value) => setCloserFilter(value)}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="All closers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All closers</SelectItem>
+                  {closers.map((closer) => (
+                    <SelectItem
+                      key={closer.closerId ?? 'unassigned'}
+                      value={closer.closerId ?? 'unassigned'}
+                    >
+                      {closer.closerName} ({closer.pendingCount})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div
               className="cursor-pointer"

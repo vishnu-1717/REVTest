@@ -112,9 +112,18 @@ export interface PendingPCN {
   id: string
   scheduledAt: string
   contactName: string
+  closerId: string | null
   closerName: string | null
   status: string
   minutesSinceScheduled: number
+  urgencyLevel: 'normal' | 'medium' | 'high'
+}
+
+export interface PendingPCNCloserSummary {
+  closerId: string | null
+  closerName: string
+  pendingCount: number
+  oldestMinutes: number | null
   urgencyLevel: 'normal' | 'medium' | 'high'
 }
 
@@ -122,6 +131,8 @@ export interface PendingPCNsResponse {
   count: number
   totalCount?: number
   appointments: PendingPCN[]
+  timezone?: string
+  byCloser?: PendingPCNCloserSummary[]
 }
 
 // Option lists for dropdowns

@@ -5,24 +5,26 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { PendingPCN } from '@/types/pcn'
-import { formatDistanceToNow } from 'date-fns'
+import { PendingPCNCloserSummary, PendingPCNsResponse } from '@/types/pcn'
 import { formatMinutesOverdue } from '@/lib/utils'
 
 export function PendingPCNsWidget() {
   const router = useRouter()
-  const [appointments, setAppointments] = useState<PendingPCN[]>([])
+  const [closerSummaries, setCloserSummaries] = useState<PendingPCNCloserSummary[]>([])
   const [totalCount, setTotalCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
   const [timezone, setTimezone] = useState('UTC')
 
   const fetchPending = useCallback(async () => {
     try {
-      // Fetch limited results for dashboard widget (50 to show accurate count in "View All")
-      const response = await fetch('/api/appointments/pending-pcns?limit=50')
-      const data = await response.json()
-      setAppointments(data.appointments || [])
-      setTotalCount(data.totalCount || data.appointments?.length || 0)
+      const response = await fetch('/api/appointments/pending-pcns?groupBy=closer')
+      const data: PendingPCNsResponse = await response.json()
+      setCloserSummaries(data.byCloser || [])
+      setTotalCount(
+        data.totalCount ||
+          data.byCloser?.reduce((sum, closer) => sum + closer.pendingCount, 0) ||
+          0
+      )
       if (data.timezone) {
         setTimezone(data.timezone)
       }
@@ -35,44 +37,37 @@ export function PendingPCNsWidget() {
 
   useEffect(() => {
     fetchPending()
-    
-    // Refresh every 60 seconds
+
     const interval = setInterval(fetchPending, 60000)
     return () => clearInterval(interval)
   }, [fetchPending])
 
-  const handleClick = (appointmentId: string) => {
-    router.push(`/pcn/${appointmentId}`)
-  }
-
-  const getUrgencyColor = (level: string) => {
+  const getUrgencyStyles = useCallback((level: 'normal' | 'medium' | 'high') => {
     switch (level) {
       case 'high':
-        return 'bg-red-500'
+        return 'border-red-200 bg-red-50 text-red-700'
       case 'medium':
-        return 'bg-yellow-500'
+        return 'border-yellow-200 bg-yellow-50 text-yellow-700'
       default:
-        return 'bg-blue-500'
+        return 'border-blue-100 bg-blue-50 text-blue-700'
     }
-  }
+  }, [])
 
-  const scheduledFormatter = useMemo(() => {
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    })
-  }, [timezone])
+  const hasUrgent = useMemo(
+    () =>
+      closerSummaries.some(
+        (summary) => summary.urgencyLevel === 'high' && summary.pendingCount > 0
+      ),
+    [closerSummaries]
+  )
 
-  const formatScheduledAt = useCallback((iso: string) => {
-    try {
-      return scheduledFormatter.format(new Date(iso))
-    } catch {
-      return new Date(iso).toLocaleString()
-    }
-  }, [scheduledFormatter])
+  const handleNavigateToCloser = useCallback(
+    (closerId: string | null) => {
+      const value = closerId ?? 'unassigned'
+      router.push(`/appointments?closerId=${encodeURIComponent(value)}`)
+    },
+    [router]
+  )
 
   return (
     <Card>
@@ -82,7 +77,7 @@ export function PendingPCNsWidget() {
       <CardContent>
         {loading ? (
           <p className="text-gray-500 text-sm">Loading...</p>
-        ) : appointments.length === 0 ? (
+        ) : totalCount === 0 ? (
           <div className="text-center py-4">
             <p className="text-green-600 font-semibold">All caught up! 🎉</p>
             <p className="text-gray-500 text-sm mt-1">No appointments need PCNs</p>
@@ -90,48 +85,62 @@ export function PendingPCNsWidget() {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm text-gray-600">
-                {totalCount > 0 ? totalCount : appointments.length} pending
-              </span>
-              {appointments.some(a => a.urgencyLevel === 'high') && (
-                <Badge className="bg-red-500 text-white">Urgent!</Badge>
-              )}
-              <span className="text-xs text-gray-400 ml-auto">
-                Time zone: {timezone}
-              </span>
+              <span className="text-sm text-gray-600">{totalCount} pending</span>
+              {hasUrgent && <Badge className="bg-red-500 text-white">Urgent!</Badge>}
+              <span className="text-xs text-gray-400 ml-auto">Time zone: {timezone}</span>
             </div>
-            
-            {appointments.slice(0, 5).map((apt) => (
-              <div
-                key={apt.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer border border-gray-200"
-                onClick={() => handleClick(apt.id)}
-              >
-                <div className="flex-1">
-                  <p className="font-medium text-sm">{apt.contactName}</p>
-                  <p className="text-xs text-gray-500">
-                    {formatScheduledAt(apt.scheduledAt)} ({formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })})
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${getUrgencyColor(apt.urgencyLevel)}`} />
-                  <span className="text-xs text-gray-500">{formatMinutesOverdue(apt.minutesSinceScheduled)} ago</span>
-                </div>
-              </div>
-            ))}
-            
-            {(totalCount > 5 || appointments.length > 5) && (
-              <div className="text-center pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push('/appointments')}
-                  className="text-xs"
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {closerSummaries.map((summary) => (
+                <button
+                  type="button"
+                  key={summary.closerId ?? 'unassigned'}
+                  className={`rounded-lg border p-4 text-left transition hover:shadow-sm ${
+                    summary.pendingCount > 0
+                      ? getUrgencyStyles(summary.urgencyLevel)
+                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                  }`}
+                  onClick={() => handleNavigateToCloser(summary.closerId)}
                 >
-                  View All ({totalCount > 0 ? totalCount : appointments.length})
-                </Button>
-              </div>
-            )}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {summary.closerName}
+                        {summary.pendingCount === 0 && ' ✅'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {summary.pendingCount === 0
+                          ? 'All PCNs submitted'
+                          : `${summary.pendingCount} missing PCN${
+                              summary.pendingCount === 1 ? '' : 's'
+                            }`}
+                      </p>
+                    </div>
+                    {summary.pendingCount > 0 && (
+                      <span className="text-lg font-bold text-gray-700">
+                        {summary.pendingCount}
+                      </span>
+                    )}
+                  </div>
+                  {summary.pendingCount > 0 && summary.oldestMinutes !== null && (
+                    <p className="mt-3 text-xs text-gray-600">
+                      Oldest outstanding: {formatMinutesOverdue(summary.oldestMinutes)} ago
+                    </p>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-center pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push('/appointments')}
+                className="text-xs"
+              >
+                View all team PCNs
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
