@@ -2,6 +2,88 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
+import { AppointmentWhereClause, AppointmentWithRelations, AnalyticsBreakdownItem } from '@/types'
+
+// Helper types for analytics aggregations
+interface ObjectionData {
+  type: string
+  count: number
+  converted: number
+  conversionRate?: string | number
+}
+
+interface CalendarBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  calendar: string
+  total: number
+}
+
+interface DayBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  dayOfWeek: number
+}
+
+interface TimeBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  hour: number
+}
+
+interface SourceData extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
+  source: string
+}
+
+// Local type for closer breakdown with all required fields
+interface CloserBreakdownItem {
+  closerId: string
+  closerEmail: string
+  closerName: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type CloserBreakdownAccumulator = Record<string, CloserBreakdownItem>
+
+// Local type for day breakdown accumulator with all required fields
+interface DayBreakdownItem {
+  dayOfWeek: number
+  dayName: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+  noShows: number
+}
+
+type DayBreakdownAccumulator = Record<string, DayBreakdownItem>
+
+// Local type for calendar breakdown accumulator with all required fields
+interface CalendarBreakdownItem {
+  calendar: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type CalendarBreakdownAccumulator = Record<string, CalendarBreakdownItem>
+
+// Local type for traffic source breakdown accumulator with all required fields
+interface SourceBreakdownItem {
+  source: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type SourceBreakdownAccumulator = Record<string, SourceBreakdownItem>
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +104,7 @@ export async function GET(request: NextRequest) {
     // Build where clause based on filters
     // Note: Date filters apply to scheduledAt for "Scheduled Calls to Date"
     // "Calls Created" will be calculated separately using createdAt
-    const where: any = {
+    const where: Partial<AppointmentWhereClause> = {
       companyId: effectiveCompanyId
     }
     
@@ -43,42 +125,47 @@ export async function GET(request: NextRequest) {
     }
     
     // Status filter
-    if (searchParams.get('status')) {
-      where.status = searchParams.get('status')
+    const statusParam = searchParams.get('status')
+    if (statusParam) {
+      where.status = statusParam
     }
-    
+
     // Closer filter
-    if (searchParams.get('closer')) {
-      where.closerId = searchParams.get('closer')
+    const closerParam = searchParams.get('closer')
+    if (closerParam) {
+      where.closerId = closerParam
     }
-    
+
     // Objection type filter
-    if (searchParams.get('objectionType')) {
+    const objectionTypeParam = searchParams.get('objectionType')
+    if (objectionTypeParam) {
       where.objectionType = {
-        contains: searchParams.get('objectionType'),
+        contains: objectionTypeParam,
         mode: 'insensitive'
       }
     }
     
     // Appointment type filter (first call vs follow up)
-    if (searchParams.get('appointmentType')) {
-      where.isFirstCall = searchParams.get('appointmentType') === 'first_call'
+    const appointmentTypeParam = searchParams.get('appointmentType')
+    if (appointmentTypeParam) {
+      where.isFirstCall = appointmentTypeParam === 'first_call'
     }
-    
+
     // Follow-up needed filter
     if (searchParams.get('followUpNeeded') === 'true') {
       where.followUpScheduled = true
       where.status = { notIn: ['signed', 'cancelled'] }
     }
-    
+
     // Nurture type filter
-    if (searchParams.get('nurtureType')) {
+    const nurtureTypeParam = searchParams.get('nurtureType')
+    if (nurtureTypeParam) {
       where.nurtureType = {
-        contains: searchParams.get('nurtureType'),
+        contains: nurtureTypeParam,
         mode: 'insensitive'
       }
     }
-    
+
     // Deal size range filter
     const minDealSize = searchParams.get('minDealSize')
     const maxDealSize = searchParams.get('maxDealSize')
@@ -87,25 +174,49 @@ export async function GET(request: NextRequest) {
       if (minDealSize) where.cashCollected.gte = parseFloat(minDealSize)
       if (maxDealSize) where.cashCollected.lte = parseFloat(maxDealSize)
     }
-    
+
     // Calendar filter (traffic source proxy)
-    if (searchParams.get('calendar')) {
+    const calendarParam = searchParams.get('calendar')
+    if (calendarParam) {
       where.calendar = {
-        contains: searchParams.get('calendar'),
+        contains: calendarParam,
         mode: 'insensitive'
       }
     }
-    
+
     // Traffic source filter
-    if (searchParams.get('trafficSource')) {
+    const trafficSourceParam = searchParams.get('trafficSource')
+    if (trafficSourceParam) {
       where.attributionSource = {
-        contains: searchParams.get('trafficSource'),
+        contains: trafficSourceParam,
         mode: 'insensitive'
       }
     }
     
+    // PERFORMANCE NOTE: This endpoint loads appointments into memory for complex aggregations.
+    // For large datasets (>25k appointments), consider using database-level GROUP BY operations.
+    // Current approach prioritizes feature completeness over performance.
+
+    // Safety limit to prevent memory exhaustion
+    const ANALYTICS_SAFETY_LIMIT = parseInt(process.env.ANALYTICS_LIMIT || '50000')
+
     // Get all appointments matching filters (including those with null flag for backwards compatibility)
     const appointments = await withPrisma(async (prisma) => {
+      // First, check count to warn if approaching limits
+      const totalCount = await prisma.appointment.count({
+        where: {
+          ...where,
+          OR: [
+            { appointmentInclusionFlag: 1 },
+            { appointmentInclusionFlag: null }
+          ]
+        }
+      })
+
+      if (totalCount > ANALYTICS_SAFETY_LIMIT) {
+        console.warn(`Analytics query for company ${effectiveCompanyId} exceeds safety limit: ${totalCount} appointments (limit: ${ANALYTICS_SAFETY_LIMIT})`)
+      }
+
       return await prisma.appointment.findMany({
         where: {
           ...where,
@@ -122,7 +233,14 @@ export async function GET(request: NextRequest) {
         },
         orderBy: {
           scheduledAt: 'desc'
-        }
+        },
+        // Apply safety limit to prevent memory exhaustion
+        // If you hit this limit, results will be truncated. Consider:
+        // 1. Narrowing date range
+        // 2. Using more specific filters
+        // 3. Increasing ANALYTICS_LIMIT env var (with caution)
+        // 4. Refactoring to use database aggregations (recommended for 100k+ records)
+        take: ANALYTICS_SAFETY_LIMIT
       })
     })
     
@@ -154,16 +272,16 @@ export async function GET(request: NextRequest) {
     
     // Calculate metrics using inclusion flag
     // Filter to only include appointments with flag = 1 (or null for backwards compatibility)
-    const countableAppointments = filteredAppointments.filter((a: any) => 
-      (a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null) &&
-      (a.appointmentInclusionFlag !== 0)
+    // Flag = 0 means excluded from analytics (e.g., duplicate, cancelled before showed)
+    const countableAppointments = filteredAppointments.filter((a) =>
+      a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null
     )
     
     // Calls Created: Number of calls with a Create Date inside the selected time frame
     // This requires a separate query using createdAt instead of scheduledAt
     // Apply all the same filters except date (which uses createdAt)
     let callsCreated = 0
-    const createdWhereClause: any = {
+    const createdWhereClause: Partial<AppointmentWhereClause> = {
       companyId: effectiveCompanyId,
       OR: [
         { appointmentInclusionFlag: 1 },
@@ -259,7 +377,7 @@ export async function GET(request: NextRequest) {
     
     // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
     // Only count appointments with status "scheduled" - all other statuses don't need PCNs
-    const isPCNOverdue = (appointment: any): boolean => {
+    const isPCNOverdue = (appointment: AppointmentWithRelations): boolean => {
       // Exclude if PCN already submitted
       if (appointment.pcnSubmitted) return false
       
@@ -386,9 +504,9 @@ export async function GET(request: NextRequest) {
     
     // Group by closer (using countable appointments)
     const byCloser = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: CloserBreakdownAccumulator, apt) => {
         if (!apt.closer) return acc
-        
+
         const key = apt.closer.email
         if (!acc[key]) {
           acc[key] = {
@@ -403,23 +521,25 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+
+        // Store reference to help TypeScript's control flow analysis
+        const closerData = acc[key]!
+        closerData.total++
+        closerData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          closerData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          closerData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          closerData.signed++
+          closerData.revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {})
-    ).map((closer: any) => {
+      }, {} as CloserBreakdownAccumulator)
+    ).map((closer) => {
       // Calculate expected calls: scheduled - cancelled
       const closerExpectedCalls = closer.scheduled - closer.cancelled
       
@@ -436,14 +556,14 @@ export async function GET(request: NextRequest) {
         showRate: closerShowRate,
         closeRate: closerCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
-    
+    }).sort((a, b) => b.revenue - a.revenue)
+
     // Group by day of week (using countable appointments)
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const byDayOfWeek = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: DayBreakdownAccumulator, apt) => {
         const day = new Date(apt.scheduledAt).getDay()
-        
+
         if (!acc[day]) {
           acc[day] = {
             dayOfWeek: day,
@@ -453,65 +573,73 @@ export async function GET(request: NextRequest) {
             signed: 0,
             scheduled: 0,
             cancelled: 0,
-            revenue: 0
+            revenue: 0,
+            noShows: 0
           }
         }
-        
-        acc[day].total++
-        acc[day].scheduled++ // All appointments in countableAppointments are scheduled
+
+        // Store reference to help TypeScript's control flow analysis
+        const dayData = acc[day]
+        dayData.total++
+        dayData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[day].cancelled++
+          dayData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[day].showed++
+          dayData.showed++
+        } else if (apt.status === 'scheduled') {
+          // Track no-shows (scheduled but didn't show)
+          dayData.noShows++
         }
         if (apt.status === 'signed') {
-          acc[day].signed++
-          acc[day].revenue += apt.cashCollected || 0
+          dayData.signed++
+          dayData.revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {})
-    ).map((day: any) => {
+      }, {} as DayBreakdownAccumulator)
+    ).map((day: DayBreakdownItem) => {
       // Calculate expected calls: scheduled - cancelled
       const dayExpectedCalls = day.scheduled - day.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const dayShowRate = dayExpectedCalls > 0
         ? ((day.showed / dayExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const dayCloseRate = day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...day,
         showRate: dayShowRate,
         closeRate: dayCloseRate
       }
-    }).sort((a: any, b: any) => a.dayOfWeek - b.dayOfWeek)
+    }).sort((a, b) => a.dayOfWeek - b.dayOfWeek)
     
     // Group by objection type - using countable appointments
     const byObjection = Object.entries(
       countableAppointments
         .filter(a => a.objectionType && a.status === 'showed')
-        .reduce((acc: any, apt) => {
+        .reduce((acc: Record<string, ObjectionData>, apt) => {
           const key = apt.objectionType || 'None'
           if (!acc[key]) {
             acc[key] = { type: key, count: 0, converted: 0 }
           }
-          acc[key].count++
-          if (apt.status === 'signed') acc[key].converted++
+          // Store reference to help TypeScript's control flow analysis
+          const objectionData = acc[key]
+          objectionData.count++
+          if (apt.status === 'signed') objectionData.converted++
           return acc
         }, {})
-    ).map(([type, data]: [string, any]) => ({
+    ).map(([_type, data]: [string, ObjectionData]) => ({
       ...data,
       conversionRate: data.count > 0 ? ((data.converted / data.count) * 100).toFixed(1) : 0
-    })).sort((a: any, b: any) => b.count - a.count)
+    })).sort((a, b) => b.count - a.count)
     
     // Group by calendar (traffic source) - using countable appointments
     const byCalendar = Object.entries(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: CalendarBreakdownAccumulator, apt) => {
         const key = apt.calendar || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -524,40 +652,42 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+
+        // Store reference to help TypeScript's control flow analysis
+        const calendarData = acc[key]
+        calendarData.total++
+        calendarData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          calendarData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          calendarData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          calendarData.signed++
+          calendarData.revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {})
-    ).map(([calendar, data]: [string, any]) => {
+      }, {} as CalendarBreakdownAccumulator)
+    ).map(([_calendar, data]: [string, CalendarBreakdownItem]) => {
       // Calculate expected calls: scheduled - cancelled
       const calendarExpectedCalls = data.scheduled - data.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const calendarShowRate = calendarExpectedCalls > 0
         ? ((data.showed / calendarExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const calendarCloseRate = data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...data,
         showRate: calendarShowRate,
         closeRate: calendarCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
+    }).sort((a, b) => b.revenue - a.revenue)
     
     // Group by appointment type (first call vs follow up) - using countable appointments
     const byAppointmentType = [
@@ -668,11 +798,11 @@ export async function GET(request: NextRequest) {
     
     // Group by traffic source - using countable appointments
     const byTrafficSource = Object.values(
-      countableAppointments.reduce((acc: any, apt) => {
+      countableAppointments.reduce((acc: SourceBreakdownAccumulator, apt) => {
         const key = apt.attributionSource || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
-            trafficSource: key,
+            source: key,
             total: 0,
             showed: 0,
             signed: 0,
@@ -681,40 +811,42 @@ export async function GET(request: NextRequest) {
             revenue: 0
           }
         }
-        
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+
+        // Store reference to help TypeScript's control flow analysis
+        const sourceData = acc[key]
+        sourceData.total++
+        sourceData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          sourceData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          sourceData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          sourceData.signed++
+          sourceData.revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {})
-    ).map((source: any) => {
+      }, {} as SourceBreakdownAccumulator)
+    ).map((source: SourceBreakdownItem) => {
       // Calculate expected calls: scheduled - cancelled
       const sourceExpectedCalls = source.scheduled - source.cancelled
-      
+
       // Show Rate: Percent of expected calls that showed (same as main metric)
       const sourceShowRate = sourceExpectedCalls > 0
         ? ((source.showed / sourceExpectedCalls) * 100).toFixed(1)
         : '0'
-      
+
       // Close Rate: Percent of qualified calls that closed
       const sourceCloseRate = source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : '0'
-      
+
       return {
         ...source,
         showRate: sourceShowRate,
         closeRate: sourceCloseRate
       }
-    }).sort((a: any, b: any) => b.revenue - a.revenue)
+    }).sort((a, b) => b.revenue - a.revenue)
     
     return NextResponse.json({
       // New metrics
@@ -756,10 +888,11 @@ export async function GET(request: NextRequest) {
       byTrafficSource
     })
     
-  } catch (error: any) {
+  } catch (error) {
     console.error('Analytics error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     return NextResponse.json(
-      { error: error.message },
+      { error: errorMessage },
       { status: 500 }
     )
   }

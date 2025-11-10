@@ -17,57 +17,81 @@ export async function GET(request: Request) {
       const url = new URL(request.url)
       const dateFrom = url.searchParams.get('dateFrom') || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
       const dateTo = url.searchParams.get('dateTo') || new Date().toISOString()
-      
-      // Get all active users in company with rep/closer/setter roles
-      const users = await prisma.user.findMany({
+
+      // OPTIMIZED: Single query to get all appointments with closer info
+      // This replaces the N+1 query pattern (1 query for users + N queries for appointments)
+      const appointments = await prisma.appointment.findMany({
         where: {
           companyId: user.companyId,
-          role: { in: ['rep', 'closer', 'setter'] }
+          closerId: { not: null },
+          scheduledAt: {
+            gte: new Date(dateFrom),
+            lte: new Date(dateTo)
+          },
+          closer: {
+            role: { in: ['rep', 'closer', 'setter'] }
+          }
         },
         select: {
           id: true,
-          name: true
+          closerId: true,
+          status: true,
+          cashCollected: true,
+          closer: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       })
-      
-      // Get stats for each user
-      const leaderboard = await Promise.all(
-        users.map(async (rep) => {
-          const appointments = await prisma.appointment.findMany({
-            where: {
-              closerId: rep.id,
-              scheduledAt: {
-                gte: new Date(dateFrom),
-                lte: new Date(dateTo)
-              }
-            }
+
+      // Group appointments by closer and calculate stats in memory
+      const repStatsMap = new Map<string, {
+        id: string
+        name: string
+        revenue: number
+        appointments: number
+        signed: number
+      }>()
+
+      for (const apt of appointments) {
+        if (!apt.closer) continue
+
+        const existing = repStatsMap.get(apt.closer.id)
+        if (existing) {
+          existing.appointments += 1
+          existing.revenue += Number(apt.cashCollected || 0)
+          if (apt.status === 'signed') existing.signed += 1
+        } else {
+          repStatsMap.set(apt.closer.id, {
+            id: apt.closer.id,
+            name: apt.closer.name,
+            revenue: Number(apt.cashCollected || 0),
+            appointments: 1,
+            signed: apt.status === 'signed' ? 1 : 0
           })
-          
-          const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
-          
-          return {
-            id: rep.id,
-            name: rep.name,
-            email: '', // Not returned by API anymore
-            revenue: totalRevenue,
-            commissions: 0, // Not calculated anymore
-            appointments: appointments.length,
-            signed: appointments.filter((a: any) => a.status === 'signed').length,
-            showDetails: false,
-            isCurrentUser: rep.id === user.id
-          }
-        })
-      )
-      
+        }
+      }
+
+      // Convert map to array and add metadata
+      const leaderboard = Array.from(repStatsMap.values()).map(rep => ({
+        ...rep,
+        email: '', // Not returned by API anymore
+        commissions: 0, // Not calculated anymore
+        showDetails: false,
+        isCurrentUser: rep.id === user.id
+      }))
+
       // Sort by revenue (descending)
       leaderboard.sort((a, b) => b.revenue - a.revenue)
-      
+
       // Add rank
       const leaderboardWithRank = leaderboard.map((entry, index) => ({
         ...entry,
         rank: index + 1
       }))
-      
+
       return leaderboardWithRank
     })
     

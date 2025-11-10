@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getCurrentUser } from '@/lib/auth'
+import { SUPER_ADMIN_EMAILS } from '@/lib/constants'
 
 // Endpoint to force update superAdmin flag for current user if email matches
 export async function POST() {
   try {
     const user = await getCurrentUser()
-    
+
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    const superAdminEmails = ['ben@systemizedsales.com', 'dylan@automatedrev.com', 'jake@systemizedsales.com']
-    
-    if (!superAdminEmails.includes(user.email)) {
-      return NextResponse.json({ 
+
+    if (!SUPER_ADMIN_EMAILS.includes(user.email)) {
+      return NextResponse.json({
         error: 'This endpoint is only for authorized super admin emails',
-        yourEmail: user.email 
+        yourEmail: user.email
       }, { status: 403 })
     }
     

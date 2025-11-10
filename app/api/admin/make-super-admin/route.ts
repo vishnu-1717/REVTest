@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
+import { MAKE_SUPER_ADMIN_ALLOWED_EMAILS } from '@/lib/constants'
 
 // This is a temporary endpoint to grant super admin access
 export async function POST(request: Request) {
   try {
     const { email } = await request.json()
-    
+
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
-    
+
     // Only allow specific email for security
-    const allowedEmails = ['ben@systemizedsales.com']
-    if (!allowedEmails.includes(email)) {
+    if (!MAKE_SUPER_ADMIN_ALLOWED_EMAILS.includes(email)) {
       return NextResponse.json({ error: 'Email not authorized' }, { status: 403 })
     }
     
