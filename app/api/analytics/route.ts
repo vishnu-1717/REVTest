@@ -216,9 +216,9 @@ export async function GET(request: NextRequest) {
     
     // Calculate metrics using inclusion flag
     // Filter to only include appointments with flag = 1 (or null for backwards compatibility)
+    // Flag = 0 means excluded from analytics (e.g., duplicate, cancelled before showed)
     const countableAppointments = filteredAppointments.filter((a) =>
-      (a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null) &&
-      (a.appointmentInclusionFlag !== 0)
+      a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null
     )
     
     // Calls Created: Number of calls with a Create Date inside the selected time frame
