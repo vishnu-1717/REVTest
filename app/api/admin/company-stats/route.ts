@@ -23,129 +23,260 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get('dateTo')
     
     const result = await withPrisma(async (prisma) => {
-      const dateFilter: any = {}
+      const dateFilter: { gte?: Date; lte?: Date } = {}
       if (dateFrom) dateFilter.gte = new Date(dateFrom)
       if (dateTo) dateFilter.lte = new Date(dateTo)
-      
-      // Get all appointments for this company
-      const appointments = await prisma.appointment.findMany({
-        where: {
-          companyId: user.companyId,
-          ...(Object.keys(dateFilter).length > 0 && {
-            scheduledAt: dateFilter
-          })
-        },
-        include: {
-          contact: true,
-          closer: true,
-          setter: true,
-          calendarRelation: true
-        },
-        orderBy: {
-          scheduledAt: 'desc'
-        }
-      })
-      
-      // Get all commissions for the company
-      const commissions = await prisma.commission.findMany({
-        where: {
-          companyId: user.companyId
-        },
-        include: {
-          Sale: true
-        },
-        orderBy: {
-          calculatedAt: 'desc'
-        }
-      })
-      
-      // Get all active reps in the company
-      const activeReps = await prisma.user.findMany({
-        where: {
-          companyId: user.companyId,
-          role: {
-            in: ['rep', 'closer', 'setter']
+
+      const baseWhere = {
+        companyId: user.companyId,
+        ...(Object.keys(dateFilter).length > 0 && {
+          scheduledAt: dateFilter
+        })
+      }
+
+      // OPTIMIZED: Use database aggregations instead of loading all data
+      // Run all count queries in parallel
+      const [
+        totalAppointments,
+        scheduled,
+        showed,
+        signed,
+        noShows,
+        revenueAgg,
+        signedRevenueAgg,
+        activeReps,
+        recentAppointmentsForDisplay,
+        recentCommissionsForDisplay
+      ] = await Promise.all([
+        // Total appointments count
+        prisma.appointment.count({ where: baseWhere }),
+
+        // Scheduled (not cancelled)
+        prisma.appointment.count({
+          where: { ...baseWhere, status: { not: 'cancelled' } }
+        }),
+
+        // Showed (showed or signed)
+        prisma.appointment.count({
+          where: { ...baseWhere, status: { in: ['showed', 'signed'] } }
+        }),
+
+        // Signed
+        prisma.appointment.count({
+          where: { ...baseWhere, status: 'signed' }
+        }),
+
+        // No shows
+        prisma.appointment.count({
+          where: { ...baseWhere, status: 'no_show' }
+        }),
+
+        // Total revenue
+        prisma.appointment.aggregate({
+          where: baseWhere,
+          _sum: { cashCollected: true }
+        }),
+
+        // Signed appointments revenue (for average deal size)
+        prisma.appointment.aggregate({
+          where: { ...baseWhere, status: 'signed' },
+          _sum: { cashCollected: true },
+          _count: true
+        }),
+
+        // Get active reps
+        prisma.user.findMany({
+          where: {
+            companyId: user.companyId,
+            role: { in: ['rep', 'closer', 'setter'] },
+            isActive: true
           },
-          isActive: true
-        }
-      })
-      
-      // Calculate stats
-      const totalAppointments = appointments.length
-      const scheduled = appointments.filter((a: any) => a.status !== 'cancelled').length
-      const showed = appointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length
-      const signed = appointments.filter((a: any) => a.status === 'signed').length
-      const noShows = appointments.filter((a: any) => a.status === 'no_show').length
-      
+          select: { id: true, name: true, email: true }
+        }),
+
+        // Only fetch 5 most recent appointments for display (not all!)
+        prisma.appointment.findMany({
+          where: baseWhere,
+          include: {
+            contact: true,
+            closer: true,
+            setter: true,
+            calendarRelation: true
+          },
+          orderBy: { scheduledAt: 'desc' },
+          take: 5
+        }),
+
+        // Only fetch 5 most recent commissions for display
+        prisma.commission.findMany({
+          where: { companyId: user.companyId },
+          include: { Sale: true },
+          orderBy: { calculatedAt: 'desc' },
+          take: 5
+        })
+      ])
+
+      // Calculate rates
       const showRate = scheduled > 0 ? (showed / scheduled) * 100 : 0
       const closeRate = showed > 0 ? (signed / showed) * 100 : 0
-      
-      const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
-      
-      const totalCommissions = commissions.reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
-      const pendingCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
-        .reduce((sum: number, com: any) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
-      const releasedCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'released')
-        .reduce((sum: number, com: any) => sum + Number(com.releasedAmount), 0)
-      const paidCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'paid')
-        .reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
-      
-      // Get rep breakdown
-      const repStats: Record<string, any> = {}
-      
+      const totalRevenue = revenueAgg._sum.cashCollected || 0
+      const averageDealSize = signedRevenueAgg._count > 0
+        ? (signedRevenueAgg._sum.cashCollected || 0) / signedRevenueAgg._count
+        : 0
+
+      // OPTIMIZED: Get commission stats using database aggregation
+      const [commissionsTotalAgg, commissionsPending, commissionsReleased, commissionsPaid] = await Promise.all([
+        prisma.commission.aggregate({
+          where: { companyId: user.companyId },
+          _sum: { totalAmount: true }
+        }),
+        prisma.commission.aggregate({
+          where: {
+            companyId: user.companyId,
+            releaseStatus: { in: ['pending', 'partial'] }
+          },
+          _sum: {
+            totalAmount: true,
+            releasedAmount: true
+          }
+        }),
+        prisma.commission.aggregate({
+          where: {
+            companyId: user.companyId,
+            releaseStatus: 'released'
+          },
+          _sum: { releasedAmount: true }
+        }),
+        prisma.commission.aggregate({
+          where: {
+            companyId: user.companyId,
+            releaseStatus: 'paid'
+          },
+          _sum: { totalAmount: true }
+        })
+      ])
+
+      const totalCommissions = Number(commissionsTotalAgg._sum.totalAmount || 0)
+      const pendingCommissions =
+        Number(commissionsPending._sum.totalAmount || 0) -
+        Number(commissionsPending._sum.releasedAmount || 0)
+      const releasedCommissions = Number(commissionsReleased._sum.releasedAmount || 0)
+      const paidCommissions = Number(commissionsPaid._sum.totalAmount || 0)
+
+      // OPTIMIZED: Get per-rep stats using groupBy instead of loading all data
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+      const [repAppointmentStats, repCommissionStats, monthlyRepRevenue] = await Promise.all([
+        // Per-rep appointment stats (all time or filtered)
+        prisma.appointment.groupBy({
+          by: ['closerId', 'status'],
+          where: {
+            ...baseWhere,
+            closerId: { not: null }
+          },
+          _count: true,
+          _sum: { cashCollected: true }
+        }),
+
+        // Per-rep commission stats
+        prisma.commission.groupBy({
+          by: ['repId'],
+          where: { companyId: user.companyId },
+          _sum: { totalAmount: true }
+        }),
+
+        // Monthly revenue by rep for top performer
+        prisma.appointment.groupBy({
+          by: ['closerId'],
+          where: {
+            companyId: user.companyId,
+            closerId: { not: null },
+            scheduledAt: { gte: thirtyDaysAgo }
+          },
+          _count: true,
+          _sum: { cashCollected: true }
+        })
+      ])
+
+      // Build rep stats from aggregated data
+      interface RepStats {
+        id: string
+        name: string
+        email: string
+        appointments: number
+        revenue: number
+        commissions: number
+        showRate: number
+        closeRate: number
+        scheduled: number
+        showed: number
+        signed: number
+      }
+
+      const repStats: Record<string, RepStats> = {}
+
+      // Initialize all active reps
       for (const rep of activeReps) {
-        const repAppointments = appointments.filter((a: any) => a.closerId === rep.id)
-        const repCommissions = commissions.filter((c: any) => c.repId === rep.id)
-        
         repStats[rep.id] = {
           id: rep.id,
           name: rep.name,
           email: rep.email,
-          appointments: repAppointments.length,
-          revenue: repAppointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0),
-          commissions: repCommissions.reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0),
-          showRate: repAppointments.filter((a: any) => a.status !== 'cancelled').length > 0 
-            ? (repAppointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length / repAppointments.filter((a: any) => a.status !== 'cancelled').length) * 100 
-            : 0,
-          closeRate: repAppointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length > 0
-            ? (repAppointments.filter((a: any) => a.status === 'signed').length / repAppointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length) * 100
-            : 0
+          appointments: 0,
+          revenue: 0,
+          commissions: 0,
+          showRate: 0,
+          closeRate: 0,
+          scheduled: 0,
+          showed: 0,
+          signed: 0
         }
       }
-      
-      // Find top performing rep this month
-      const thirtyDaysAgo = new Date()
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      
-      const recentAppointments = appointments.filter((a: any) => 
-        new Date(a.scheduledAt) >= thirtyDaysAgo
-      )
-      
-      const monthlyRepStats: Record<string, { revenue: number, appointments: number }> = {}
-      for (const apt of recentAppointments) {
-        if (apt.closerId) {
-          if (!monthlyRepStats[apt.closerId]) {
-            monthlyRepStats[apt.closerId] = { revenue: 0, appointments: 0 }
-          }
-          monthlyRepStats[apt.closerId].revenue += apt.cashCollected || 0
-          monthlyRepStats[apt.closerId].appointments += 1
+
+      // Fill in appointment stats
+      for (const stat of repAppointmentStats) {
+        if (!stat.closerId || !repStats[stat.closerId]) continue
+
+        const rep = repStats[stat.closerId]
+        rep.appointments += stat._count
+        rep.revenue += Number(stat._sum.cashCollected || 0)
+
+        if (stat.status !== 'cancelled') {
+          rep.scheduled += stat._count
+        }
+        if (stat.status === 'showed' || stat.status === 'signed') {
+          rep.showed += stat._count
+        }
+        if (stat.status === 'signed') {
+          rep.signed += stat._count
         }
       }
-      
-      const topPerformer = Object.entries(monthlyRepStats)
-        .sort((a, b) => b[1].revenue - a[1].revenue)[0]
-      
-      const topPerformerInfo = topPerformer ? repStats[topPerformer[0]] : null
-      
-      // Average deal size
-      const completedSales = appointments.filter((a: any) => a.status === 'signed')
-      const averageDealSize = completedSales.length > 0
-        ? completedSales.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0) / completedSales.length
-        : 0
-      
+
+      // Fill in commission stats
+      for (const stat of repCommissionStats) {
+        if (repStats[stat.repId]) {
+          repStats[stat.repId].commissions = Number(stat._sum.totalAmount || 0)
+        }
+      }
+
+      // Calculate rates for each rep
+      for (const rep of Object.values(repStats)) {
+        rep.showRate = rep.scheduled > 0 ? (rep.showed / rep.scheduled) * 100 : 0
+        rep.closeRate = rep.showed > 0 ? (rep.signed / rep.showed) * 100 : 0
+      }
+
+      // Find top performer from monthly data
+      let topPerformerInfo: RepStats | null = null
+      if (monthlyRepRevenue.length > 0) {
+        const topPerformerData = monthlyRepRevenue.reduce((max, curr) =>
+          (curr._sum.cashCollected || 0) > (max._sum.cashCollected || 0) ? curr : max
+        )
+
+        if (topPerformerData.closerId && repStats[topPerformerData.closerId]) {
+          topPerformerInfo = repStats[topPerformerData.closerId]
+        }
+      }
+
       return {
         totalAppointments,
         scheduled,
@@ -154,7 +285,7 @@ export async function GET(request: Request) {
         noShows,
         showRate: Number(showRate.toFixed(1)),
         closeRate: Number(closeRate.toFixed(1)),
-        totalRevenue,
+        totalRevenue: Number(totalRevenue),
         averageDealSize: Number(averageDealSize.toFixed(2)),
         totalCommissions,
         pendingCommissions,
@@ -162,9 +293,11 @@ export async function GET(request: Request) {
         paidCommissions,
         activeRepsCount: activeReps.length,
         topPerformer: topPerformerInfo,
-        repStats: Object.values(repStats).sort((a: any, b: any) => b.revenue - a.revenue),
-        recentAppointments: appointments.slice(0, 5),
-        recentCommissions: commissions.slice(0, 5)
+        repStats: Object.values(repStats)
+          .sort((a, b) => b.revenue - a.revenue)
+          .map(({ scheduled, showed, signed, ...rest }) => rest), // Remove intermediate counts
+        recentAppointments: recentAppointmentsForDisplay,
+        recentCommissions: recentCommissionsForDisplay
       }
     })
     

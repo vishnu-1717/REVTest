@@ -18,77 +18,155 @@ export async function GET(request: Request) {
     const dateTo = url.searchParams.get('dateTo')
     
     const result = await withPrisma(async (prisma) => {
-      const dateFilter: any = {}
+      const dateFilter: { gte?: Date; lte?: Date } = {}
       if (dateFrom) dateFilter.gte = new Date(dateFrom)
       if (dateTo) dateFilter.lte = new Date(dateTo)
-      
-      // Get appointments for this rep (either as closer or setter)
-      const appointments = await prisma.appointment.findMany({
-        where: {
-          OR: [
-            { closerId: user.id },
-            { setterId: user.id }
-          ],
-          ...(Object.keys(dateFilter).length > 0 && {
-            scheduledAt: dateFilter
-          })
-        },
-        include: {
-          contact: true,
-          setter: true,
-          closer: true,
-          calendarRelation: true
-        },
-        orderBy: {
-          scheduledAt: 'desc'
-        }
-      })
-      
-      // Get commissions
-      const commissions = await prisma.commission.findMany({
-        where: {
-          repId: user.id
-        },
-        include: {
-          Sale: true
-        },
-        orderBy: {
-          calculatedAt: 'desc'
-        }
-      })
-      
-      // Calculate stats
-      const totalAppointments = appointments.length
-      const scheduled = appointments.filter((a: any) => a.status !== 'cancelled').length
-      const showed = appointments.filter((a: any) => a.status === 'showed' || a.status === 'signed').length
-      const signed = appointments.filter((a: any) => a.status === 'signed').length
-      const noShows = appointments.filter((a: any) => a.status === 'no_show').length
-      
+
+      const baseWhere = {
+        OR: [
+          { closerId: user.id },
+          { setterId: user.id }
+        ],
+        ...(Object.keys(dateFilter).length > 0 && {
+          scheduledAt: dateFilter
+        })
+      }
+
+      // OPTIMIZED: Use database aggregations instead of loading all appointments
+      const [
+        totalAppointments,
+        scheduled,
+        showed,
+        signed,
+        noShows,
+        revenueAgg,
+        followUpsNeeded,
+        redzoneFollowUps,
+        recentAppointmentsForDisplay,
+        recentCommissionsForDisplay,
+        commissionsTotalAgg,
+        commissionsPending,
+        commissionsReleased,
+        commissionsPaid
+      ] = await Promise.all([
+        // Total appointments count
+        prisma.appointment.count({ where: baseWhere }),
+
+        // Scheduled (not cancelled)
+        prisma.appointment.count({
+          where: { ...baseWhere, status: { not: 'cancelled' } }
+        }),
+
+        // Showed (showed or signed)
+        prisma.appointment.count({
+          where: { ...baseWhere, status: { in: ['showed', 'signed'] } }
+        }),
+
+        // Signed
+        prisma.appointment.count({
+          where: { ...baseWhere, status: 'signed' }
+        }),
+
+        // No shows
+        prisma.appointment.count({
+          where: { ...baseWhere, status: 'no_show' }
+        }),
+
+        // Total revenue
+        prisma.appointment.aggregate({
+          where: baseWhere,
+          _sum: { cashCollected: true }
+        }),
+
+        // Follow-ups needed
+        prisma.appointment.count({
+          where: {
+            ...baseWhere,
+            followUpScheduled: true,
+            status: { notIn: ['signed', 'cancelled'] }
+          }
+        }),
+
+        // Redzone follow-ups
+        prisma.appointment.count({
+          where: {
+            ...baseWhere,
+            followUpScheduled: true,
+            status: { notIn: ['signed', 'cancelled'] },
+            nurtureType: 'Redzone (Within 7 Days)'
+          }
+        }),
+
+        // Only fetch 5 most recent appointments for display
+        prisma.appointment.findMany({
+          where: baseWhere,
+          include: {
+            contact: true,
+            setter: true,
+            closer: true,
+            calendarRelation: true
+          },
+          orderBy: { scheduledAt: 'desc' },
+          take: 5
+        }),
+
+        // Only fetch 5 most recent commissions for display
+        prisma.commission.findMany({
+          where: { repId: user.id },
+          include: { Sale: true },
+          orderBy: { calculatedAt: 'desc' },
+          take: 5
+        }),
+
+        // Commission totals
+        prisma.commission.aggregate({
+          where: { repId: user.id },
+          _sum: { totalAmount: true }
+        }),
+
+        // Pending commissions
+        prisma.commission.aggregate({
+          where: {
+            repId: user.id,
+            releaseStatus: { in: ['pending', 'partial'] }
+          },
+          _sum: {
+            totalAmount: true,
+            releasedAmount: true
+          }
+        }),
+
+        // Released commissions
+        prisma.commission.aggregate({
+          where: {
+            repId: user.id,
+            releaseStatus: 'released'
+          },
+          _sum: { releasedAmount: true }
+        }),
+
+        // Paid commissions
+        prisma.commission.aggregate({
+          where: {
+            repId: user.id,
+            releaseStatus: 'paid'
+          },
+          _sum: { totalAmount: true }
+        })
+      ])
+
+      // Calculate rates
       const showRate = scheduled > 0 ? (showed / scheduled) * 100 : 0
       const closeRate = showed > 0 ? (signed / showed) * 100 : 0
-      
-      const totalRevenue = appointments.reduce((sum: number, apt: any) => sum + (apt.cashCollected || 0), 0)
-      
-      const totalCommissions = commissions.reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
-      const pendingCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'pending' || c.releaseStatus === 'partial')
-        .reduce((sum: number, com: any) => sum + (Number(com.totalAmount) - Number(com.releasedAmount)), 0)
-      const releasedCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'released')
-        .reduce((sum: number, com: any) => sum + Number(com.releasedAmount), 0)
-      const paidCommissions = commissions
-        .filter((c: any) => c.releaseStatus === 'paid')
-        .reduce((sum: number, com: any) => sum + Number(com.totalAmount), 0)
-      
-      // Follow-ups needed
-      const followUpsNeeded = appointments.filter((a: any) => 
-        a.followUpScheduled && 
-        a.status !== 'signed' && 
-        a.status !== 'cancelled'
-      )
-      
-      const redzoneFollowUps = followUpsNeeded.filter((a: any) => a.nurtureType === 'Redzone (Within 7 Days)')
-      
+      const totalRevenue = revenueAgg._sum.cashCollected || 0
+
+      const totalCommissions = Number(commissionsTotalAgg._sum.totalAmount || 0)
+      const pendingCommissions =
+        Number(commissionsPending._sum.totalAmount || 0) -
+        Number(commissionsPending._sum.releasedAmount || 0)
+      const releasedCommissions = Number(commissionsReleased._sum.releasedAmount || 0)
+      const paidCommissions = Number(commissionsPaid._sum.totalAmount || 0)
+
       return {
         totalAppointments,
         scheduled,
@@ -97,15 +175,15 @@ export async function GET(request: Request) {
         noShows,
         showRate: Number(showRate.toFixed(1)),
         closeRate: Number(closeRate.toFixed(1)),
-        totalRevenue,
+        totalRevenue: Number(totalRevenue),
         totalCommissions,
         pendingCommissions,
         releasedCommissions,
         paidCommissions,
-        followUpsNeeded: followUpsNeeded.length,
-        redzoneFollowUps: redzoneFollowUps.length,
-        recentAppointments: appointments.slice(0, 5),
-        recentCommissions: commissions.slice(0, 5)
+        followUpsNeeded,
+        redzoneFollowUps,
+        recentAppointments: recentAppointmentsForDisplay,
+        recentCommissions: recentCommissionsForDisplay
       }
     })
     
