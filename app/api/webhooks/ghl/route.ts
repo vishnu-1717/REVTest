@@ -337,7 +337,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Only proceed if we have location or contact data
-      if (locationId || body.contact_id) {
+      if (locationId || getStringValue(body.contact_id)) {
         console.log('[GHL Webhook] Found location.id at root level - using direct format')
         webhookData = {
           ...body,
@@ -410,9 +410,16 @@ export async function POST(request: NextRequest) {
     // Validate required fields
     if (!webhook.locationId) {
       // Try to get locationId from body.location.id if not in webhook
-      if (body.location?.id) {
-        webhook.locationId = body.location.id
-        console.log('[GHL Webhook] Extracted locationId from body.location.id:', webhook.locationId)
+      if (body.location && typeof body.location === 'object' && !Array.isArray(body.location)) {
+        const location = body.location as Record<string, unknown>
+        const locationId = getStringValue(location.id)
+        if (locationId) {
+          webhook.locationId = locationId
+          console.log('[GHL Webhook] Extracted locationId from body.location.id:', webhook.locationId)
+        } else {
+          console.error('[GHL Webhook] Missing locationId in payload')
+          return NextResponse.json({ error: 'Missing locationId' }, { status: 400 })
+        }
       } else {
         console.error('[GHL Webhook] Missing locationId in payload')
         return NextResponse.json({ error: 'Missing locationId' }, { status: 400 })
