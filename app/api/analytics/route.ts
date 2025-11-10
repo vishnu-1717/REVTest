@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
-import { AppointmentWhereClause, AppointmentWithRelations, CloserBreakdownAccumulator, AnalyticsBreakdownItem } from '@/types'
+import { AppointmentWhereClause, AppointmentWithRelations, AnalyticsBreakdownItem } from '@/types'
 
 // Helper types for analytics aggregations
 interface ObjectionData {
@@ -28,6 +28,21 @@ interface TimeBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'close
 interface SourceData extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
   source: string
 }
+
+// Local type for closer breakdown with all required fields
+interface CloserBreakdownItem {
+  closerId: string
+  closerEmail: string
+  closerName: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type CloserBreakdownAccumulator = Record<string, CloserBreakdownItem>
 
 export async function GET(request: NextRequest) {
   try {
