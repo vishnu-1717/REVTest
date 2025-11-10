@@ -38,15 +38,24 @@ interface DashboardPageClientProps {
   isSuperAdmin: boolean
 }
 
+const getViewAsCompany = () => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const viewAsParam = params.get('viewAs')
+  if (viewAsParam) return viewAsParam
+  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+  const value = match ? decodeURIComponent(match[1]) : null
+  if (value === 'none') return null
+  return value
+}
+
 export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin }: DashboardPageClientProps) {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('30') // days
   
   const withViewAs = useCallback((url: string) => {
-    if (typeof window === 'undefined') return url
-    const params = new URLSearchParams(window.location.search)
-    const viewAs = params.get('viewAs')
+    const viewAs = getViewAsCompany()
     if (!viewAs) return url
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}viewAs=${viewAs}`

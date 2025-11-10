@@ -1,4 +1,4 @@
-import { headers } from 'next/headers'
+import { headers, cookies } from 'next/headers'
 import { getCurrentUser } from './auth'
 import { withPrisma } from './db'
 
@@ -36,11 +36,16 @@ export async function getCompanyContext(requestUrl?: string): Promise<CompanyCon
   // For super admins, check for viewAs param
   const headersList = await headers()
   const referer = headersList.get('referer') || ''
+  const cookieStore = await cookies()
+  const cookieCompanyId = cookieStore.get('view_as_company')?.value || null
   
   // Check both referer (for page requests) and requestUrl (for API requests)
   const urlToCheck = requestUrl || referer
   const viewAsMatch = urlToCheck.match(/[?&]viewAs=([a-zA-Z0-9-_]+)/)
-  const viewAsCompanyId = viewAsMatch ? viewAsMatch[1] : null
+  let viewAsCompanyId = viewAsMatch ? viewAsMatch[1] : null
+  if (!viewAsCompanyId && cookieCompanyId) {
+    viewAsCompanyId = cookieCompanyId
+  }
   
   if (viewAsCompanyId) {
     // Super admin is viewing as another company
@@ -62,6 +67,10 @@ export async function getCompanyContext(requestUrl?: string): Promise<CompanyCon
   }
   
   // Super admin viewing their own company or no viewAs param
+  if (cookieCompanyId === 'none') {
+    viewAsCompanyId = null
+  }
+
   const userCompany = await withPrisma(async (prisma) => {
     return await prisma.company.findUnique({
       where: { id: user.companyId },

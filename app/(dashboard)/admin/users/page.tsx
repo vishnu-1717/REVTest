@@ -97,14 +97,23 @@ export default function UsersPage() {
     }
   }
 
-  const withViewAs = (url: string) => {
-    if (typeof window === 'undefined') return url
-    const params = new URLSearchParams(window.location.search)
-    const viewAs = params.get('viewAs')
-    if (!viewAs) return url
-    const separator = url.includes('?') ? '&' : '?'
-    return `${url}${separator}viewAs=${viewAs}`
-  }
+const getViewAsCompany = () => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const viewAsParam = params.get('viewAs')
+  if (viewAsParam) return viewAsParam
+  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+  const value = match ? decodeURIComponent(match[1]) : null
+  if (value === 'none') return null
+  return value
+}
+
+const withViewAs = (url: string) => {
+  const viewAs = getViewAsCompany()
+  if (!viewAs) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}viewAs=${viewAs}`
+}
 
   const fetchCompanies = async () => {
     try {

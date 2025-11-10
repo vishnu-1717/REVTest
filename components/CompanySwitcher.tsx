@@ -52,6 +52,15 @@ export default function CompanySwitcher({
     c.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
   
+  const setViewAsCookie = (companyId: string | null) => {
+    if (typeof document === 'undefined') return
+    if (companyId) {
+      document.cookie = `view_as_company=${companyId}; path=/; max-age=${60 * 60 * 12}`
+    } else {
+      document.cookie = `view_as_company=; path=/; max-age=0`
+    }
+  }
+
   const handleSwitch = (companyId: string, companyName: string) => {
     if (companyId === currentCompanyId) {
       setIsOpen(false)
@@ -60,6 +69,7 @@ export default function CompanySwitcher({
     
     setIsOpen(false)
     setSearchQuery('')
+    setViewAsCookie(companyId)
     
     // Get current path and navigate with viewAs param using window.location
     const currentPath = window.location.pathname
@@ -77,6 +87,7 @@ export default function CompanySwitcher({
   const handleClear = () => {
     setIsOpen(false)
     setSearchQuery('')
+    setViewAsCookie(null)
     
     // Remove viewAs param but keep other params
     const currentPath = window.location.pathname
