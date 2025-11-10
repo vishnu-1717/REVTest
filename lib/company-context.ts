@@ -49,9 +49,10 @@ export async function getCompanyContext(requestUrl?: string): Promise<CompanyCon
   
   if (viewAsCompanyId) {
     // Super admin is viewing as another company
+    const targetCompanyId: string = viewAsCompanyId
     const company = await withPrisma(async (prisma) => {
       return await prisma.company.findUnique({
-        where: { id: viewAsCompanyId },
+        where: { id: targetCompanyId },
         select: { id: true, name: true }
       })
     })
