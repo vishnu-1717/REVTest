@@ -73,7 +73,14 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      let pendingAppointments: Awaited<ReturnType<typeof prisma.appointment.findMany>> = []
+      type PendingAppointmentWithRelations = Prisma.AppointmentGetPayload<{
+        include: {
+          contact: { select: { name: true } }
+          closer: { select: { name: true } }
+        }
+      }>
+
+      let pendingAppointments: PendingAppointmentWithRelations[] = []
       const shouldFetchAppointments =
         !groupByCloser || typeof closerFilter !== 'undefined' || all
 
