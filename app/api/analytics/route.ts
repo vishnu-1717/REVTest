@@ -44,6 +44,47 @@ interface CloserBreakdownItem {
 
 type CloserBreakdownAccumulator = Record<string, CloserBreakdownItem>
 
+// Local type for day breakdown accumulator with all required fields
+interface DayBreakdownItem {
+  dayOfWeek: number
+  dayName: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+  noShows: number
+}
+
+type DayBreakdownAccumulator = Record<string, DayBreakdownItem>
+
+// Local type for calendar breakdown accumulator with all required fields
+interface CalendarBreakdownItem {
+  calendar: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type CalendarBreakdownAccumulator = Record<string, CalendarBreakdownItem>
+
+// Local type for traffic source breakdown accumulator with all required fields
+interface SourceBreakdownItem {
+  source: string
+  total: number
+  showed: number
+  signed: number
+  scheduled: number
+  cancelled: number
+  revenue: number
+}
+
+type SourceBreakdownAccumulator = Record<string, SourceBreakdownItem>
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getEffectiveUser()
@@ -520,9 +561,9 @@ export async function GET(request: NextRequest) {
     // Group by day of week (using countable appointments)
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
     const byDayOfWeek = Object.values(
-      countableAppointments.reduce((acc: Record<string, AnalyticsBreakdownItem & { dayOfWeek: number; dayName: string; total: number; noShows: number }>, apt) => {
+      countableAppointments.reduce((acc: DayBreakdownAccumulator, apt) => {
         const day = new Date(apt.scheduledAt).getDay()
-        
+
         if (!acc[day]) {
           acc[day] = {
             dayOfWeek: day,
@@ -532,26 +573,32 @@ export async function GET(request: NextRequest) {
             signed: 0,
             scheduled: 0,
             cancelled: 0,
-            revenue: 0
+            revenue: 0,
+            noShows: 0
           }
         }
-        
-        acc[day].total++
-        acc[day].scheduled++ // All appointments in countableAppointments are scheduled
+
+        // Store reference to help TypeScript's control flow analysis
+        const dayData = acc[day]
+        dayData.total++
+        dayData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[day].cancelled++
+          dayData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[day].showed++
+          dayData.showed++
+        } else if (apt.status === 'scheduled') {
+          // Track no-shows (scheduled but didn't show)
+          dayData.noShows++
         }
         if (apt.status === 'signed') {
-          acc[day].signed++
-          acc[day].revenue += apt.cashCollected || 0
+          dayData.signed++
+          dayData.revenue += apt.cashCollected || 0
         }
-        
+
         return acc
-      }, {} as Record<string, DayBreakdown>)
-    ).map(([_dayStr, day]: [string, DayBreakdown]): AnalyticsBreakdownItem => {
+      }, {} as DayBreakdownAccumulator)
+    ).map((day: DayBreakdownItem): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const dayExpectedCalls = day.scheduled - day.cancelled
 
@@ -590,7 +637,7 @@ export async function GET(request: NextRequest) {
     
     // Group by calendar (traffic source) - using countable appointments
     const byCalendar = Object.entries(
-      countableAppointments.reduce((acc: Record<string, CalendarBreakdown>, apt) => {
+      countableAppointments.reduce((acc: CalendarBreakdownAccumulator, apt) => {
         const key = apt.calendar || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -604,22 +651,24 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        // Store reference to help TypeScript's control flow analysis
+        const calendarData = acc[key]
+        calendarData.total++
+        calendarData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          calendarData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          calendarData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          calendarData.signed++
+          calendarData.revenue += apt.cashCollected || 0
         }
 
         return acc
-      }, {})
-    ).map(([_calendar, data]: [string, CalendarBreakdown]): AnalyticsBreakdownItem => {
+      }, {} as CalendarBreakdownAccumulator)
+    ).map(([_calendar, data]: [string, CalendarBreakdownItem]): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const calendarExpectedCalls = data.scheduled - data.cancelled
 
@@ -747,7 +796,7 @@ export async function GET(request: NextRequest) {
     
     // Group by traffic source - using countable appointments
     const byTrafficSource = Object.values(
-      countableAppointments.reduce((acc: Record<string, SourceData>, apt) => {
+      countableAppointments.reduce((acc: SourceBreakdownAccumulator, apt) => {
         const key = apt.attributionSource || 'Unknown'
         if (!acc[key]) {
           acc[key] = {
@@ -761,22 +810,24 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        acc[key].total++
-        acc[key].scheduled++ // All appointments in countableAppointments are scheduled
+        // Store reference to help TypeScript's control flow analysis
+        const sourceData = acc[key]
+        sourceData.total++
+        sourceData.scheduled++ // All appointments in countableAppointments are scheduled
         if (apt.status === 'cancelled' || apt.outcome === 'Cancelled' || apt.outcome === 'cancelled') {
-          acc[key].cancelled++
+          sourceData.cancelled++
         }
         if (apt.status === 'showed' || apt.status === 'signed') {
-          acc[key].showed++
+          sourceData.showed++
         }
         if (apt.status === 'signed') {
-          acc[key].signed++
-          acc[key].revenue += apt.cashCollected || 0
+          sourceData.signed++
+          sourceData.revenue += apt.cashCollected || 0
         }
 
         return acc
-      }, {})
-    ).map((source: SourceData): AnalyticsBreakdownItem => {
+      }, {} as SourceBreakdownAccumulator)
+    ).map((source: SourceBreakdownItem): AnalyticsBreakdownItem => {
       // Calculate expected calls: scheduled - cancelled
       const sourceExpectedCalls = source.scheduled - source.cancelled
 
