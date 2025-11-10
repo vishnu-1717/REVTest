@@ -59,7 +59,7 @@ export default function EditUserPage() {
   
   const fetchUser = async () => {
     try {
-      const res = await fetch(`/api/admin/users/${params.id}`)
+      const res = await fetch(withViewAs(`/api/admin/users/${params.id}`))
       const user: User = await res.json()
       
       setFormData({
@@ -122,7 +122,7 @@ export default function EditUserPage() {
     setSaving(true)
     
     try {
-      const res = await fetch(`/api/admin/users/${params.id}`, {
+      const res = await fetch(withViewAs(`/api/admin/users/${params.id}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -149,7 +149,7 @@ export default function EditUserPage() {
     if (!confirm('Are you sure you want to delete this user?')) return
     
     try {
-      const res = await fetch(`/api/admin/users/${params.id}`, {
+      const res = await fetch(withViewAs(`/api/admin/users/${params.id}`), {
         method: 'DELETE'
       })
       
