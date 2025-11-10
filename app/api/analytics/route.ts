@@ -626,11 +626,13 @@ export async function GET(request: NextRequest) {
           if (!acc[key]) {
             acc[key] = { type: key, count: 0, converted: 0 }
           }
-          acc[key].count++
-          if (apt.status === 'signed') acc[key].converted++
+          // Store reference to help TypeScript's control flow analysis
+          const objectionData = acc[key]
+          objectionData.count++
+          if (apt.status === 'signed') objectionData.converted++
           return acc
         }, {})
-    ).map(([_type, data]: [string, ObjectionData]): ObjectionData => ({
+    ).map(([_type, data]: [string, ObjectionData]) => ({
       ...data,
       conversionRate: data.count > 0 ? ((data.converted / data.count) * 100).toFixed(1) : 0
     })).sort((a, b) => b.count - a.count)
