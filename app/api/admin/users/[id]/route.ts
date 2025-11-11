@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,18 +14,22 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    // Verify admin permissions
     if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!currentUser.superAdmin && currentUser.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     
     const user = await withPrisma(async (prisma) => {
       return await prisma.user.findFirst({
         where: {
           id,
-          companyId: currentUser.companyId
+          companyId: effectiveCompanyId
         },
         include: {
           commissionRole: true,
@@ -61,7 +66,7 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -71,34 +76,38 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    // Verify admin permissions
     if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!currentUser.superAdmin && currentUser.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { name, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive, ghlUserId } = await request.json()
     
     const user = await withPrisma(async (prisma) => {
-      // If ghlUserId is being set, check for uniqueness within company
       if (ghlUserId !== undefined && ghlUserId !== null && ghlUserId !== '') {
         const existingUser = await prisma.user.findFirst({
           where: {
-            companyId: currentUser.companyId,
+            companyId: effectiveCompanyId,
             ghlUserId: ghlUserId,
             NOT: { id }
           }
         })
         
         if (existingUser) {
-          throw new Error('GHL User ID is already assigned to another user in your company')
+          throw new Error('GHL User ID is already assigned to another user in this company')
         }
       }
       
       return await prisma.user.update({
         where: {
           id,
-          companyId: currentUser.companyId
+          companyId: effectiveCompanyId
         },
         data: {
           name,
@@ -122,7 +131,7 @@ export async function PUT(
 }
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -132,20 +141,24 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    // Verify admin permissions
     if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
     
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!currentUser.superAdmin && currentUser.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { name, email, role, commissionRoleId, customCommissionRate, canViewTeamMetrics, isActive, ghlUserId } = await request.json()
     
     const updatedUser = await withPrisma(async (prisma) => {
-      // Check if user belongs to the same company
       const existing = await prisma.user.findFirst({
         where: {
           id,
-          companyId: currentUser.companyId
+          companyId: effectiveCompanyId
         }
       })
       
@@ -153,12 +166,11 @@ export async function PATCH(
         throw new Error('User not found')
       }
       
-      // If email is being changed, check if new email is already taken
       if (email && email !== existing.email) {
         const emailExists = await prisma.user.findFirst({
           where: {
             email,
-            companyId: currentUser.companyId
+            companyId: effectiveCompanyId
           }
         })
         
@@ -167,24 +179,24 @@ export async function PATCH(
         }
       }
       
-      // If ghlUserId is being set, check for uniqueness within company
       if (ghlUserId !== undefined && ghlUserId !== null && ghlUserId !== '' && ghlUserId !== existing.ghlUserId) {
         const existingUser = await prisma.user.findFirst({
           where: {
-            companyId: currentUser.companyId,
+            companyId: effectiveCompanyId,
             ghlUserId: ghlUserId,
             NOT: { id }
           }
         })
         
         if (existingUser) {
-          throw new Error('GHL User ID is already assigned to another user in your company')
+          throw new Error('GHL User ID is already assigned to another user in this company')
         }
       }
       
       return await prisma.user.update({
         where: {
-          id
+          id,
+          companyId: effectiveCompanyId
         },
         data: {
           ...(name && { name }),
@@ -212,7 +224,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -222,8 +234,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
-    // Verify admin permissions
-    // Also check if user is impersonating - if so, they need to be impersonating an admin
     const isImpersonating = (currentUser as any)._impersonating === true
     
     if (currentUser.role !== 'admin' && !currentUser.superAdmin) {
@@ -236,8 +246,12 @@ export async function DELETE(
     }
     
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!currentUser.superAdmin && currentUser.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
     
-    // Don't allow deleting yourself
     if (id === currentUser.id) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
@@ -246,19 +260,11 @@ export async function DELETE(
     }
     
     const result = await withPrisma(async (prisma) => {
-      // Check if impersonating - if so, always restrict to impersonated user's company
-      const isImpersonating = (currentUser as any)._impersonating === true
-      
-      // Build where clause
-      const whereClause: any = { id }
-      // If impersonating OR not super admin, restrict to company
-      // This ensures that when a super admin impersonates, they can only delete from that company
-      if (isImpersonating || !currentUser.superAdmin) {
-        whereClause.companyId = currentUser.companyId
-      }
-      
       const user = await prisma.user.findFirst({
-        where: whereClause,
+        where: {
+          id,
+          companyId: effectiveCompanyId
+        },
         include: {
           _count: {
             select: {
@@ -274,7 +280,6 @@ export async function DELETE(
       }
       
       if (user._count.Commission > 0 || user._count.AppointmentsAsCloser > 0) {
-        // Instead of deleting, deactivate
         await prisma.user.update({
           where: { id },
           data: { isActive: false }
@@ -283,7 +288,6 @@ export async function DELETE(
         return { deactivated: true, hasData: true }
       }
       
-      // If no data, can safely delete
       await prisma.user.delete({
         where: { id }
       })

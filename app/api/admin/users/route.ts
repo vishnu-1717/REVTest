@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { clerkClient } from '@clerk/nextjs/server'
 import { getEffectiveUser } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await getEffectiveUser()
     
@@ -23,19 +24,16 @@ export async function GET() {
       isImpersonating: (user as any)._impersonating
     })
     
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && effectiveCompanyId !== user.companyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+      
     const users = await withPrisma(async (prisma) => {
-      const where: any = {}
-      
-      // Check if impersonating - if so, always filter by impersonated user's company
-      const isImpersonating = (user as any)._impersonating === true
-      
-      // If impersonating OR not super admin, filter by company
-      // This ensures that when a super admin impersonates a user, they only see that user's company data
-      if (isImpersonating || !user.superAdmin) {
-        where.companyId = user.companyId
+      const where: any = {
+        companyId: effectiveCompanyId
       }
-      
-      console.log('Users API - Where clause:', where, 'isImpersonating:', isImpersonating)
       
       return await prisma.user.findMany({
         where,
