@@ -21,6 +21,283 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
 
   await withPrisma(async (prisma) => {
     const timezone = company.timezone || 'UTC'
+    const safeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+    const normalizeWhitespace = (value: string): string => value.replace(/\s+/g, ' ').trim()
+    const normalizeName = (value: string): string =>
+      normalizeWhitespace(
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+      )
+    const normalizeEmail = (value: string): string => value.trim().toLowerCase()
+
+    type NameCandidateMeta = {
+      normalized: string
+      raw: string
+      hint?: 'setter' | 'closer'
+      sources: Set<string>
+    }
+
+    type EmailCandidateMeta = {
+      normalized: string
+      raw: string
+      sources: Set<string>
+    }
+
+    const collectAssigneeCandidates = () => {
+      const nameCandidates = new Map<string, NameCandidateMeta>()
+      const emailCandidates = new Map<string, EmailCandidateMeta>()
+
+      const addNameCandidate = (value: unknown, source: string, key?: string) => {
+        const raw = safeString(value)
+        if (!raw) return
+        const normalized = normalizeName(raw)
+        if (!normalized) return
+        const lowerKey = key?.toLowerCase() || ''
+        let hint: 'setter' | 'closer' | undefined
+        if (lowerKey.includes('setter') || lowerKey.includes('sdr')) {
+          hint = 'setter'
+        } else if (
+          lowerKey.includes('closer') ||
+          lowerKey.includes('assignee') ||
+          lowerKey.includes('host') ||
+          lowerKey.includes('owner') ||
+          lowerKey.includes('advisor') ||
+          lowerKey.includes('sales')
+        ) {
+          hint = 'closer'
+        }
+
+        const existing = nameCandidates.get(normalized)
+        if (existing) {
+          existing.sources.add(source)
+          if (!existing.hint && hint) {
+            existing.hint = hint
+          }
+        } else {
+          nameCandidates.set(normalized, {
+            normalized,
+            raw,
+            hint,
+            sources: new Set([source])
+          })
+        }
+      }
+
+      const addEmailCandidate = (value: unknown, source: string) => {
+        const raw = safeString(value)
+        if (!raw) return
+        const normalized = normalizeEmail(raw)
+        if (!normalized) return
+        const existing = emailCandidates.get(normalized)
+        if (existing) {
+          existing.sources.add(source)
+        } else {
+          emailCandidates.set(normalized, {
+            normalized,
+            raw,
+            sources: new Set([source])
+          })
+        }
+      }
+
+      const processField = (key: string, value: unknown, source: string) => {
+        if (typeof value !== 'string') return
+        const lowerKey = key.toLowerCase()
+        const isNameField = /(assignee|host|closer|rep|owner|advisor|coach|team|staff|sales|consultant|executive|agent)/i.test(lowerKey)
+        const isEmailField =
+          lowerKey.includes('email') &&
+          (lowerKey.includes('assignee') ||
+            lowerKey.includes('host') ||
+            lowerKey.includes('user') ||
+            lowerKey.includes('staff') ||
+            lowerKey.includes('closer') ||
+            lowerKey.includes('rep') ||
+            lowerKey.includes('owner'))
+
+        if (isNameField) {
+          addNameCandidate(value, `${source}.${key}`, key)
+        }
+        if (isEmailField) {
+          addEmailCandidate(value, `${source}.${key}`)
+        }
+      }
+
+      const processObject = (obj: unknown, source: string) => {
+        if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
+        Object.entries(obj as Record<string, unknown>).forEach(([key, value]) => {
+          processField(key, value, source)
+          const lowerKey = key.toLowerCase()
+          if (
+            value &&
+            typeof value === 'object' &&
+            !Array.isArray(value) &&
+            (lowerKey.includes('user') || lowerKey.includes('assignee') || lowerKey.includes('host'))
+          ) {
+            processObject(value, `${source}.${key}`)
+          }
+        })
+      }
+
+      processObject(webhook.allCustomFields, 'payload')
+      processObject(webhook.customFields, 'customFields')
+
+      const payloadUser =
+        (webhook.allCustomFields as Record<string, unknown> | undefined)?.user ||
+        (webhook as unknown as Record<string, unknown>).user
+
+      if (payloadUser && typeof payloadUser === 'object' && !Array.isArray(payloadUser)) {
+        const userObj = payloadUser as Record<string, unknown>
+        const userName = `${safeString(userObj.firstName)} ${safeString(userObj.lastName)}`.trim()
+        if (userName) {
+          addNameCandidate(userName, 'payload.user', 'user')
+        }
+        if (safeString(userObj.name)) {
+          addNameCandidate(userObj.name, 'payload.user', 'user')
+        }
+        if (safeString(userObj.email)) {
+          addEmailCandidate(userObj.email, 'payload.user')
+        }
+      }
+
+      const calendlyAssignee = safeString(
+        (webhook.allCustomFields as Record<string, unknown> | undefined)?.['Calendly Assignee']
+      )
+      if (calendlyAssignee) {
+        addNameCandidate(calendlyAssignee, 'payload.Calendly Assignee', 'Calendly Assignee')
+      }
+
+      const calendlyHost = safeString(
+        (webhook.allCustomFields as Record<string, unknown> | undefined)?.['Calendly Host']
+      )
+      if (calendlyHost) {
+        addNameCandidate(calendlyHost, 'payload.Calendly Host', 'Calendly Host')
+      }
+
+      const calendlyAssignedTo = safeString(
+        (webhook.allCustomFields as Record<string, unknown> | undefined)?.['Calendly Assigned To']
+      )
+      if (calendlyAssignedTo) {
+        addNameCandidate(calendlyAssignedTo, 'payload.Calendly Assigned To', 'Calendly Assigned To')
+      }
+
+      const calendlyAssigneeEmail = safeString(
+        (webhook.allCustomFields as Record<string, unknown> | undefined)?.['Calendly Assignee Email']
+      )
+      if (calendlyAssigneeEmail) {
+        addEmailCandidate(calendlyAssigneeEmail, 'payload.Calendly Assignee Email')
+      }
+
+      return { nameCandidates, emailCandidates }
+    }
+
+    const resolveFallbackAssignee = async () => {
+      const { nameCandidates, emailCandidates } = collectAssigneeCandidates()
+      const contactNormalized = normalizeName(
+        safeString(webhook.contactName) ||
+          `${safeString(webhook.firstName)} ${safeString(webhook.lastName)}`.trim()
+      )
+      const normalizedTitle = normalizeName(safeString(webhook.title))
+      const normalizedCalendarName = normalizeName(safeString(webhook.calendarName))
+
+      if (
+        nameCandidates.size === 0 &&
+        emailCandidates.size === 0 &&
+        !normalizedTitle &&
+        !normalizedCalendarName
+      ) {
+        return null
+      }
+
+      const users = await prisma.user.findMany({
+        where: {
+          companyId: company.id,
+          isActive: true
+        }
+      })
+
+      const isContactName = (normalizedName: string) =>
+        !!contactNormalized && normalizedName === contactNormalized
+
+      for (const userCandidate of users) {
+        const emailNorm = normalizeEmail(userCandidate.email || '')
+        if (!emailNorm) continue
+        const emailMeta = emailCandidates.get(emailNorm)
+        if (emailMeta) {
+          const assignment: 'setter' | 'closer' =
+            userCandidate.role?.toLowerCase() === 'setter' ? 'setter' : 'closer'
+          return {
+            user: userCandidate,
+            assignment,
+            reason: `email match (${Array.from(emailMeta.sources).join(', ')})`
+          }
+        }
+      }
+
+      for (const userCandidate of users) {
+        const normalizedCandidateName = normalizeName(userCandidate.name || '')
+        if (!normalizedCandidateName || isContactName(normalizedCandidateName)) continue
+        const nameMeta = nameCandidates.get(normalizedCandidateName)
+        if (nameMeta) {
+          const assignment: 'setter' | 'closer' =
+            nameMeta.hint || (userCandidate.role?.toLowerCase() === 'setter' ? 'setter' : 'closer')
+          return {
+            user: userCandidate,
+            assignment,
+            reason: `name match (${Array.from(nameMeta.sources).join(', ')})`
+          }
+        }
+      }
+
+      const nameMetaList = Array.from(nameCandidates.values())
+      if (nameMetaList.length > 0) {
+        for (const userCandidate of users) {
+          const normalizedCandidateName = normalizeName(userCandidate.name || '')
+          if (!normalizedCandidateName || isContactName(normalizedCandidateName)) continue
+          const candidateParts = normalizedCandidateName.split(' ').filter(Boolean)
+          if (candidateParts.length === 0) continue
+
+          for (const meta of nameMetaList) {
+            if (meta.normalized === normalizedCandidateName) continue
+            const metaParts = meta.normalized.split(' ').filter(Boolean)
+            if (candidateParts.every((part) => metaParts.includes(part))) {
+              const assignment: 'setter' | 'closer' =
+                meta.hint ||
+                (userCandidate.role?.toLowerCase() === 'setter' ? 'setter' : 'closer')
+              return {
+                user: userCandidate,
+                assignment,
+                reason: `partial name match (${Array.from(meta.sources).join(', ')})`
+              }
+            }
+          }
+        }
+      }
+
+      if (normalizedTitle || normalizedCalendarName) {
+        for (const userCandidate of users) {
+          const normalizedCandidateName = normalizeName(userCandidate.name || '')
+          if (!normalizedCandidateName || isContactName(normalizedCandidateName)) continue
+          const matchesTitle =
+            normalizedTitle && normalizedTitle.includes(normalizedCandidateName)
+          const matchesCalendar =
+            normalizedCalendarName && normalizedCalendarName.includes(normalizedCandidateName)
+          if (matchesTitle || matchesCalendar) {
+            const assignment: 'setter' | 'closer' =
+              userCandidate.role?.toLowerCase() === 'setter' ? 'setter' : 'closer'
+            return {
+              user: userCandidate,
+              assignment,
+              reason: matchesTitle
+                ? 'title contained user name'
+                : 'calendar name contained user name'
+            }
+          }
+        }
+      }
+
+      return null
+    }
   // Find or create contact
   let contact = await prisma.contact.findFirst({
     where: {
@@ -119,6 +396,17 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
         } catch (createError) {
           const errorMessage = createError instanceof Error ? createError.message : 'Unknown error'
           console.error('[GHL Webhook] Failed to auto-create calendar:', errorMessage)
+          const existingCalendar = await prisma.calendar.findFirst({
+            where: {
+              companyId: company.id,
+              ghlCalendarId: webhook.calendarId
+            },
+            include: { defaultCloser: true }
+          })
+          if (existingCalendar) {
+            calendar = existingCalendar
+            console.log('[GHL Webhook] ✅ Using existing calendar after conflict')
+          }
         }
       } else {
         console.log('[GHL Webhook] Cannot auto-create calendar - missing calendarId or calendarName')
@@ -192,6 +480,27 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
   if (!setter && !closer && calendar?.defaultCloser) {
     closer = calendar.defaultCloser
     console.log('[GHL Webhook] ✅ Using calendar default CLOSER:', closer.name)
+  }
+
+  if (!closer || !setter) {
+    const fallbackMatch = await resolveFallbackAssignee()
+    if (fallbackMatch) {
+      if (fallbackMatch.assignment === 'setter' && !setter) {
+        setter = fallbackMatch.user
+        console.log(
+          '[GHL Webhook] ✅ Assigned to SETTER via fallback detection:',
+          setter.name,
+          `(${fallbackMatch.reason})`
+        )
+      } else if (!closer) {
+        closer = fallbackMatch.user
+        console.log(
+          '[GHL Webhook] ✅ Assigned to CLOSER via fallback detection:',
+          closer.name,
+          `(${fallbackMatch.reason})`
+        )
+      }
+    }
   }
 
   if (!closer) {
