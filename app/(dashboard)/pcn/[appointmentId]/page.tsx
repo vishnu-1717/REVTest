@@ -7,6 +7,24 @@ import { PCNAppointmentData } from '@/types/pcn'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
+const getViewAsCompany = () => {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const viewAsParam = params.get('viewAs')
+  if (viewAsParam) return viewAsParam
+  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+  const value = match ? decodeURIComponent(match[1]) : null
+  if (!value || value === 'none') return null
+  return value
+}
+
+const withViewAs = (url: string) => {
+  const viewAs = getViewAsCompany()
+  if (!viewAs) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}viewAs=${viewAs}`
+}
+
 export default function PCNSubmissionPage() {
   const params = useParams()
   const router = useRouter()
@@ -23,8 +41,8 @@ export default function PCNSubmissionPage() {
     async function fetchData() {
       try {
         const [appointmentRes, userRes] = await Promise.all([
-          fetch(`/api/appointments/${appointmentId}`),
-          fetch('/api/admin/users/me', { credentials: 'include' })
+          fetch(withViewAs(`/api/appointments/${appointmentId}`)),
+          fetch(withViewAs('/api/admin/users/me'), { credentials: 'include' })
         ])
 
         if (!appointmentRes.ok) {
@@ -65,7 +83,7 @@ export default function PCNSubmissionPage() {
     setDeleteError(null)
 
     try {
-      const response = await fetch(`/api/appointments/${appointment.id}`, {
+      const response = await fetch(withViewAs(`/api/appointments/${appointment.id}`), {
         method: 'DELETE',
         credentials: 'include'
       })

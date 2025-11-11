@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { getEffectiveUser } from '@/lib/auth'
+import { getEffectiveCompanyId } from '@/lib/company-context'
 
 export async function GET(
   request: NextRequest,
@@ -14,13 +15,18 @@ export async function GET(
     }
 
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && user.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const result = await withPrisma(async (prisma) => {
 
       // Build where clause based on role
       const whereClause: any = {
         id: id,
-        companyId: user.companyId
+        companyId: effectiveCompanyId
       }
 
       // Reps can only see their own appointments
@@ -172,6 +178,11 @@ export async function DELETE(
     }
 
     const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && user.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const result = await withPrisma(async (prisma) => {
       try {
@@ -179,7 +190,7 @@ export async function DELETE(
           const appointment = await tx.appointment.findFirst({
             where: {
               id,
-              companyId: user.companyId
+              companyId: effectiveCompanyId
             },
             include: {
               matchedSales: {
