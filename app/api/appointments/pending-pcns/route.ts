@@ -42,14 +42,9 @@ export async function GET(request: NextRequest) {
       })
       const timezone = getCompanyTimezone(company)
 
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
-      
       const baseWhereClause: Prisma.AppointmentWhereInput = {
         companyId: effectiveCompanyId,
         pcnSubmitted: false,
-        scheduledAt: {
-          lte: tenMinutesAgo
-        },
         status: 'scheduled',
         AND: [
           {

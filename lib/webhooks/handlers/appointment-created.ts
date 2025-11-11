@@ -194,6 +194,26 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     console.log('[GHL Webhook] ✅ Using calendar default CLOSER:', closer.name)
   }
 
+  if (!closer) {
+    const recentCloserAppointment = await prisma.appointment.findFirst({
+      where: {
+        contactId: contact.id,
+        companyId: company.id,
+        closerId: { not: null }
+      },
+      orderBy: {
+        scheduledAt: 'desc'
+      }
+    })
+
+    if (recentCloserAppointment?.closerId) {
+      closer = await prisma.user.findUnique({ where: { id: recentCloserAppointment.closerId } }) || null
+      if (closer) {
+        console.log('[GHL Webhook] ✅ Reusing recent closer for contact:', closer.name)
+      }
+    }
+  }
+
   // Determine if this is first call (not a reschedule/follow-up)
   const isFirstCall = !calendar?.calendarType?.match(/reschedule|follow.?up/i)
 
