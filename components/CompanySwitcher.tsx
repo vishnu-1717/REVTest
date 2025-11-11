@@ -31,13 +31,26 @@ export default function CompanySwitcher({
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
-  
-  // Determine which company is currently being viewed
-  const viewAsParam = searchParams.get('viewAs')
-  const viewingCompanyId = viewAsParam || currentCompanyId
-  const viewingCompany = companies.find(c => c.id === viewingCompanyId)
-  const viewingCompanyName = viewingCompany?.name || currentCompanyName || 'My Company'
-  
+
+  const getViewAsCompany = () => {
+    const viewAsParam = searchParams.get('viewAs')
+    if (viewAsParam) return viewAsParam
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+    const value = match ? decodeURIComponent(match[1]) : null
+    if (!value || value === 'none') return null
+    return value
+  }
+
+  const [viewingCompanyId, setViewingCompanyId] = useState<string>(
+    getViewAsCompany() || currentCompanyId
+  )
+
+  useEffect(() => {
+    setViewingCompanyId(getViewAsCompany() || currentCompanyId)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, currentCompanyId])
+
   useEffect(() => {
     if (isSuperAdmin) {
       fetch('/api/super-admin/companies')
@@ -46,18 +59,21 @@ export default function CompanySwitcher({
         .catch(console.error)
     }
   }, [isSuperAdmin])
-  
+
   const filteredCompanies = companies.filter(c =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.email.toLowerCase().includes(searchQuery.toLowerCase())
   )
-  
+
+  const viewingCompany = companies.find(c => c.id === viewingCompanyId)
+  const viewingCompanyName = viewingCompany?.name || currentCompanyName || 'My Company'
+
   const setViewAsCookie = (companyId: string | null) => {
     if (typeof document === 'undefined') return
     if (companyId) {
       document.cookie = `view_as_company=${companyId}; path=/; max-age=${60 * 60 * 12}`
     } else {
-      document.cookie = `view_as_company=; path=/; max-age=0`
+      document.cookie = `view_as_company=none; path=/; max-age=${60 * 60 * 12}`
     }
   }
 
@@ -66,43 +82,39 @@ export default function CompanySwitcher({
       setIsOpen(false)
       return
     }
-    
+
     setIsOpen(false)
     setSearchQuery('')
     setViewAsCookie(companyId)
-    
-    // Get current path and navigate with viewAs param using window.location
+    setViewingCompanyId(companyId)
+
     const currentPath = window.location.pathname
-    
-    // Keep existing params but update viewAs
     const params = new URLSearchParams(window.location.search)
     params.set('viewAs', companyId)
-    
+
     const newUrl = `${currentPath}?${params.toString()}`
-    
-    // Use window.location for full navigation (will reload with the param)
     window.location.href = newUrl
   }
-  
+
   const handleClear = () => {
     setIsOpen(false)
     setSearchQuery('')
     setViewAsCookie(null)
-    
-    // Remove viewAs param but keep other params
+    setViewingCompanyId(currentCompanyId)
+
     const currentPath = window.location.pathname
     const params = new URLSearchParams(window.location.search)
     params.delete('viewAs')
-    
-    const newUrl = params.toString() 
+
+    const newUrl = params.toString()
       ? `${currentPath}?${params.toString()}`
       : currentPath
-    
+
     window.location.href = newUrl
   }
-  
+
   if (!isSuperAdmin) return null
-  
+
   return (
     <div className="relative">
       <Button
@@ -118,7 +130,7 @@ export default function CompanySwitcher({
           'Switch Company'
         )}
       </Button>
-      
+
       {isOpen && (
         <>
           <div
@@ -136,9 +148,8 @@ export default function CompanySwitcher({
                 autoFocus
               />
             </div>
-            
+
             <div className="max-h-96 overflow-y-auto">
-              {/* Your Company (Clear View) */}
               {viewingCompanyId !== currentCompanyId && (
                 <div
                   onClick={handleClear}
@@ -155,8 +166,7 @@ export default function CompanySwitcher({
                   </div>
                 </div>
               )}
-              
-              {/* Company List */}
+
               {filteredCompanies.length === 0 ? (
                 <div className="px-4 py-8 text-center text-gray-500 text-sm">
                   {searchQuery ? 'No companies found' : 'No companies available'}
@@ -185,7 +195,7 @@ export default function CompanySwitcher({
                 ))
               )}
             </div>
-            
+
             <div className="p-3 border-t bg-gray-50">
               <p className="text-xs text-gray-500">
                 Viewing data from another company's perspective
