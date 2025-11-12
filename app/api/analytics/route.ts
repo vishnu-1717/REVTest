@@ -11,6 +11,9 @@ interface ObjectionData {
   count: number
   converted: number
   conversionRate?: string | number
+  salesCycleTotalDays?: number
+  salesCycleCount?: number
+  averageSalesCycleDays?: number | null
 }
 
 interface CalendarBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
@@ -41,6 +44,9 @@ interface CloserBreakdownItem {
   scheduled: number
   cancelled: number
   revenue: number
+  salesCycleTotalDays: number
+  salesCycleCount: number
+  averageSalesCycleDays?: number | null
 }
 
 type CloserBreakdownAccumulator = Record<string, CloserBreakdownItem>
@@ -56,6 +62,9 @@ interface DayBreakdownItem {
   cancelled: number
   revenue: number
   noShows: number
+  salesCycleTotalDays: number
+  salesCycleCount: number
+  averageSalesCycleDays?: number | null
 }
 
 type DayBreakdownAccumulator = Record<string, DayBreakdownItem>
@@ -69,6 +78,9 @@ interface CalendarBreakdownItem {
   scheduled: number
   cancelled: number
   revenue: number
+  salesCycleTotalDays: number
+  salesCycleCount: number
+  averageSalesCycleDays?: number | null
 }
 
 type CalendarBreakdownAccumulator = Record<string, CalendarBreakdownItem>
@@ -82,6 +94,9 @@ interface SourceBreakdownItem {
   scheduled: number
   cancelled: number
   revenue: number
+  salesCycleTotalDays: number
+  salesCycleCount: number
+  averageSalesCycleDays?: number | null
 }
 
 type SourceBreakdownAccumulator = Record<string, SourceBreakdownItem>
@@ -500,6 +515,111 @@ export async function GET(request: NextRequest) {
       ...filteredSales.map(s => s.appointmentId).filter(Boolean)
     ]).size
     
+    // Prepare maps for sales cycle calculations
+    const contactIds = Array.from(
+      new Set(
+        countableAppointments
+          .map((apt) => apt.contactId)
+          .filter((id): id is string => !!id)
+      )
+    )
+
+    const contactFirstCallMap = new Map<string, Date>()
+
+    if (contactIds.length > 0) {
+      const firstCallResults = await withPrisma(async (prisma) => {
+        return await prisma.appointment.groupBy({
+          by: ['contactId'],
+          where: {
+            companyId: effectiveCompanyId,
+            contactId: { in: contactIds },
+            OR: [
+              { appointmentInclusionFlag: 1 },
+              { appointmentInclusionFlag: null }
+            ]
+          } as any,
+          _min: {
+            scheduledAt: true
+          }
+        })
+      })
+
+      firstCallResults.forEach((result) => {
+        if (result.contactId && result._min?.scheduledAt) {
+          contactFirstCallMap.set(result.contactId, result._min.scheduledAt)
+        }
+      })
+    }
+
+    const salesByAppointmentId = new Map<
+      string,
+      { paidAt: Date | null; amount: number }
+    >()
+    filteredSales.forEach((sale) => {
+      if (!sale.appointmentId) return
+      const paidAtDate = sale.paidAt ? new Date(sale.paidAt) : null
+      const existing = salesByAppointmentId.get(sale.appointmentId)
+      if (
+        !existing ||
+        (paidAtDate &&
+          (!existing.paidAt || paidAtDate.getTime() < existing.paidAt.getTime()))
+      ) {
+        salesByAppointmentId.set(sale.appointmentId, {
+          paidAt: paidAtDate,
+          amount: Number(sale.amount)
+        })
+      }
+    })
+
+    interface SalesCycleMeta {
+      days: number
+      firstCallAt: Date
+      closedAt: Date
+    }
+
+    const appointmentSalesCycleMeta = new Map<string, SalesCycleMeta>()
+    let salesCycleTotalDays = 0
+    let salesCycleCount = 0
+
+    countableAppointments.forEach((apt) => {
+      const hasSignedStatus = apt.status === 'signed'
+      const associatedSale = salesByAppointmentId.get(apt.id)
+
+      if (!hasSignedStatus && !associatedSale) {
+        return
+      }
+
+      const firstCallAt = apt.contactId
+        ? contactFirstCallMap.get(apt.contactId)
+        : null
+      if (!firstCallAt) return
+
+      const closedAt =
+        associatedSale?.paidAt ||
+        (apt.pcnSubmittedAt ? new Date(apt.pcnSubmittedAt) : null) ||
+        (apt.updatedAt ? new Date(apt.updatedAt) : null) ||
+        new Date(apt.scheduledAt)
+
+      const diffMs = closedAt.getTime() - firstCallAt.getTime()
+      if (diffMs < 0) {
+        return
+      }
+
+      const diffDays = diffMs / (1000 * 60 * 60 * 24)
+      appointmentSalesCycleMeta.set(apt.id, {
+        days: diffDays,
+        firstCallAt,
+        closedAt
+      })
+      salesCycleTotalDays += diffDays
+      salesCycleCount += 1
+    })
+
+    const averageSalesCycleDays =
+      salesCycleCount > 0
+        ? parseFloat((salesCycleTotalDays / salesCycleCount).toFixed(1))
+        : null
+    
     // Close Rate: Percent of showed calls that closed
     const closeRate = callsShown > 0
       ? ((totalUnitsClosed / callsShown) * 100).toFixed(1)
@@ -558,7 +678,9 @@ export async function GET(request: NextRequest) {
             signed: 0,
             scheduled: 0,
             cancelled: 0,
-            revenue: 0
+            revenue: 0,
+            salesCycleTotalDays: 0,
+            salesCycleCount: 0
           }
         }
 
@@ -577,6 +699,12 @@ export async function GET(request: NextRequest) {
           closerData.revenue += apt.cashCollected || 0
         }
 
+        const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+        if (salesCycleMeta) {
+          closerData.salesCycleTotalDays += salesCycleMeta.days
+          closerData.salesCycleCount += 1
+        }
+
         return acc
       }, {} as CloserBreakdownAccumulator)
     ).map((closer) => {
@@ -590,11 +718,19 @@ export async function GET(request: NextRequest) {
       
       // Close Rate: Percent of qualified calls that closed (legacy calculation for backward compatibility)
       const closerCloseRate = closer.showed > 0 ? ((closer.signed / closer.showed) * 100).toFixed(1) : '0'
+
+      const averageSalesCycleDays =
+        closer.salesCycleCount > 0
+          ? parseFloat((closer.salesCycleTotalDays / closer.salesCycleCount).toFixed(1))
+          : null
+
+      const { salesCycleTotalDays, salesCycleCount, ...rest } = closer
       
       return {
-        ...closer,
+        ...rest,
         showRate: closerShowRate,
-        closeRate: closerCloseRate
+        closeRate: closerCloseRate,
+        averageSalesCycleDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
 
@@ -614,7 +750,9 @@ export async function GET(request: NextRequest) {
             scheduled: 0,
             cancelled: 0,
             revenue: 0,
-            noShows: 0
+            noShows: 0,
+            salesCycleTotalDays: 0,
+            salesCycleCount: 0
           }
         }
 
@@ -636,6 +774,12 @@ export async function GET(request: NextRequest) {
           dayData.revenue += apt.cashCollected || 0
         }
 
+        const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+        if (salesCycleMeta) {
+          dayData.salesCycleTotalDays += salesCycleMeta.days
+          dayData.salesCycleCount += 1
+        }
+
         return acc
       }, {} as DayBreakdownAccumulator)
     ).map((day: DayBreakdownItem) => {
@@ -650,10 +794,18 @@ export async function GET(request: NextRequest) {
       // Close Rate: Percent of qualified calls that closed
       const dayCloseRate = day.showed > 0 ? ((day.signed / day.showed) * 100).toFixed(1) : '0'
 
+      const averageSalesCycleDays =
+        day.salesCycleCount > 0
+          ? parseFloat((day.salesCycleTotalDays / day.salesCycleCount).toFixed(1))
+          : null
+
+      const { salesCycleTotalDays, salesCycleCount, ...rest } = day
+
       return {
-        ...day,
+        ...rest,
         showRate: dayShowRate,
-        closeRate: dayCloseRate
+        closeRate: dayCloseRate,
+        averageSalesCycleDays
       }
     }).sort((a, b) => a.dayOfWeek - b.dayOfWeek)
     
@@ -664,18 +816,34 @@ export async function GET(request: NextRequest) {
         .reduce((acc: Record<string, ObjectionData>, apt) => {
           const key = apt.objectionType || 'None'
           if (!acc[key]) {
-            acc[key] = { type: key, count: 0, converted: 0 }
+            acc[key] = { type: key, count: 0, converted: 0, salesCycleTotalDays: 0, salesCycleCount: 0 }
           }
           // Store reference to help TypeScript's control flow analysis
           const objectionData = acc[key]
           objectionData.count++
           if (apt.status === 'signed') objectionData.converted++
+          const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+          if (salesCycleMeta) {
+            objectionData.salesCycleTotalDays =
+              (objectionData.salesCycleTotalDays || 0) + salesCycleMeta.days
+            objectionData.salesCycleCount =
+              (objectionData.salesCycleCount || 0) + 1
+          }
           return acc
         }, {})
-    ).map(([_type, data]: [string, ObjectionData]) => ({
-      ...data,
-      conversionRate: data.count > 0 ? ((data.converted / data.count) * 100).toFixed(1) : 0
-    })).sort((a, b) => b.count - a.count)
+    ).map(([_type, data]: [string, ObjectionData]) => {
+      const { salesCycleTotalDays = 0, salesCycleCount = 0, ...rest } = data
+      const averageSalesCycleDays =
+        salesCycleCount > 0
+          ? parseFloat((salesCycleTotalDays / salesCycleCount).toFixed(1))
+          : null
+
+      return {
+        ...rest,
+        conversionRate: rest.count > 0 ? ((rest.converted / rest.count) * 100).toFixed(1) : 0,
+        averageSalesCycleDays
+      }
+    }).sort((a, b) => b.count - a.count)
     
     // Group by calendar (traffic source) - using countable appointments
     const byCalendar = Object.entries(
@@ -689,7 +857,9 @@ export async function GET(request: NextRequest) {
             signed: 0,
             scheduled: 0,
             cancelled: 0,
-            revenue: 0
+            revenue: 0,
+            salesCycleTotalDays: 0,
+            salesCycleCount: 0
           }
         }
 
@@ -708,6 +878,12 @@ export async function GET(request: NextRequest) {
           calendarData.revenue += apt.cashCollected || 0
         }
 
+        const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+        if (salesCycleMeta) {
+          calendarData.salesCycleTotalDays += salesCycleMeta.days
+          calendarData.salesCycleCount += 1
+        }
+
         return acc
       }, {} as CalendarBreakdownAccumulator)
     ).map(([_calendar, data]: [string, CalendarBreakdownItem]) => {
@@ -722,10 +898,18 @@ export async function GET(request: NextRequest) {
       // Close Rate: Percent of qualified calls that closed
       const calendarCloseRate = data.showed > 0 ? ((data.signed / data.showed) * 100).toFixed(1) : '0'
 
+      const averageSalesCycleDays =
+        data.salesCycleCount > 0
+          ? parseFloat((data.salesCycleTotalDays / data.salesCycleCount).toFixed(1))
+          : null
+
+      const { salesCycleTotalDays, salesCycleCount, ...rest } = data
+
       return {
-        ...data,
+        ...rest,
         showRate: calendarShowRate,
-        closeRate: calendarCloseRate
+        closeRate: calendarCloseRate,
+        averageSalesCycleDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
@@ -748,8 +932,13 @@ export async function GET(request: NextRequest) {
               acc.signed++
               acc.revenue += apt.cashCollected || 0
             }
+            const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+            if (salesCycleMeta) {
+              acc.salesCycleTotalDays += salesCycleMeta.days
+              acc.salesCycleCount += 1
+            }
             return acc
-          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0 })
       },
       {
         type: 'Follow Up',
@@ -768,8 +957,13 @@ export async function GET(request: NextRequest) {
               acc.signed++
               acc.revenue += apt.cashCollected || 0
             }
+            const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+            if (salesCycleMeta) {
+              acc.salesCycleTotalDays += salesCycleMeta.days
+              acc.salesCycleCount += 1
+            }
             return acc
-          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0 })
       }
     ].map(type => {
       // Calculate expected calls: scheduled - cancelled
@@ -783,10 +977,18 @@ export async function GET(request: NextRequest) {
       // Close Rate: Percent of qualified calls that closed
       const typeCloseRate = type.showed > 0 ? ((type.signed / type.showed) * 100).toFixed(1) : '0'
       
+      const averageSalesCycleDays =
+        type.salesCycleCount > 0
+          ? parseFloat((type.salesCycleTotalDays / type.salesCycleCount).toFixed(1))
+          : null
+
+      const { salesCycleTotalDays, salesCycleCount, ...rest } = type
+
       return {
-        ...type,
+        ...rest,
         showRate: typeShowRate,
-        closeRate: typeCloseRate
+        closeRate: typeCloseRate,
+        averageSalesCycleDays
       }
     })
     
@@ -813,6 +1015,17 @@ export async function GET(request: NextRequest) {
       ).length
       const showed = periodAppointments.filter(a => a.status === 'showed' || a.status === 'signed').length
       const signed = periodAppointments.filter(a => a.status === 'signed').length
+      const salesCycleStats = periodAppointments.reduce(
+        (acc, apt) => {
+          const meta = appointmentSalesCycleMeta.get(apt.id)
+          if (meta) {
+            acc.totalDays += meta.days
+            acc.count += 1
+          }
+          return acc
+        },
+        { totalDays: 0, count: 0 }
+      )
       
       // Calculate expected calls: scheduled - cancelled
       const periodExpectedCalls = scheduled - cancelled
@@ -825,6 +1038,11 @@ export async function GET(request: NextRequest) {
       // Close Rate: Percent of qualified calls that closed
       const periodCloseRate = showed > 0 ? ((signed / showed) * 100).toFixed(1) : '0'
       
+      const averageSalesCycleDays =
+        salesCycleStats.count > 0
+          ? parseFloat((salesCycleStats.totalDays / salesCycleStats.count).toFixed(1))
+          : null
+
       return {
         period: period.charAt(0).toUpperCase() + period.slice(1),
         total: periodAppointments.length,
@@ -832,7 +1050,8 @@ export async function GET(request: NextRequest) {
         showed,
         signed,
         showRate: periodShowRate,
-        closeRate: periodCloseRate
+        closeRate: periodCloseRate,
+        averageSalesCycleDays
       }
     })
     
@@ -848,7 +1067,9 @@ export async function GET(request: NextRequest) {
             signed: 0,
             scheduled: 0,
             cancelled: 0,
-            revenue: 0
+            revenue: 0,
+            salesCycleTotalDays: 0,
+            salesCycleCount: 0
           }
         }
 
@@ -867,6 +1088,12 @@ export async function GET(request: NextRequest) {
           sourceData.revenue += apt.cashCollected || 0
         }
 
+        const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+        if (salesCycleMeta) {
+          sourceData.salesCycleTotalDays += salesCycleMeta.days
+          sourceData.salesCycleCount += 1
+        }
+
         return acc
       }, {} as SourceBreakdownAccumulator)
     ).map((source: SourceBreakdownItem) => {
@@ -881,26 +1108,45 @@ export async function GET(request: NextRequest) {
       // Close Rate: Percent of qualified calls that closed
       const sourceCloseRate = source.showed > 0 ? ((source.signed / source.showed) * 100).toFixed(1) : '0'
 
+      const averageSalesCycleDays =
+        source.salesCycleCount > 0
+          ? parseFloat((source.salesCycleTotalDays / source.salesCycleCount).toFixed(1))
+          : null
+
+      const { salesCycleTotalDays, salesCycleCount, ...rest } = source
+
       return {
-        ...source,
+        ...rest,
         showRate: sourceShowRate,
-        closeRate: sourceCloseRate
+        closeRate: sourceCloseRate,
+        averageSalesCycleDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
-    const mapAppointmentDetail = (apt: AppointmentWithRelations) => ({
-      id: apt.id,
-      scheduledAt: apt.scheduledAt.toISOString(),
-      createdAt: apt.createdAt?.toISOString() || null,
-      contactName: apt.contact?.name || 'Unknown contact',
-      closerId: apt.closerId,
-      closerName: apt.closer?.name || 'Unassigned',
-      status: apt.status,
-      outcome: apt.outcome,
-      cashCollected: apt.cashCollected !== null && apt.cashCollected !== undefined ? Number(apt.cashCollected) : null,
-      pcnSubmittedAt: apt.pcnSubmittedAt?.toISOString() || null,
-      notes: apt.notes || null
-    })
+    const mapAppointmentDetail = (apt: AppointmentWithRelations) => {
+      const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+      return {
+        id: apt.id,
+        scheduledAt: apt.scheduledAt.toISOString(),
+        createdAt: apt.createdAt?.toISOString() || null,
+        contactName: apt.contact?.name || 'Unknown contact',
+        closerId: apt.closerId,
+        closerName: apt.closer?.name || 'Unassigned',
+        status: apt.status,
+        outcome: apt.outcome,
+        cashCollected:
+          apt.cashCollected !== null && apt.cashCollected !== undefined
+            ? Number(apt.cashCollected)
+            : null,
+        pcnSubmittedAt: apt.pcnSubmittedAt?.toISOString() || null,
+        notes: apt.notes || null,
+        salesCycleDays: salesCycleMeta
+          ? parseFloat(salesCycleMeta.days.toFixed(1))
+          : null,
+        firstCallAt: salesCycleMeta ? salesCycleMeta.firstCallAt.toISOString() : null,
+        closedAt: salesCycleMeta ? salesCycleMeta.closedAt.toISOString() : null
+      }
+    }
 
     let detail: any = null
 
@@ -1041,6 +1287,19 @@ export async function GET(request: NextRequest) {
           }
           break
         }
+        case 'salescycle': {
+          const cycleAppointments = countableAppointments.filter((apt) =>
+            appointmentSalesCycleMeta.has(apt.id)
+          )
+          detail = {
+            metric: 'salesCycle',
+            items: cycleAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
         default: {
           detail = {
             metric: detailMetricRaw,
@@ -1068,6 +1327,8 @@ export async function GET(request: NextRequest) {
       cashCollected,
       missingPCNs,
       timezone: companyTimezone,
+      averageSalesCycleDays,
+      salesCycleCount,
       
       // Legacy metrics (for backward compatibility)
       totalAppointments,

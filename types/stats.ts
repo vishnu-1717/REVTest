@@ -78,6 +78,7 @@ export interface AnalyticsBreakdownItem {
   showRate: string
   closeRate: string
   total?: number
+  averageSalesCycleDays?: number | null
 }
 
 export interface CloserBreakdownItem extends AnalyticsBreakdownItem {
@@ -101,6 +102,8 @@ export interface AnalyticsResponse extends BaseStats {
   qualifiedCalls: number
   qualifiedRate: string
   missingPCNs: number
+  averageSalesCycleDays: number | null
+  salesCycleCount: number
 
   // Breakdowns
   byCloser: AnalyticsBreakdown
