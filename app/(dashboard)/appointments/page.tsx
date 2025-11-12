@@ -58,15 +58,6 @@ export default function AppointmentsPage() {
     return `${url}${separator}viewAs=${viewAs}`
   }, [])
 
-  useEffect(() => {
-    fetchUser()
-    fetchAppointments()
-  }, [])
-
-  useEffect(() => {
-    fetchUpcomingAppointments()
-  }, [fetchUpcomingAppointments])
-
   const fetchAppointments = async () => {
     try {
       setLoading(true)
@@ -138,6 +129,15 @@ export default function AppointmentsPage() {
     upcomingDateFrom,
     upcomingDateTo
   ])
+
+  useEffect(() => {
+    fetchUser()
+    fetchAppointments()
+  }, [])
+
+  useEffect(() => {
+    fetchUpcomingAppointments()
+  }, [fetchUpcomingAppointments])
 
   const fetchUser = async () => {
     try {
