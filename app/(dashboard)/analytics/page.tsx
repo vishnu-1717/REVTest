@@ -21,10 +21,48 @@ interface FilterState {
   timeOfDay: string
 }
 
-export default function AnalyticsPage() {
-  const [filters, setFilters] = useState<FilterState>({
-    dateFrom: '',
-    dateTo: '',
+type QuickViewRange =
+  | 'today'
+  | 'yesterday'
+  | 'this_week'
+  | 'last_week'
+  | 'last_month'
+  | 'this_year'
+
+const formatDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const startOfWeek = (date: Date): Date => {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const day = start.getDay()
+  const diff = (day + 6) % 7 // Treat Monday as start of week
+  start.setDate(start.getDate() - diff)
+  return start
+}
+
+const endOfWeek = (start: Date): Date => {
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return end
+}
+
+const startOfMonth = (date: Date): Date => {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+const startOfYear = (date: Date): Date => {
+  return new Date(date.getFullYear(), 0, 1)
+}
+
+const createDefaultFilters = (): FilterState => {
+  const today = new Date()
+  return {
+    dateFrom: formatDate(startOfMonth(today)),
+    dateTo: formatDate(new Date(today.getFullYear(), today.getMonth(), today.getDate())),
     closer: '',
     status: '',
     dayOfWeek: '',
@@ -36,7 +74,67 @@ export default function AnalyticsPage() {
     maxDealSize: '',
     calendar: '',
     timeOfDay: ''
-  })
+  }
+}
+
+const computeQuickViewRange = (range: QuickViewRange) => {
+  const today = new Date()
+  const todayAtMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+  switch (range) {
+    case 'today': {
+      return {
+        from: formatDate(todayAtMidnight),
+        to: formatDate(todayAtMidnight)
+      }
+    }
+    case 'yesterday': {
+      const yesterday = new Date(todayAtMidnight)
+      yesterday.setDate(yesterday.getDate() - 1)
+      return {
+        from: formatDate(yesterday),
+        to: formatDate(yesterday)
+      }
+    }
+    case 'this_week': {
+      const weekStart = startOfWeek(todayAtMidnight)
+      return {
+        from: formatDate(weekStart),
+        to: formatDate(todayAtMidnight)
+      }
+    }
+    case 'last_week': {
+      const thisWeekStart = startOfWeek(todayAtMidnight)
+      const lastWeekStart = new Date(thisWeekStart)
+      lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+      const lastWeekEnd = endOfWeek(lastWeekStart)
+      return {
+        from: formatDate(lastWeekStart),
+        to: formatDate(lastWeekEnd)
+      }
+    }
+    case 'last_month': {
+      const firstOfThisMonth = startOfMonth(todayAtMidnight)
+      const lastMonthEnd = new Date(firstOfThisMonth)
+      lastMonthEnd.setDate(0)
+      const lastMonthStart = startOfMonth(lastMonthEnd)
+      return {
+        from: formatDate(lastMonthStart),
+        to: formatDate(lastMonthEnd)
+      }
+    }
+    case 'this_year': {
+      const yearStart = startOfYear(todayAtMidnight)
+      return {
+        from: formatDate(yearStart),
+        to: formatDate(todayAtMidnight)
+      }
+    }
+  }
+}
+
+export default function AnalyticsPage() {
+  const [filters, setFilters] = useState<FilterState>(() => createDefaultFilters())
   
   const [analytics, setAnalytics] = useState<any>(null)
   const [closers, setClosers] = useState<any[]>([])
@@ -44,6 +142,7 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(false)
   const [activeView, setActiveView] = useState<'overview' | 'closers' | 'calendars' | 'objections'>('overview')
   const [timezone, setTimezone] = useState('UTC')
+  const [activeQuickView, setActiveQuickView] = useState<QuickViewRange | null>(null)
   
   useEffect(() => {
     fetchClosers()
@@ -65,11 +164,13 @@ export default function AnalyticsPage() {
     }
   }
   
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = async (overrideFilters?: FilterState) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      Object.entries(filters).forEach(([key, value]) => {
+      const filtersToUse = overrideFilters ?? filters
+
+      Object.entries(filtersToUse).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
       
@@ -100,9 +201,39 @@ export default function AnalyticsPage() {
   }
   
   const handleApplyFilters = () => {
+    setActiveQuickView(null)
     fetchAnalytics()
   }
+
+  const handleFilterChange = (nextFilters: FilterState) => {
+    setActiveQuickView(null)
+    setFilters(nextFilters)
+  }
+
+  const handleQuickView = (range: QuickViewRange) => {
+    const computed = computeQuickViewRange(range)
+    if (!computed) return
+
+    const updatedFilters: FilterState = {
+      ...filters,
+      dateFrom: computed.from,
+      dateTo: computed.to
+    }
+
+    setFilters(updatedFilters)
+    setActiveQuickView(range)
+    fetchAnalytics(updatedFilters)
+  }
   
+  const quickViews: Array<{ id: QuickViewRange; label: string }> = [
+    { id: 'today', label: 'Today' },
+    { id: 'yesterday', label: 'Yesterday' },
+    { id: 'this_week', label: 'This Week' },
+    { id: 'last_week', label: 'Last Week' },
+    { id: 'last_month', label: 'Last Month' },
+    { id: 'this_year', label: 'This Year' }
+  ]
+
   return (
     <div className="container mx-auto py-10">
       <div className="mb-8">
@@ -117,9 +248,21 @@ export default function AnalyticsPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {quickViews.map((view) => (
+              <Button
+                key={view.id}
+                variant={activeQuickView === view.id ? 'default' : 'outline'}
+                onClick={() => handleQuickView(view.id)}
+                className={activeQuickView === view.id ? '' : 'text-black'}
+              >
+                {view.label}
+              </Button>
+            ))}
+          </div>
           <AdvancedFilters
             filters={filters}
-            onFilterChange={setFilters}
+            onFilterChange={handleFilterChange}
             closers={closers}
             calendars={calendars}
           />
