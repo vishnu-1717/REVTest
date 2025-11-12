@@ -68,16 +68,17 @@ export async function GET(request: NextRequest) {
       const dateFrom = parseDateParam(dateFromParam)
       const dateTo = parseDateParam(dateToParam, true)
 
-      const scheduledFrom =
+      const effectiveDateFrom =
         dateFrom && dateFrom > tenMinutesAgo ? dateFrom : tenMinutesAgo
+      const effectiveDateTo = dateTo || undefined
 
       const baseWhereClause: Prisma.AppointmentWhereInput = {
         companyId: effectiveCompanyId,
         status: 'scheduled',
         pcnSubmitted: false,
         scheduledAt: {
-          gte: scheduledFrom,
-          ...(dateTo ? { lte: dateTo } : {})
+          gte: effectiveDateFrom,
+          ...(effectiveDateTo ? { lte: effectiveDateTo } : {})
         },
         AND: [
           {
@@ -94,21 +95,6 @@ export async function GET(request: NextRequest) {
       }
 
       const listWhereClause: Prisma.AppointmentWhereInput = { ...baseWhereClause }
-
-      if (dateFrom && dateFrom > tenMinutesAgo) {
-        listWhereClause.scheduledAt = {
-          ...(listWhereClause.scheduledAt || {}),
-          gte: dateFrom
-        }
-      }
-
-      if (dateTo) {
-        listWhereClause.scheduledAt = {
-          ...(listWhereClause.scheduledAt || {}),
-          lte: dateTo,
-          ...(dateFrom && dateFrom > tenMinutesAgo ? { gte: dateFrom } : {})
-        }
-      }
 
       if (typeof closerIdParam === 'string' && closerIdParam.trim().length > 0) {
         if (closerIdParam === 'unassigned') {
