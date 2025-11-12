@@ -283,6 +283,30 @@ export async function POST(request: NextRequest) {
         qualificationStatus: extractField<string>(flattened, FIELD_MAP.qualificationStatus) as any
       }
 
+      if (
+        (!submission.cancellationReason ||
+          (typeof submission.cancellationReason === 'string' &&
+            submission.cancellationReason.trim().length === 0)) &&
+        canonicalOutcome === 'cancelled'
+      ) {
+        const fallbackCancellation =
+          flattened['Call Notes - Cancellation Reason'] ||
+          flattened['call notes - cancellation reason'] ||
+          flattened['PCN - Cancellation Reason'] ||
+          flattened['pcn - cancellation reason'] ||
+          flattened['cancellation reason'] ||
+          payload['Call Notes - Cancellation Reason'] ||
+          payload['PCN - Cancellation Reason'] ||
+          payload['cancellation reason']
+
+        if (typeof fallbackCancellation === 'string') {
+          const trimmed = fallbackCancellation.trim()
+          if (trimmed.length > 0) {
+            submission.cancellationReason = trimmed
+          }
+        }
+      }
+
       const rawNoShowCommunicative = extractField<string>(
         flattened,
         FIELD_MAP.noShowCommunicative
