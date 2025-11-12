@@ -101,7 +101,11 @@ export async function submitPCN({
       outcome: submission.callOutcome,
       pcnSubmitted: true,
       pcnSubmittedAt: new Date(),
-      pcnSubmittedByUserId: actorUserId ?? undefined,
+      pcnSubmittedBy: actorUserId
+        ? { connect: { id: actorUserId } }
+        : actorUserId === null
+        ? { disconnect: true }
+        : undefined,
       notes: submission.notes || null
     }
 
