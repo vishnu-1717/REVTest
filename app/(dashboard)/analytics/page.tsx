@@ -351,7 +351,8 @@ export default function AnalyticsPage() {
   )
 
   return (
-    <div className="container mx-auto py-10">
+    <>
+      <div className="container mx-auto py-10">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Sales Analytics</h1>
         <p className="text-gray-600">Deep dive into your sales performance</p>
@@ -841,7 +842,7 @@ export default function AnalyticsPage() {
           )}
         </>
       )}
-    </div>
+      </div>
       {detailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
           <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-full overflow-hidden">
@@ -932,6 +933,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
+    </>
   )
 }
 
