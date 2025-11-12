@@ -212,18 +212,21 @@ export async function POST(request: NextRequest) {
         return logFailure(403, 'Invalid secret')
       }
 
-      const appointmentId =
+      const rawAppointmentId =
         extractField<string>(flattened, FIELD_MAP.appointmentId) ||
         flattened['appointment.id'] ||
         flattened['data.appointmentId'] ||
         payload['appointmentId']
 
-      if (!appointmentId || typeof appointmentId !== 'string') {
+      const appointmentId = typeof rawAppointmentId === 'string' ? rawAppointmentId.trim() : ''
+
+      if (!appointmentId) {
         return logFailure(400, 'Appointment ID not found in payload')
       }
 
       const rawOutcome =
         (extractField<string>(flattened, FIELD_MAP.callOutcome) || '').trim().toLowerCase()
+      const normalizedOutcome = rawOutcome.replace(/[_\s-]+/g, '_')
 
       const outcomeAliases: Record<string, PCNSubmission['callOutcome']> = {
         showed: 'showed',
@@ -236,14 +239,18 @@ export async function POST(request: NextRequest) {
         contract_sent: 'contract_sent',
         'no show': 'no_show',
         'no_show': 'no_show',
+        'no-show': 'no_show',
+        'no-showed': 'no_show',
+        'no_showed': 'no_show',
+        'no showed': 'no_show',
         noshow: 'no_show',
         cancelled: 'cancelled',
         canceled: 'cancelled'
       }
 
       const canonicalOutcome =
-        outcomeAliases[rawOutcome as keyof typeof outcomeAliases] ??
-        (rawOutcome as PCNSubmission['callOutcome'])
+        outcomeAliases[normalizedOutcome as keyof typeof outcomeAliases] ??
+        (normalizedOutcome as PCNSubmission['callOutcome'])
 
       const allowedOutcomes: PCNSubmission['callOutcome'][] = [
         'showed',
@@ -264,10 +271,11 @@ export async function POST(request: NextRequest) {
         notes: extractField<string>(flattened, FIELD_MAP.notes) || '',
         whyDidntMoveForward: extractField<string>(flattened, FIELD_MAP.why) || undefined,
         nurtureType: extractField<string>(flattened, FIELD_MAP.nurtureType) as any,
-        followUpScheduled: parseBoolean(extractField(flattened, FIELD_MAP.followUpScheduled)),
+        followUpScheduled:
+          parseBoolean(extractField(flattened, FIELD_MAP.followUpScheduled)) ?? false,
         followUpDate: extractField<string>(flattened, FIELD_MAP.followUpDate) || undefined,
         cashCollected: parseCash(extractField(flattened, FIELD_MAP.cashCollected)),
-        wasOfferMade: parseBoolean(extractField(flattened, FIELD_MAP.offerMade)),
+        wasOfferMade: parseBoolean(extractField(flattened, FIELD_MAP.offerMade)) ?? false,
         noShowCommunicative: parseBoolean(extractField(flattened, FIELD_MAP.noShowCommunicative)),
         cancellationReason: extractField<string>(flattened, FIELD_MAP.cancellationReason) || undefined,
         disqualificationReason: extractField<string>(flattened, FIELD_MAP.disqualificationReason) || undefined,
