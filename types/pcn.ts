@@ -135,6 +135,25 @@ export interface PendingPCNsResponse {
   byCloser?: PendingPCNCloserSummary[]
 }
 
+export interface UpcomingAppointment {
+  id: string
+  scheduledAt: string
+  contactName: string
+  closerId: string | null
+  closerName: string | null
+  calendarId: string | null
+  calendarName: string
+  timezone?: string
+}
+
+export interface UpcomingAppointmentsResponse {
+  appointments: UpcomingAppointment[]
+  totalCount: number
+  timezone?: string
+  closers?: Array<{ id: string; name: string }>
+  calendars?: Array<{ key: string; label: string }>
+}
+
 // Option lists for dropdowns
 export const PCN_OPTIONS = {
   whyDidntMoveForward: [

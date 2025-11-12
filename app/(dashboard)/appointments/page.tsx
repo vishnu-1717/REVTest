@@ -15,7 +15,13 @@ import {
 } from '@/components/ui/select'
 import { formatDistanceToNow } from 'date-fns'
 import { formatMinutesOverdue } from '@/lib/utils'
-import { PendingPCN, PendingPCNCloserSummary, PendingPCNsResponse } from '@/types/pcn'
+import {
+  PendingPCN,
+  PendingPCNCloserSummary,
+  PendingPCNsResponse,
+  UpcomingAppointment,
+  UpcomingAppointmentsResponse
+} from '@/types/pcn'
 
 export default function AppointmentsPage() {
   const router = useRouter()
@@ -33,17 +39,39 @@ export default function AppointmentsPage() {
   const [closerFilter, setCloserFilter] = useState<string>('all')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([])
+  const [upcomingTotal, setUpcomingTotal] = useState<number>(0)
+  const [upcomingLoading, setUpcomingLoading] = useState<boolean>(false)
+  const [upcomingCloserOptions, setUpcomingCloserOptions] = useState<Array<{ id: string; name: string }>>([])
+  const [upcomingCalendarOptions, setUpcomingCalendarOptions] = useState<Array<{ key: string; label: string }>>([])
+  const [upcomingCloserFilter, setUpcomingCloserFilter] = useState<string>('all')
+  const [upcomingCalendarFilter, setUpcomingCalendarFilter] = useState<string>('all')
+  const [upcomingDateFrom, setUpcomingDateFrom] = useState<string>('')
+  const [upcomingDateTo, setUpcomingDateTo] = useState<string>('')
+
+  const appendViewAs = useCallback((url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }, [])
 
   useEffect(() => {
     fetchUser()
     fetchAppointments()
   }, [])
 
+  useEffect(() => {
+    fetchUpcomingAppointments()
+  }, [fetchUpcomingAppointments])
+
   const fetchAppointments = async () => {
     try {
       setLoading(true)
       // Fetch all pending PCNs when on the appointments page
-      const response = await fetch('/api/appointments/pending-pcns?all=true&groupBy=closer', {
+      const response = await fetch(appendViewAs('/api/appointments/pending-pcns?all=true&groupBy=closer'), {
         credentials: 'include'
       })
       const data: PendingPCNsResponse = await response.json()
@@ -62,6 +90,54 @@ export default function AppointmentsPage() {
       setLoading(false)
     }
   }
+
+  const fetchUpcomingAppointments = useCallback(async () => {
+    try {
+      setUpcomingLoading(true)
+      const params = new URLSearchParams()
+      if (upcomingDateFrom) {
+        params.append('dateFrom', upcomingDateFrom)
+      }
+      if (upcomingDateTo) {
+        params.append('dateTo', upcomingDateTo)
+      }
+      if (upcomingCloserFilter !== 'all') {
+        params.append('closerId', upcomingCloserFilter)
+      }
+      if (upcomingCalendarFilter !== 'all') {
+        params.append('calendar', upcomingCalendarFilter)
+      }
+      params.append('limit', '500')
+
+      const response = await fetch(
+        appendViewAs(`/api/appointments/upcoming?${params.toString()}`),
+        { credentials: 'include' }
+      )
+      const data: UpcomingAppointmentsResponse = await response.json()
+
+      setUpcomingAppointments(data.appointments || [])
+      setUpcomingTotal(data.totalCount || 0)
+      if (data.timezone) {
+        setTimezone(data.timezone)
+      }
+      if (data.closers) {
+        setUpcomingCloserOptions(data.closers)
+      }
+      if (data.calendars) {
+        setUpcomingCalendarOptions(data.calendars)
+      }
+    } catch (error) {
+      console.error('Failed to fetch upcoming appointments:', error)
+    } finally {
+      setUpcomingLoading(false)
+    }
+  }, [
+    appendViewAs,
+    upcomingCalendarFilter,
+    upcomingCloserFilter,
+    upcomingDateFrom,
+    upcomingDateTo
+  ])
 
   const fetchUser = async () => {
     try {
@@ -204,6 +280,32 @@ export default function AppointmentsPage() {
     }
   }
 
+  const upcomingCloserSelectOptions = useMemo(() => {
+    const baseOptions = [
+      { value: 'all', label: 'All closers' },
+      { value: 'unassigned', label: 'Unassigned' }
+    ]
+    const additional = upcomingCloserOptions
+      .filter((closer) => closer.id)
+      .map((closer) => ({
+        value: closer.id,
+        label: closer.name || 'Unnamed rep'
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return [...baseOptions, ...additional]
+  }, [upcomingCloserOptions])
+
+  const upcomingCalendarSelectOptions = useMemo(() => {
+    const baseOptions = [{ value: 'all', label: 'All calendars' }]
+    const additional = upcomingCalendarOptions
+      .map((calendar) => ({
+        value: calendar.key,
+        label: calendar.label
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return [...baseOptions, ...additional]
+  }, [upcomingCalendarOptions])
+
   const closerFromQuery = searchParams?.get('closerId')
 
   useEffect(() => {
@@ -248,6 +350,9 @@ export default function AppointmentsPage() {
           <div className="flex justify-between items-center">
             <div>
               <CardTitle>Pending Post-Call Notes</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Reporting in {timezone}
+              </p>
               {totalCount > 0 && (
                 <p className="text-sm text-gray-500 mt-1">
                   {totalCount} total pending {searchQuery && `(${filteredAppointments.length} matching)`}
@@ -449,6 +554,136 @@ export default function AppointmentsPage() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Upcoming Appointments</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Appointments scheduled in the future. PCNs become available 10 minutes after the start time.
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Times shown in {timezone}
+              </p>
+            </div>
+            <Badge variant="outline">
+              {upcomingTotal} upcoming
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">From date</label>
+              <Input
+                type="date"
+                value={upcomingDateFrom}
+                onChange={(e) => setUpcomingDateFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">To date</label>
+              <Input
+                type="date"
+                value={upcomingDateTo}
+                onChange={(e) => setUpcomingDateTo(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Closer</label>
+              <Select
+                value={upcomingCloserFilter}
+                onValueChange={setUpcomingCloserFilter}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All closers" />
+                </SelectTrigger>
+                <SelectContent>
+                  {upcomingCloserSelectOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Calendar</label>
+              <Select
+                value={upcomingCalendarFilter}
+                onValueChange={setUpcomingCalendarFilter}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All calendars" />
+                </SelectTrigger>
+                <SelectContent>
+                  {upcomingCalendarSelectOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUpcomingDateFrom('')
+                setUpcomingDateTo('')
+                setUpcomingCloserFilter('all')
+                setUpcomingCalendarFilter('all')
+              }}
+            >
+              Reset filters
+            </Button>
+          </div>
+
+          <div className="rounded-lg border">
+            <div className="grid grid-cols-12 gap-4 px-4 py-3 text-sm font-medium text-gray-500 border-b bg-gray-50">
+              <div className="col-span-4 md:col-span-3">Scheduled</div>
+              <div className="col-span-4 md:col-span-3">Contact</div>
+              <div className="hidden md:block md:col-span-3">Closer</div>
+              <div className="col-span-4 md:col-span-3">Calendar</div>
+            </div>
+            {upcomingLoading ? (
+              <div className="py-6 text-center text-gray-500 text-sm">
+                Loading upcoming appointments...
+              </div>
+            ) : upcomingAppointments.length === 0 ? (
+              <div className="py-6 text-center text-gray-500 text-sm">
+                No upcoming appointments for the selected filters.
+              </div>
+            ) : (
+              upcomingAppointments.map((apt) => (
+                <div
+                  key={apt.id}
+                  className="grid grid-cols-12 gap-4 px-4 py-3 text-sm border-b last:border-b-0 hover:bg-gray-50 transition"
+                >
+                  <div className="col-span-4 md:col-span-3 font-medium">
+                    {formatScheduledAt(apt.scheduledAt)}
+                  </div>
+                  <div className="col-span-4 md:col-span-3">
+                    <div className="font-medium">{apt.contactName}</div>
+                    <div className="md:hidden text-xs text-gray-500 mt-1">
+                      Closer: {apt.closerName || 'Unassigned'}
+                    </div>
+                  </div>
+                  <div className="hidden md:block md:col-span-3 text-gray-600">
+                    {apt.closerName || 'Unassigned'}
+                  </div>
+                  <div className="col-span-4 md:col-span-3 text-gray-600">
+                    {apt.calendarName || 'Unassigned'}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
