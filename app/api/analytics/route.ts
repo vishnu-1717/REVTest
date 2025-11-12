@@ -906,10 +906,13 @@ export async function GET(request: NextRequest) {
 
     if (detailMetric) {
       const normalizedMetric = detailMetric.toLowerCase()
-      const appointmentDetailMap = new Map(
-        countableAppointments.map((apt) => [apt.id, mapAppointmentDetail(apt)])
-      )
-
+    const appointmentDetailMap = new Map<string, ReturnType<typeof mapAppointmentDetail>>()
+    countableAppointments.forEach((apt) => {
+      appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt))
+    })
+    callsCreatedAppointments.forEach((apt) => {
+      appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt))
+    })
       switch (normalizedMetric) {
         case 'callscreated': {
           detail = {
