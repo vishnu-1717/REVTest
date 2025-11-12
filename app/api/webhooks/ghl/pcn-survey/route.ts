@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
         qualificationStatus: extractField<string>(flattened, FIELD_MAP.qualificationStatus) as any
       }
 
-      if (callOutcome === 'showed' && !submission.firstCallOrFollowUp) {
+      if (canonicalOutcome === 'showed' && !submission.firstCallOrFollowUp) {
         submission.firstCallOrFollowUp = submission.followUpScheduled ? 'follow_up' : 'first_call'
       }
 
