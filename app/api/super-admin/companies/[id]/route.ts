@@ -2,6 +2,15 @@ import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 
+const isValidTimezone = (timezone: string): boolean => {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -109,6 +118,58 @@ export async function DELETE(
     return NextResponse.json(
       { error: error.message },
       { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireSuperAdmin()
+    const { id } = await params
+    const body = await request.json()
+    const requestedTimezone =
+      typeof body.timezone === 'string' && body.timezone.trim().length > 0
+        ? body.timezone.trim()
+        : ''
+
+    if (!requestedTimezone) {
+      return NextResponse.json({ error: 'Timezone is required' }, { status: 400 })
+    }
+
+    if (!isValidTimezone(requestedTimezone)) {
+      return NextResponse.json({ error: 'Invalid timezone provided' }, { status: 400 })
+    }
+
+    const updatedCompany = await withPrisma(async (prisma) => {
+      const existing = await prisma.company.findUnique({ where: { id } })
+
+      if (!existing) {
+        throw new Error('Company not found')
+      }
+
+      return prisma.company.update({
+        where: { id },
+        data: { timezone: requestedTimezone },
+        select: {
+          id: true,
+          name: true,
+          timezone: true
+        }
+      })
+    })
+
+    return NextResponse.json({ company: updatedCompany })
+  } catch (error: any) {
+    console.error('Error updating company timezone:', error)
+    if (error?.message === 'Company not found') {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    return NextResponse.json(
+      { error: error?.message || 'Failed to update company' },
+      { status: 400 }
     )
   }
 }

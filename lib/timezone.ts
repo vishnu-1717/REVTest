@@ -74,6 +74,32 @@ export function convertDateRangeToUtc({ dateFrom, dateTo, timezone }: DateRangeI
   return { start, end }
 }
 
+export const COMMON_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Phoenix',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'America/Honolulu',
+  'America/Toronto',
+  'America/Vancouver',
+  'Europe/London',
+  'Europe/Dublin',
+  'Europe/Amsterdam',
+  'Europe/Berlin',
+  'Europe/Paris',
+  'Europe/Madrid',
+  'Europe/Rome',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Australia/Melbourne'
+] as const
+
 export function getCompanyTimezone(company?: { timezone?: string | null } | null): string {
   return company?.timezone || 'UTC'
 }

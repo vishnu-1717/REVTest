@@ -3,6 +3,15 @@ import { requireSuperAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
 import crypto from 'crypto'
 
+const isValidTimezone = (timezone: string): boolean => {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function GET() {
   try {
     await requireSuperAdmin()
@@ -14,6 +23,7 @@ export async function GET() {
           name: true,
           email: true,
           createdAt: true,
+          timezone: true,
           _count: {
             select: {
               User: true,
@@ -48,6 +58,11 @@ export async function POST(request: NextRequest) {
       typeof body.processor === 'string' && body.processor.trim().length > 0
         ? body.processor.trim()
         : 'whop'
+    const requestedTimezone =
+      typeof body.timezone === 'string' && body.timezone.trim().length > 0
+        ? body.timezone.trim()
+        : 'UTC'
+    const timezone = isValidTimezone(requestedTimezone) ? requestedTimezone : 'UTC'
 
     if (!name) {
       return NextResponse.json({ error: 'Company name is required' }, { status: 400 })
@@ -71,6 +86,7 @@ export async function POST(request: NextRequest) {
           name,
           email: generatedEmail,
           processor,
+          timezone,
           processorAccountId: webhookSecret,
           inviteCode
         },
@@ -79,6 +95,7 @@ export async function POST(request: NextRequest) {
           name: true,
           email: true,
           processor: true,
+          timezone: true,
           createdAt: true,
           _count: {
             select: {

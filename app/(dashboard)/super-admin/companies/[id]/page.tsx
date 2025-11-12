@@ -5,6 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
+import { COMMON_TIMEZONES } from '@/lib/timezone'
 import Link from 'next/link'
 
 interface CompanyDetails {
@@ -12,6 +20,7 @@ interface CompanyDetails {
   name: string
   email: string
   processor: string
+  timezone: string
   createdAt: string
   updatedAt: string
   User: any[]
@@ -28,6 +37,10 @@ export default function CompanyDetailsPage() {
   const router = useRouter()
   const [company, setCompany] = useState<CompanyDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [timezoneValue, setTimezoneValue] = useState<string>('UTC')
+  const [timezoneMessage, setTimezoneMessage] = useState<string | null>(null)
+  const [timezoneError, setTimezoneError] = useState<string | null>(null)
+  const [timezoneSaving, setTimezoneSaving] = useState<boolean>(false)
   
   useEffect(() => {
     fetch(`/api/super-admin/companies/${params.id}`)
@@ -41,11 +54,45 @@ export default function CompanyDetailsPage() {
         setLoading(false)
       })
   }, [params.id])
+
+  useEffect(() => {
+    if (company?.timezone) {
+      setTimezoneValue(company.timezone)
+    }
+  }, [company?.timezone])
   
   const handleViewAs = () => {
     const searchParams = new URLSearchParams()
     searchParams.set('viewAs', company!.id)
     router.push(`/dashboard?${searchParams.toString()}`)
+  }
+
+  const handleTimezoneUpdate = async () => {
+    if (!company) return
+    setTimezoneSaving(true)
+    setTimezoneMessage(null)
+    setTimezoneError(null)
+
+    try {
+      const res = await fetch(`/api/super-admin/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: timezoneValue })
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to update timezone')
+      }
+
+      setCompany((prev) => (prev ? { ...prev, timezone: data.company.timezone } : prev))
+      setTimezoneMessage('Timezone updated successfully.')
+    } catch (error: any) {
+      console.error('Failed to update timezone:', error)
+      setTimezoneError(error?.message || 'Failed to update timezone')
+    } finally {
+      setTimezoneSaving(false)
+    }
   }
   
   if (loading) return <div className="container mx-auto py-10">Loading...</div>
@@ -160,7 +207,7 @@ export default function CompanyDetailsPage() {
           <CardTitle>Company Information</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <p className="text-sm text-gray-600 mb-1">Processor</p>
               <p className="font-medium">{company.processor}</p>
@@ -180,6 +227,35 @@ export default function CompanyDetailsPage() {
               <p className="font-medium">
                 {new Date(company.updatedAt).toLocaleDateString()}
               </p>
+            </div>
+            <div className="md:col-span-2">
+              <p className="text-sm text-gray-600 mb-2">Timezone</p>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <Select value={timezoneValue} onValueChange={setTimezoneValue}>
+                  <SelectTrigger className="w-full md:w-72">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-64 overflow-y-auto">
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <SelectItem key={tz} value={tz}>
+                        {tz}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={handleTimezoneUpdate}
+                  disabled={timezoneSaving || timezoneValue === company.timezone}
+                >
+                  {timezoneSaving ? 'Saving...' : 'Save Timezone'}
+                </Button>
+              </div>
+              {timezoneMessage && (
+                <p className="text-sm text-green-600 mt-2">{timezoneMessage}</p>
+              )}
+              {timezoneError && (
+                <p className="text-sm text-red-600 mt-2">{timezoneError}</p>
+              )}
             </div>
           </div>
         </CardContent>

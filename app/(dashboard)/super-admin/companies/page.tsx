@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { COMMON_TIMEZONES } from '@/lib/timezone'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -20,6 +21,7 @@ interface Company {
   name: string
   email: string
   processor?: string
+  timezone: string
   createdAt: string
   _count: {
     User: number
@@ -36,6 +38,7 @@ export default function CompaniesPage() {
   const [companyName, setCompanyName] = useState('')
   const [companyEmail, setCompanyEmail] = useState('')
   const [processor, setProcessor] = useState('whop')
+  const [timezone, setTimezone] = useState<string>('UTC')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState<{
@@ -109,6 +112,7 @@ export default function CompaniesPage() {
     setCompanyName('')
     setCompanyEmail('')
     setProcessor('whop')
+    setTimezone('UTC')
     setCreateError(null)
   }
 
@@ -121,7 +125,8 @@ export default function CompaniesPage() {
     try {
       const payload: Record<string, string> = {
         name: companyName.trim(),
-        processor
+        processor,
+        timezone
       }
 
       if (companyEmail.trim()) {
@@ -235,6 +240,23 @@ export default function CompaniesPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Timezone
+                  </label>
+                  <Select value={timezone} onValueChange={setTimezone}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {COMMON_TIMEZONES.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {createError && (
@@ -338,6 +360,7 @@ export default function CompaniesPage() {
                       </td>
                       <td className="py-3 px-4">
                         <div className="text-sm text-gray-600">{company.email}</div>
+                        <div className="text-xs text-gray-400">{company.timezone}</div>
                       </td>
                       <td className="py-3 px-4 text-right">
                         <span className="font-medium">{company._count.User}</span>
