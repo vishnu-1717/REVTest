@@ -201,10 +201,10 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      let callOutcome =
+      const rawOutcome =
         (extractField<string>(flattened, FIELD_MAP.callOutcome) || '').trim().toLowerCase()
 
-      const outcomeAliases: Record<string, string> = {
+      const outcomeAliases: Record<string, PCNSubmission['callOutcome']> = {
         showed: 'showed',
         show: 'showed',
         'showed - won': 'showed',
@@ -220,17 +220,27 @@ export async function POST(request: NextRequest) {
         canceled: 'cancelled'
       }
 
-      callOutcome = outcomeAliases[callOutcome] || callOutcome
+      const canonicalOutcome =
+        outcomeAliases[rawOutcome as keyof typeof outcomeAliases] ??
+        (rawOutcome as PCNSubmission['callOutcome'])
 
-      if (!callOutcome || !['showed', 'signed', 'no_show', 'contract_sent', 'cancelled'].includes(callOutcome)) {
+      const allowedOutcomes: PCNSubmission['callOutcome'][] = [
+        'showed',
+        'signed',
+        'no_show',
+        'contract_sent',
+        'cancelled'
+      ]
+
+      if (!canonicalOutcome || !allowedOutcomes.includes(canonicalOutcome)) {
         return NextResponse.json(
-          { error: 'Unsupported or missing call outcome in payload', outcome: callOutcome },
+          { error: 'Unsupported or missing call outcome in payload', outcome: rawOutcome },
           { status: 400 }
         )
       }
 
       const submission: PCNSubmission = {
-        callOutcome,
+        callOutcome: canonicalOutcome,
         notes: extractField<string>(flattened, FIELD_MAP.notes) || '',
         whyDidntMoveForward: extractField<string>(flattened, FIELD_MAP.why) || undefined,
         nurtureType: extractField<string>(flattened, FIELD_MAP.nurtureType) as any,
