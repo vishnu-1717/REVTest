@@ -181,11 +181,35 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const logFailure = async (
+        status: number,
+        message: string,
+        extra: Record<string, any> = {}
+      ) => {
+        try {
+          await prisma.webhookEvent.create({
+            data: {
+              processor: 'ghl',
+              eventType: 'pcn.survey.error',
+              companyId: company.id,
+              payload: {
+                raw: payload,
+                message,
+                ...extra
+              },
+              processed: false,
+              processedAt: new Date()
+            }
+          })
+        } catch (logError) {
+          console.error('[PCN Survey] Failed to record webhook error event:', logError)
+        }
+
+        return NextResponse.json({ error: message, ...extra }, { status })
+      }
+
       if (!company.ghlWebhookSecret || company.ghlWebhookSecret !== secret) {
-        return NextResponse.json(
-          { error: 'Invalid secret' },
-          { status: 403 }
-        )
+        return logFailure(403, 'Invalid secret')
       }
 
       const appointmentId =
@@ -195,10 +219,7 @@ export async function POST(request: NextRequest) {
         payload['appointmentId']
 
       if (!appointmentId || typeof appointmentId !== 'string') {
-        return NextResponse.json(
-          { error: 'Appointment ID not found in payload' },
-          { status: 400 }
-        )
+        return logFailure(400, 'Appointment ID not found in payload')
       }
 
       const rawOutcome =
@@ -233,10 +254,9 @@ export async function POST(request: NextRequest) {
       ]
 
       if (!canonicalOutcome || !allowedOutcomes.includes(canonicalOutcome)) {
-        return NextResponse.json(
-          { error: 'Unsupported or missing call outcome in payload', outcome: rawOutcome },
-          { status: 400 }
-        )
+        return logFailure(400, 'Unsupported or missing call outcome in payload', {
+          outcome: rawOutcome
+        })
       }
 
       const submission: PCNSubmission = {
@@ -258,13 +278,22 @@ export async function POST(request: NextRequest) {
         submission.firstCallOrFollowUp = submission.followUpScheduled ? 'follow_up' : 'first_call'
       }
 
-      const result = await submitPCN({
-        appointmentId,
-        companyId: company.id,
-        submission,
-        actorUserId: null,
-        actorName: 'GHL Survey Automation'
-      })
+      let result
+      try {
+        result = await submitPCN({
+          appointmentId,
+          companyId: company.id,
+          submission,
+          actorUserId: null,
+          actorName: 'GHL Survey Automation'
+        })
+      } catch (submitError: any) {
+        console.error('[PCN Survey] submitPCN failed:', submitError)
+        return logFailure(500, 'Failed to submit PCN', {
+          details: submitError?.message || 'Unknown error',
+          appointmentId
+        })
+      }
 
       await prisma.webhookEvent.create({
         data: {
