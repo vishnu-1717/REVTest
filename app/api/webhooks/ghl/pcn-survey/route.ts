@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
           payload: {
             raw: payload,
             appointmentId,
-            outcome: callOutcome
+            outcome: canonicalOutcome
           },
           processed: true,
           processedAt: new Date()
