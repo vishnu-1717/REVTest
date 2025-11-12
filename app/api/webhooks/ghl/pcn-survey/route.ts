@@ -22,30 +22,43 @@ const FIELD_MAP = {
     'callnotes-calloutcome',
     'status'
   ],
-  notes: ['notes', 'pcn - notes', 'pcn_notes', 'call notes - signed notes'],
+  notes: [
+    'notes',
+    'pcn - notes',
+    'pcn_notes',
+    'call notes - signed notes',
+    'pcn - fathom notes',
+    'call notes - fathom notes'
+  ],
   why: [
     'pcn - why didn\'t the prospect move forward?',
     'pcn - why didnt the prospect move forward?',
     'why didn\'t the prospect move forward?',
     'why didnt move forward',
-    'pcn_why_didnt_move_forward'
+    'pcn_why_didnt_move_forward',
+    'call notes - why didn\'t the prospect move forward?',
+    'call notes - why didnt move forward'
   ],
   nurtureType: [
     'pcn - nurture type',
     'pcn_nurture_type',
-    'nurture type'
+    'nurture type',
+    'call notes - nurture type'
   ],
   followUpScheduled: [
     'pcn - was a follow up scheduled?',
     'pcn_was_follow_up_scheduled',
     'was a follow up scheduled',
-    'follow up scheduled'
+    'follow up scheduled',
+    'call notes - was a follow up scheduled?'
   ],
   followUpDate: [
     'pcn - submission date',
     'pcn submission date',
     'follow up date',
-    'pcn_follow_up_date'
+    'pcn_follow_up_date',
+    'call notes - submission date',
+    'call notes - follow up date'
   ],
   cashCollected: [
     'pcn - cash collected',
@@ -56,7 +69,8 @@ const FIELD_MAP = {
     'call notes - did you make an offer?',
     'pcn - did you make an offer?',
     'pcn_did_you_make_an_offer',
-    'did you make an offer'
+    'did you make an offer',
+    'call notes - did you make an offer?'
   ],
   noShowCommunicative: [
     'pcn - was the no show communicative?',
@@ -73,12 +87,38 @@ const FIELD_MAP = {
   disqualificationReason: [
     'pcn - dq reason',
     'pcn_dq_reason',
-    'dq reason'
+    'dq reason',
+    'call notes - dq reason'
   ],
   qualificationStatus: [
     'pcn - qualification status',
     'pcn_qualification_status',
-    'qualification status'
+    'qualification status',
+    'call notes - qualification status'
+  ],
+  firstCallOrFollowUp: [
+    'pcn - first call or follow up',
+    'pcn_first_call_or_follow_up',
+    'first call or follow up',
+    'call notes - first call or follow up'
+  ],
+  notMovingForwardNotes: [
+    'pcn - not moving forward notes',
+    'pcn_not_moving_forward_notes',
+    'not moving forward notes',
+    'call notes - not moving forward notes'
+  ],
+  objectionType: [
+    'pcn - objection type',
+    'pcn_objection_type',
+    'objection type',
+    'call notes - objection type'
+  ],
+  objectionNotes: [
+    'pcn - objection notes',
+    'pcn_objection_notes',
+    'objection notes',
+    'call notes - objection notes'
   ]
 }
 
@@ -124,6 +164,50 @@ function parseCash(value: unknown): number | undefined {
   if (!numeric) return undefined
   const parsed = parseFloat(numeric)
   return Number.isNaN(parsed) ? undefined : parsed
+}
+
+function normalizeString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function normalizeFirstCallOrFollowUp(
+  value: unknown
+): PCNSubmission['firstCallOrFollowUp'] | undefined {
+  const text = normalizeString(value)
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+  if (lower.includes('follow')) return 'follow_up'
+  if (lower.includes('first')) return 'first_call'
+  return undefined
+}
+
+function normalizeNurtureType(
+  value: unknown
+): PCNSubmission['nurtureType'] | undefined {
+  const text = normalizeString(value)
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+  if (lower.includes('redzone') || lower.includes('within 7')) return 'timing'
+  if (lower.includes('timing')) return 'timing'
+  if (lower.includes('budget')) return 'budget'
+  if (lower.includes('think') || lower.includes('follow up')) return 'thinking_it_over'
+  if (lower.includes('not qualified')) return 'not_qualified_yet'
+  if (lower.includes('other')) return 'other'
+  return 'other'
+}
+
+function normalizeQualificationStatus(
+  value: unknown
+): PCNSubmission['qualificationStatus'] | undefined {
+  const text = normalizeString(value)
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+  if (lower.includes('qualified')) return 'qualified'
+  if (lower.includes('disqual')) return 'disqualified'
+  if (lower.includes('pending')) return 'pending'
+  return undefined
 }
 
 function flattenPayload(payload: any, prefix = ''): Record<string, any> {
@@ -282,6 +366,54 @@ export async function POST(request: NextRequest) {
         disqualificationReason: extractField<string>(flattened, FIELD_MAP.disqualificationReason) || undefined,
         qualificationStatus: extractField<string>(flattened, FIELD_MAP.qualificationStatus) as any
       }
+
+      const firstCallRaw =
+        extractField<string>(flattened, FIELD_MAP.firstCallOrFollowUp) ||
+        payload['PCN - First Call or Follow Up'] ||
+        payload['Call Notes - First Call or Follow Up']
+      const normalizedFirstCall = normalizeFirstCallOrFollowUp(firstCallRaw)
+      if (normalizedFirstCall) {
+        submission.firstCallOrFollowUp = normalizedFirstCall
+      }
+
+      const nurtureNormalized = normalizeNurtureType(submission.nurtureType)
+      submission.nurtureType = nurtureNormalized ?? undefined
+
+      submission.whyDidntMoveForward =
+        normalizeString(submission.whyDidntMoveForward) ?? undefined
+
+      const notMovingForwardNotesRaw = extractField<string>(
+        flattened,
+        FIELD_MAP.notMovingForwardNotes
+      )
+      const normalizedNotMovingForwardNotes = normalizeString(notMovingForwardNotesRaw)
+      if (normalizedNotMovingForwardNotes) {
+        submission.notMovingForwardNotes = normalizedNotMovingForwardNotes
+      }
+
+      const objectionTypeRaw = extractField<string>(flattened, FIELD_MAP.objectionType)
+      const normalizedObjectionType = normalizeString(objectionTypeRaw)
+      if (normalizedObjectionType) {
+        submission.objectionType = normalizedObjectionType
+      }
+
+      const objectionNotesRaw = extractField<string>(flattened, FIELD_MAP.objectionNotes)
+      const normalizedObjectionNotes = normalizeString(objectionNotesRaw)
+      if (normalizedObjectionNotes) {
+        submission.objectionNotes = normalizedObjectionNotes
+      }
+
+      submission.followUpDate = normalizeString(submission.followUpDate) ?? undefined
+
+      const qualificationNormalized = normalizeQualificationStatus(
+        submission.qualificationStatus
+      )
+      submission.qualificationStatus = qualificationNormalized ?? undefined
+
+      const disqualificationNormalized = normalizeString(submission.disqualificationReason)
+      submission.disqualificationReason = disqualificationNormalized ?? undefined
+
+      submission.cancellationReason = normalizeString(submission.cancellationReason)
 
       if (
         (!submission.cancellationReason ||
