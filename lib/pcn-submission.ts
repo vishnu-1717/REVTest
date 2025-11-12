@@ -81,8 +81,11 @@ export async function submitPCN({
   return await withPrisma(async (prisma) => {
     const existingAppointment = await prisma.appointment.findFirst({
       where: {
-        id: appointmentId,
-        companyId
+        companyId,
+        OR: [
+          { id: appointmentId },
+          { ghlAppointmentId: appointmentId }
+        ]
       },
       include: {
         contact: { select: { id: true, name: true, email: true } },
@@ -147,8 +150,11 @@ export async function submitPCN({
       })
     }
 
+    const appointmentDatabaseId = existingAppointment.id
+    const externalAppointmentId = existingAppointment.ghlAppointmentId ?? appointmentId
+
     const updatedAppointment = await prisma.appointment.update({
-      where: { id: appointmentId },
+      where: { id: appointmentDatabaseId },
       data: updateData,
       include: {
         contact: { select: { id: true, name: true, email: true } },
@@ -175,7 +181,7 @@ export async function submitPCN({
           await prisma.sale.update({
             where: { id: unmatchedPayment.saleId },
             data: {
-              appointmentId,
+              appointmentId: appointmentDatabaseId,
               matchedBy: actorName ? `pcn_submission:${actorName}` : 'pcn_submission',
               matchConfidence: 0.9,
               manuallyMatched: false,
@@ -239,7 +245,8 @@ export async function submitPCN({
         eventType: 'pcn.submitted',
         companyId,
         payload: {
-          appointmentId,
+          appointmentId: appointmentDatabaseId,
+          externalAppointmentId,
           userId: actorUserId ?? null,
           userName: actorName ?? null,
           outcome: submission.callOutcome,
