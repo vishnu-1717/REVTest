@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import AdvancedFilters from '@/components/AdvancedFilters'
@@ -143,6 +144,21 @@ export default function AnalyticsPage() {
   const [activeView, setActiveView] = useState<'overview' | 'closers' | 'calendars' | 'objections'>('overview')
   const [timezone, setTimezone] = useState('UTC')
   const [activeQuickView, setActiveQuickView] = useState<QuickViewRange | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [detailTitle, setDetailTitle] = useState('')
+  const [detailMetricKey, setDetailMetricKey] = useState<string | null>(null)
+  const [detailItems, setDetailItems] = useState<any[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+
+  const appendViewAs = useCallback((url: string) => {
+    if (typeof window === 'undefined') return url
+    const params = new URLSearchParams(window.location.search)
+    const viewAs = params.get('viewAs')
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }, [])
   
   useEffect(() => {
     fetchClosers()
@@ -234,6 +250,106 @@ export default function AnalyticsPage() {
     { id: 'this_year', label: 'This Year' }
   ]
 
+  const detailDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone || 'UTC',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }),
+    [timezone]
+  )
+
+  const formatDetailDate = useCallback(
+    (value?: string | null) => {
+      if (!value) return 'Unknown'
+      try {
+        return detailDateFormatter.format(new Date(value))
+      } catch {
+        return new Date(value).toLocaleString()
+      }
+    },
+    [detailDateFormatter]
+  )
+
+  const closeDetailModal = useCallback(() => {
+    setDetailModalOpen(false)
+    setDetailMetricKey(null)
+    setDetailItems([])
+    setDetailError(null)
+    setDetailLoading(false)
+  }, [])
+
+  const fetchMetricDetails = useCallback(
+    async (metricKey: string, title: string) => {
+      setDetailModalOpen(true)
+      setDetailTitle(title)
+      setDetailMetricKey(metricKey)
+      setDetailLoading(true)
+      setDetailError(null)
+
+      try {
+        const params = new URLSearchParams()
+
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value && value !== 'all') {
+            params.append(key, value)
+          }
+        })
+
+        const query = params.toString()
+        const baseUrl = `/api/analytics?detail=${encodeURIComponent(metricKey)}${
+          query ? `&${query}` : ''
+        }`
+        const response = await fetch(appendViewAs(baseUrl), {
+          credentials: 'include'
+        })
+        const data = await response.json()
+
+        if (!response.ok) {
+          setDetailError(data?.error || 'Failed to load details')
+          setDetailItems([])
+        } else {
+          setDetailItems(data.detail?.items || [])
+          if (data.timezone) {
+            setTimezone(data.timezone)
+          }
+        }
+      } catch (error: any) {
+        setDetailError(error?.message || 'Failed to load details')
+        setDetailItems([])
+      } finally {
+        setDetailLoading(false)
+      }
+    },
+    [appendViewAs, filters]
+  )
+
+  const createMetricCardHandlers = useCallback(
+    (metricKey: string, title: string) => {
+      const handleClick = () => fetchMetricDetails(metricKey, title)
+      const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          fetchMetricDetails(metricKey, title)
+        }
+      }
+
+      return {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: handleClick,
+        onKeyDown: handleKeyDown,
+        className:
+          'cursor-pointer transition hover:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500'
+      }
+    },
+    [fetchMetricDetails]
+  )
+
   return (
     <div className="container mx-auto py-10">
       <div className="mb-8">
@@ -283,7 +399,7 @@ export default function AnalyticsPage() {
         <>
           {/* Primary Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
+            <Card {...createMetricCardHandlers('callsCreated', 'Calls Created')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Calls Created
@@ -297,7 +413,7 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card {...createMetricCardHandlers('scheduledCallsToDate', 'Scheduled Calls to Date')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Scheduled Calls to Date
@@ -356,7 +472,7 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card {...createMetricCardHandlers('qualifiedCalls', 'Qualified Calls')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Qualified Calls
@@ -370,7 +486,7 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card {...createMetricCardHandlers('totalUnitsClosed', 'Total Units Closed')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Total Units Closed
@@ -401,7 +517,7 @@ export default function AnalyticsPage() {
           
           {/* Revenue Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
+            <Card {...createMetricCardHandlers('cashCollected', 'Cash Collected')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Cash Collected
@@ -455,7 +571,7 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
             
-            <Card>
+            <Card {...createMetricCardHandlers('missingPCNs', 'Missing PCNs')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
                   Missing PCNs
@@ -726,6 +842,96 @@ export default function AnalyticsPage() {
         </>
       )}
     </div>
+      {detailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">
+          <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl max-h-full overflow-hidden">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold">{detailTitle}</h2>
+                <p className="text-xs text-gray-500">
+                  {detailItems.length} records · Reporting in {timezone}
+                </p>
+              </div>
+              <button
+                className="text-sm text-gray-500 hover:text-gray-700"
+                onClick={closeDetailModal}
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-3 overflow-y-auto max-h-[70vh]">
+              {detailLoading ? (
+                <p className="text-sm text-gray-500">Loading...</p>
+              ) : detailError ? (
+                <p className="text-sm text-red-600">{detailError}</p>
+              ) : detailItems.length === 0 ? (
+                <p className="text-sm text-gray-500">No records for the selected filters.</p>
+              ) : (
+                detailItems.map((item, index) => {
+                  const key = item.id || item.saleId || `${detailMetricKey}-${index}`
+                  return (
+                    <div key={key} className="border rounded-md p-4 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium">
+                            {item.contactName ||
+                              item.saleId ||
+                              item.appointmentId ||
+                              `Record ${index + 1}`}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Closer: {item.closerName || 'Unassigned'}
+                          </p>
+                        </div>
+                        {item.amount !== undefined && item.amount !== null && (
+                          <p className="text-sm font-semibold text-gray-800">
+                            ${Number(item.amount).toLocaleString('en-US', {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2
+                            })}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                        {item.type && <span>Type: {item.type}</span>}
+                        {item.scheduledAt && (
+                          <span>Scheduled: {formatDetailDate(item.scheduledAt)}</span>
+                        )}
+                        {item.createdAt && (
+                          <span>Created: {formatDetailDate(item.createdAt)}</span>
+                        )}
+                        {item.paidAt && <span>Paid: {formatDetailDate(item.paidAt)}</span>}
+                        {item.pcnSubmittedAt && (
+                          <span>PCN Submitted: {formatDetailDate(item.pcnSubmittedAt)}</span>
+                        )}
+                        {item.minutesSinceScheduled !== undefined && (
+                          <span>Minutes overdue: {item.minutesSinceScheduled}</span>
+                        )}
+                        {item.status && <span>Status: {item.status}</span>}
+                        {item.outcome && <span>Outcome: {item.outcome}</span>}
+                        {item.cashCollected !== undefined &&
+                          item.cashCollected !== null &&
+                          (item.amount === undefined || item.amount === null) && (
+                            <span>
+                              Cash Collected:{' '}
+                              ${Number(item.cashCollected).toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                              })}
+                            </span>
+                          )}
+                      </div>
+                      {item.notes && (
+                        <p className="text-sm text-gray-600">Notes: {item.notes}</p>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
   )
 }
 

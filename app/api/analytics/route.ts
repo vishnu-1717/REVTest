@@ -94,18 +94,23 @@ export async function GET(request: NextRequest) {
     }
     
     const searchParams = request.nextUrl.searchParams
+    const detailMetricRaw = searchParams.get('detail')
+    const detailMetric = detailMetricRaw ? detailMetricRaw.toLowerCase() : null
+    const detailLimitParam = searchParams.get('detailLimit')
+    const detailLimit = detailLimitParam ? Math.max(parseInt(detailLimitParam, 10), 1) : 500
     
     // Get the effective company ID (respects viewAs for super admins)
     const effectiveCompanyId = await getEffectiveCompanyId(request.url)
 
     const company = await withPrisma(async (prisma) => {
       return await prisma.company.findUnique({
-        where: { id: effectiveCompanyId },
-        select: { timezone: true }
+        where: { id: effectiveCompanyId }
       })
     })
 
-    const companyTimezone = getCompanyTimezone(company)
+    const companyTimezone = getCompanyTimezone(
+      company as { timezone?: string | null } | null
+    )
     const rawDateFrom = searchParams.get('dateFrom')
     const rawDateTo = searchParams.get('dateTo')
     const { start: scheduledFrom, end: scheduledTo } = convertDateRangeToUtc({
@@ -223,14 +228,14 @@ export async function GET(request: NextRequest) {
             { appointmentInclusionFlag: 1 },
             { appointmentInclusionFlag: null }
           ]
-        }
+        } as any
       })
 
       if (totalCount > ANALYTICS_SAFETY_LIMIT) {
         console.warn(`Analytics query for company ${effectiveCompanyId} exceeds safety limit: ${totalCount} appointments (limit: ${ANALYTICS_SAFETY_LIMIT})`)
       }
 
-      return await prisma.appointment.findMany({
+      const results = await prisma.appointment.findMany({
         where: {
           ...where,
           // Only include appointments that should be counted (flag = 1 or null for backwards compatibility)
@@ -239,7 +244,7 @@ export async function GET(request: NextRequest) {
             { appointmentInclusionFlag: 1 },
             { appointmentInclusionFlag: null }
           ]
-        },
+        } as any,
         include: {
           closer: true,
           contact: true,
@@ -255,10 +260,11 @@ export async function GET(request: NextRequest) {
         // 4. Refactoring to use database aggregations (recommended for 100k+ records)
         take: ANALYTICS_SAFETY_LIMIT
       })
+      return results as AppointmentWithRelations[]
     })
     
     // Apply day of week filter if provided (post-query filter)
-    let filteredAppointments = appointments
+    let filteredAppointments: AppointmentWithRelations[] = appointments
     if (searchParams.get('dayOfWeek')) {
       const dayOfWeek = parseInt(searchParams.get('dayOfWeek')!)
       filteredAppointments = appointments.filter(apt => 
@@ -286,9 +292,10 @@ export async function GET(request: NextRequest) {
     // Calculate metrics using inclusion flag
     // Filter to only include appointments with flag = 1 (or null for backwards compatibility)
     // Flag = 0 means excluded from analytics (e.g., duplicate, cancelled before showed)
-    const countableAppointments = filteredAppointments.filter((a) =>
-      a.appointmentInclusionFlag === 1 || a.appointmentInclusionFlag === null
-    )
+    const countableAppointments = filteredAppointments.filter((a) => {
+      const inclusionFlag = (a as any).appointmentInclusionFlag
+      return inclusionFlag === 1 || inclusionFlag === null
+    }) as AppointmentWithRelations[]
     
     // Calls Created: Number of calls with a Create Date inside the selected time frame
     // This requires a separate query using createdAt instead of scheduledAt
@@ -330,9 +337,26 @@ export async function GET(request: NextRequest) {
     
     callsCreated = await withPrisma(async (prisma) => {
       return await prisma.appointment.count({
-        where: createdWhereClause
+        where: createdWhereClause as any
       })
     })
+
+    let callsCreatedAppointments: AppointmentWithRelations[] = []
+
+    if (detailMetric === 'callscreated') {
+      callsCreatedAppointments = await withPrisma(async (prisma) => {
+        const results = await prisma.appointment.findMany({
+          where: createdWhereClause as any,
+          include: {
+            contact: { select: { name: true } },
+            closer: { select: { name: true } }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: detailLimit
+        })
+        return results as AppointmentWithRelations[]
+      })
+    }
     
     // Scheduled Calls to Date: Number of calls with a Scheduled Start inside the time frame (flag = 1)
     const scheduledCallsToDate = countableAppointments.length
@@ -400,7 +424,8 @@ export async function GET(request: NextRequest) {
       
       // Exclude appointments with flag = 0 (superseded by another appointment)
       // Only count appointments that should be included (flag = 1 or null for backwards compatibility)
-      if (appointment.appointmentInclusionFlag === 0) return false
+      const inclusionFlag = (appointment as any).appointmentInclusionFlag
+      if (inclusionFlag === 0) return false
       
       const scheduledDate = new Date(appointment.scheduledAt)
       const now = new Date()
@@ -424,7 +449,8 @@ export async function GET(request: NextRequest) {
       return false
     }
     
-    const missingPCNs = filteredAppointments.filter(isPCNOverdue).length
+    const overduePCNAppointments = filteredAppointments.filter(isPCNOverdue)
+    const missingPCNs = overduePCNAppointments.length
     
     // Calculate revenue from appointments and matched sales
     const revenueFromAppointments = countableAppointments
@@ -441,6 +467,7 @@ export async function GET(request: NextRequest) {
           status: 'paid'
         },
         select: {
+          id: true,
           amount: true,
           appointmentId: true,
           paidAt: true
@@ -861,6 +888,165 @@ export async function GET(request: NextRequest) {
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
+    const mapAppointmentDetail = (apt: AppointmentWithRelations) => ({
+      id: apt.id,
+      scheduledAt: apt.scheduledAt.toISOString(),
+      createdAt: apt.createdAt?.toISOString() || null,
+      contactName: apt.contact?.name || 'Unknown contact',
+      closerId: apt.closerId,
+      closerName: apt.closer?.name || 'Unassigned',
+      status: apt.status,
+      outcome: apt.outcome,
+      cashCollected: apt.cashCollected !== null && apt.cashCollected !== undefined ? Number(apt.cashCollected) : null,
+      pcnSubmittedAt: apt.pcnSubmittedAt?.toISOString() || null,
+      notes: apt.notes || null
+    })
+
+    let detail: any = null
+
+    if (detailMetric) {
+      const normalizedMetric = detailMetric.toLowerCase()
+      const appointmentDetailMap = new Map(
+        countableAppointments.map((apt) => [apt.id, mapAppointmentDetail(apt)])
+      )
+
+      switch (normalizedMetric) {
+        case 'callscreated': {
+          detail = {
+            metric: 'callsCreated',
+            items: callsCreatedAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
+        case 'scheduledcallstodate': {
+          detail = {
+            metric: 'scheduledCallsToDate',
+            items: countableAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
+        case 'qualifiedcalls': {
+          const qualifiedAppointments = countableAppointments.filter(
+            (apt) => apt.wasOfferMade === true
+          )
+          detail = {
+            metric: 'qualifiedCalls',
+            items: qualifiedAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
+        case 'callsshowed': {
+          const showedAppointments = countableAppointments.filter(
+            (apt) => apt.status === 'showed' || apt.status === 'signed'
+          )
+          detail = {
+            metric: 'callsShown',
+            items: showedAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
+        case 'totalunitsclosed': {
+          const signedAppointments = countableAppointments.filter(
+            (apt) => apt.status === 'signed'
+          )
+          const appointmentItems = signedAppointments.map((apt) => ({
+            ...mapAppointmentDetail(apt),
+            type: 'appointment',
+            source: 'appointment',
+            amount:
+              apt.cashCollected !== null && apt.cashCollected !== undefined
+                ? Number(apt.cashCollected)
+                : null
+          }))
+
+          const saleItems = filteredSales.map((sale) => {
+            const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
+            return {
+              type: 'sale',
+              source: 'sale',
+              saleId: sale.id,
+              appointmentId: sale.appointmentId,
+              contactName: related?.contactName || 'Unknown contact',
+              closerId: related?.closerId || null,
+              closerName: related?.closerName || 'Unassigned',
+              scheduledAt: related?.scheduledAt || null,
+              paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
+              amount: Number(sale.amount)
+            }
+          })
+
+          detail = {
+            metric: 'totalUnitsClosed',
+            items: [...appointmentItems, ...saleItems]
+          }
+          break
+        }
+        case 'cashcollected': {
+          const appointmentItems = countableAppointments
+            .filter((apt) => apt.cashCollected && apt.cashCollected > 0)
+            .map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment',
+              source: 'appointment',
+              amount: Number(apt.cashCollected)
+            }))
+
+          const saleItems = filteredSales.map((sale) => {
+            const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
+            return {
+              type: 'sale',
+              source: 'sale',
+              saleId: sale.id,
+              appointmentId: sale.appointmentId,
+              contactName: related?.contactName || 'Unknown contact',
+              closerId: related?.closerId || null,
+              closerName: related?.closerName || 'Unassigned',
+              scheduledAt: related?.scheduledAt || null,
+              paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
+              amount: Number(sale.amount)
+            }
+          })
+
+          detail = {
+            metric: 'cashCollected',
+            items: [...appointmentItems, ...saleItems]
+          }
+          break
+        }
+        case 'missingpcns': {
+          detail = {
+            metric: 'missingPCNs',
+            items: overduePCNAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment',
+              minutesSinceScheduled: Math.floor(
+                (Date.now() - new Date(apt.scheduledAt).getTime()) / (1000 * 60)
+              )
+            }))
+          }
+          break
+        }
+        default: {
+          detail = {
+            metric: detailMetricRaw,
+            items: []
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       // New metrics
       callsCreated,
@@ -899,7 +1085,8 @@ export async function GET(request: NextRequest) {
       byCalendar,
       byAppointmentType,
       byTimeOfDay,
-      byTrafficSource
+      byTrafficSource,
+      ...(detail ? { detail } : {})
     })
     
   } catch (error) {
@@ -911,3 +1098,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
