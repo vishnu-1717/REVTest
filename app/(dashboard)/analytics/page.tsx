@@ -510,7 +510,7 @@ export default function AnalyticsPage() {
                     : ''}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  Avg days from scheduling to actual start (
+                  Avg days from creation to actual start (
                   {analytics.appointmentLeadTimeCount || 0} appts)
                 </p>
               </CardContent>

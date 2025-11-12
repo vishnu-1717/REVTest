@@ -598,7 +598,7 @@ export async function GET(request: NextRequest) {
 
     interface LeadTimeMeta {
       days: number
-      scheduledAt: Date
+      createdAt: Date
       startAt: Date
     }
 
@@ -639,15 +639,15 @@ export async function GET(request: NextRequest) {
       salesCycleTotalDays += diffDays
       salesCycleCount += 1
 
-      if (apt.startTime) {
+      if (apt.startTime && apt.createdAt) {
         const startAt = new Date(apt.startTime)
-        const scheduledAt = new Date(apt.scheduledAt)
-        const leadDiffMs = startAt.getTime() - scheduledAt.getTime()
+        const createdAt = new Date(apt.createdAt)
+        const leadDiffMs = startAt.getTime() - createdAt.getTime()
         if (leadDiffMs >= 0) {
           const leadDiffDays = leadDiffMs / (1000 * 60 * 60 * 24)
           appointmentLeadTimeMeta.set(apt.id, {
             days: leadDiffDays,
-            scheduledAt,
+            createdAt,
             startAt
           })
           leadTimeTotalDays += leadDiffDays
