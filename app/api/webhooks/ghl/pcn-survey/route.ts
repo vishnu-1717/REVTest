@@ -67,7 +67,8 @@ const FIELD_MAP = {
   cancellationReason: [
     'pcn - cancellation reason',
     'pcn_cancellation_reason',
-    'cancellation reason'
+    'cancellation reason',
+    'call notes - cancellation reason'
   ],
   disqualificationReason: [
     'pcn - dq reason',
