@@ -61,7 +61,8 @@ const FIELD_MAP = {
   noShowCommunicative: [
     'pcn - was the no show communicative?',
     'pcn_was_no_show_communicative',
-    'was the no show communicative'
+    'was the no show communicative',
+    'call notes - was the no show communicative?'
   ],
   cancellationReason: [
     'pcn - cancellation reason',
@@ -276,10 +277,40 @@ export async function POST(request: NextRequest) {
         followUpDate: extractField<string>(flattened, FIELD_MAP.followUpDate) || undefined,
         cashCollected: parseCash(extractField(flattened, FIELD_MAP.cashCollected)),
         wasOfferMade: parseBoolean(extractField(flattened, FIELD_MAP.offerMade)) ?? false,
-        noShowCommunicative: parseBoolean(extractField(flattened, FIELD_MAP.noShowCommunicative)),
         cancellationReason: extractField<string>(flattened, FIELD_MAP.cancellationReason) || undefined,
         disqualificationReason: extractField<string>(flattened, FIELD_MAP.disqualificationReason) || undefined,
         qualificationStatus: extractField<string>(flattened, FIELD_MAP.qualificationStatus) as any
+      }
+
+      const rawNoShowCommunicative = extractField<string>(
+        flattened,
+        FIELD_MAP.noShowCommunicative
+      )
+
+      if (rawNoShowCommunicative !== undefined) {
+        if (typeof rawNoShowCommunicative === 'string') {
+          const normalized = rawNoShowCommunicative.trim().toLowerCase()
+          if (!normalized) {
+            submission.noShowCommunicative = false
+          } else if (
+            ['yes', 'communicative', 'y'].includes(normalized) ||
+            normalized.startsWith('communicative')
+          ) {
+            submission.noShowCommunicative = true
+          } else if (
+            ['no', 'not communicative', 'n', 'non-communicative'].includes(normalized) ||
+            normalized.startsWith('not communicative')
+          ) {
+            submission.noShowCommunicative = false
+          } else {
+            submission.noShowCommunicative = parseBoolean(normalized) ?? false
+          }
+        } else {
+          submission.noShowCommunicative =
+            parseBoolean(rawNoShowCommunicative) ?? false
+        }
+      } else {
+        submission.noShowCommunicative = false
       }
 
       if (canonicalOutcome === 'showed' && !submission.firstCallOrFollowUp) {
