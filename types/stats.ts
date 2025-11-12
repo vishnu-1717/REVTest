@@ -79,6 +79,7 @@ export interface AnalyticsBreakdownItem {
   closeRate: string
   total?: number
   averageSalesCycleDays?: number | null
+  averageLeadTimeDays?: number | null
 }
 
 export interface CloserBreakdownItem extends AnalyticsBreakdownItem {
@@ -104,6 +105,8 @@ export interface AnalyticsResponse extends BaseStats {
   missingPCNs: number
   averageSalesCycleDays: number | null
   salesCycleCount: number
+  averageAppointmentLeadTimeDays: number | null
+  appointmentLeadTimeCount: number
 
   // Breakdowns
   byCloser: AnalyticsBreakdown

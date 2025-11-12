@@ -350,7 +350,7 @@ export default function AnalyticsPage() {
     [fetchMetricDetails]
   )
 
-  const formatSalesCycle = (value: number | null | undefined) => {
+  const formatDaysValue = (value: number | null | undefined) => {
     if (value === null || value === undefined) {
       return '—'
     }
@@ -360,6 +360,12 @@ export default function AnalyticsPage() {
     }
     return numeric.toFixed(1)
   }
+
+  const formatSalesCycle = (value: number | null | undefined) =>
+    formatDaysValue(value)
+
+  const formatLeadTime = (value: number | null | undefined) =>
+    formatDaysValue(value)
 
   return (
     <>
@@ -410,7 +416,7 @@ export default function AnalyticsPage() {
       {analytics && (
         <>
           {/* Primary Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
             <Card {...createMetricCardHandlers('callsCreated', 'Calls Created')}>
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-gray-600">
@@ -481,6 +487,31 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-gray-500 mt-1">
                   Avg days from first call to close ({analytics.salesCycleCount || 0}{' '}
                   deals)
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card
+              {...createMetricCardHandlers(
+                'appointmentLeadTime',
+                'Average Appointment Lead Time'
+              )}
+            >
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  Avg Lead Time
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {formatLeadTime(analytics.averageAppointmentLeadTimeDays)}{' '}
+                  {typeof analytics.averageAppointmentLeadTimeDays === 'number'
+                    ? 'days'
+                    : ''}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Avg days from scheduling to actual start (
+                  {analytics.appointmentLeadTimeCount || 0} appts)
                 </p>
               </CardContent>
             </Card>
@@ -667,7 +698,8 @@ export default function AnalyticsPage() {
                           <th className="text-right py-2">Appts</th>
                           <th className="text-right py-2">Show%</th>
                           <th className="text-right py-2">Close%</th>
-                      <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Avg Lead (days)</th>
                           <th className="text-right py-2">Revenue</th>
                         </tr>
                       </thead>
@@ -678,9 +710,12 @@ export default function AnalyticsPage() {
                             <td className="text-right">{day.total}</td>
                             <td className="text-right">{day.showRate}%</td>
                             <td className="text-right">{day.closeRate}%</td>
-                        <td className="text-right">
-                          {formatSalesCycle(day.averageSalesCycleDays)}
-                        </td>
+                            <td className="text-right">
+                              {formatSalesCycle(day.averageSalesCycleDays)}
+                            </td>
+                            <td className="text-right">
+                              {formatLeadTime(day.averageLeadTimeDays)}
+                            </td>
                             <td className="text-right">${day.revenue?.toLocaleString()}</td>
                           </tr>
                         ))}
@@ -703,8 +738,9 @@ export default function AnalyticsPage() {
                           <th className="text-left py-2">Period</th>
                           <th className="text-right py-2">Appts</th>
                           <th className="text-right py-2">Show%</th>
-                      <th className="text-right py-2">Close%</th>
-                      <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Close%</th>
+                          <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Avg Lead (days)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -713,10 +749,13 @@ export default function AnalyticsPage() {
                             <td className="py-2">{period.period}</td>
                             <td className="text-right">{period.total}</td>
                             <td className="text-right">{period.showRate}%</td>
-                        <td className="text-right">{period.closeRate}%</td>
-                        <td className="text-right">
-                          {formatSalesCycle(period.averageSalesCycleDays)}
-                        </td>
+                            <td className="text-right">{period.closeRate}%</td>
+                            <td className="text-right">
+                              {formatSalesCycle(period.averageSalesCycleDays)}
+                            </td>
+                            <td className="text-right">
+                              {formatLeadTime(period.averageLeadTimeDays)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -739,7 +778,8 @@ export default function AnalyticsPage() {
                           <th className="text-right py-2">Appts</th>
                           <th className="text-right py-2">Show%</th>
                           <th className="text-right py-2">Close%</th>
-                      <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Avg Cycle (days)</th>
+                          <th className="text-right py-2">Avg Lead (days)</th>
                           <th className="text-right py-2">Revenue</th>
                         </tr>
                       </thead>
@@ -750,9 +790,12 @@ export default function AnalyticsPage() {
                             <td className="text-right">{type.total}</td>
                             <td className="text-right">{type.showRate}%</td>
                             <td className="text-right">{type.closeRate}%</td>
-                        <td className="text-right">
-                          {formatSalesCycle(type.averageSalesCycleDays)}
-                        </td>
+                            <td className="text-right">
+                              {formatSalesCycle(type.averageSalesCycleDays)}
+                            </td>
+                            <td className="text-right">
+                              {formatLeadTime(type.averageLeadTimeDays)}
+                            </td>
                             <td className="text-right">${type.revenue?.toLocaleString()}</td>
                           </tr>
                         ))}
@@ -780,6 +823,7 @@ export default function AnalyticsPage() {
                         <th className="text-right py-2">Close%</th>
                         <th className="text-right py-2">Deals</th>
                         <th className="text-right py-2">Avg Cycle (days)</th>
+                        <th className="text-right py-2">Avg Lead (days)</th>
                         <th className="text-right py-2">Revenue</th>
                       </tr>
                     </thead>
@@ -793,6 +837,9 @@ export default function AnalyticsPage() {
                           <td className="text-right">{closer.signed}</td>
                           <td className="text-right">
                             {formatSalesCycle(closer.averageSalesCycleDays)}
+                          </td>
+                          <td className="text-right">
+                            {formatLeadTime(closer.averageLeadTimeDays)}
                           </td>
                           <td className="text-right font-semibold">
                             ${closer.revenue?.toLocaleString()}
@@ -822,6 +869,7 @@ export default function AnalyticsPage() {
                         <th className="text-right py-2">Close%</th>
                         <th className="text-right py-2">Deals</th>
                         <th className="text-right py-2">Avg Cycle (days)</th>
+                        <th className="text-right py-2">Avg Lead (days)</th>
                         <th className="text-right py-2">Revenue</th>
                       </tr>
                     </thead>
@@ -835,6 +883,9 @@ export default function AnalyticsPage() {
                           <td className="text-right">{cal.signed}</td>
                           <td className="text-right">
                             {formatSalesCycle(cal.averageSalesCycleDays)}
+                          </td>
+                          <td className="text-right">
+                            {formatLeadTime(cal.averageLeadTimeDays)}
                           </td>
                           <td className="text-right font-semibold">
                             ${cal.revenue?.toLocaleString()}
@@ -863,6 +914,7 @@ export default function AnalyticsPage() {
                         <th className="text-right py-2">Converted</th>
                         <th className="text-right py-2">Conversion Rate</th>
                         <th className="text-right py-2">Avg Cycle (days)</th>
+                        <th className="text-right py-2">Avg Lead (days)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -884,6 +936,9 @@ export default function AnalyticsPage() {
                           </td>
                           <td className="text-right">
                             {formatSalesCycle(obj.averageSalesCycleDays)}
+                          </td>
+                          <td className="text-right">
+                            {formatLeadTime(obj.averageLeadTimeDays)}
                           </td>
                         </tr>
                       ))}
@@ -964,6 +1019,15 @@ export default function AnalyticsPage() {
                               Sales Cycle: {formatSalesCycle(item.salesCycleDays)} days
                             </span>
                           )}
+                        {item.appointmentLeadTimeDays !== undefined &&
+                          item.appointmentLeadTimeDays !== null && (
+                            <span>
+                              Lead Time: {formatLeadTime(item.appointmentLeadTimeDays)} days
+                            </span>
+                          )}
+                        {item.startTime && (
+                          <span>Started: {formatDetailDate(item.startTime)}</span>
+                        )}
                         {item.firstCallAt && (
                           <span>First Call: {formatDetailDate(item.firstCallAt)}</span>
                         )}

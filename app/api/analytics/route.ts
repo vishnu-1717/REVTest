@@ -14,6 +14,9 @@ interface ObjectionData {
   salesCycleTotalDays?: number
   salesCycleCount?: number
   averageSalesCycleDays?: number | null
+  leadTimeTotalDays?: number
+  leadTimeCount?: number
+  averageLeadTimeDays?: number | null
 }
 
 interface CalendarBreakdown extends Omit<AnalyticsBreakdownItem, 'showRate' | 'closeRate'> {
@@ -47,6 +50,9 @@ interface CloserBreakdownItem {
   salesCycleTotalDays: number
   salesCycleCount: number
   averageSalesCycleDays?: number | null
+  leadTimeTotalDays: number
+  leadTimeCount: number
+  averageLeadTimeDays?: number | null
 }
 
 type CloserBreakdownAccumulator = Record<string, CloserBreakdownItem>
@@ -65,6 +71,9 @@ interface DayBreakdownItem {
   salesCycleTotalDays: number
   salesCycleCount: number
   averageSalesCycleDays?: number | null
+  leadTimeTotalDays: number
+  leadTimeCount: number
+  averageLeadTimeDays?: number | null
 }
 
 type DayBreakdownAccumulator = Record<string, DayBreakdownItem>
@@ -81,6 +90,9 @@ interface CalendarBreakdownItem {
   salesCycleTotalDays: number
   salesCycleCount: number
   averageSalesCycleDays?: number | null
+  leadTimeTotalDays: number
+  leadTimeCount: number
+  averageLeadTimeDays?: number | null
 }
 
 type CalendarBreakdownAccumulator = Record<string, CalendarBreakdownItem>
@@ -97,6 +109,9 @@ interface SourceBreakdownItem {
   salesCycleTotalDays: number
   salesCycleCount: number
   averageSalesCycleDays?: number | null
+  leadTimeTotalDays: number
+  leadTimeCount: number
+  averageLeadTimeDays?: number | null
 }
 
 type SourceBreakdownAccumulator = Record<string, SourceBreakdownItem>
@@ -581,6 +596,16 @@ export async function GET(request: NextRequest) {
     let salesCycleTotalDays = 0
     let salesCycleCount = 0
 
+    interface LeadTimeMeta {
+      days: number
+      scheduledAt: Date
+      startAt: Date
+    }
+
+    const appointmentLeadTimeMeta = new Map<string, LeadTimeMeta>()
+    let leadTimeTotalDays = 0
+    let leadTimeCount = 0
+
     countableAppointments.forEach((apt) => {
       const hasSignedStatus = apt.status === 'signed'
       const associatedSale = salesByAppointmentId.get(apt.id)
@@ -613,11 +638,32 @@ export async function GET(request: NextRequest) {
       })
       salesCycleTotalDays += diffDays
       salesCycleCount += 1
+
+      if (apt.startTime) {
+        const startAt = new Date(apt.startTime)
+        const scheduledAt = new Date(apt.scheduledAt)
+        const leadDiffMs = startAt.getTime() - scheduledAt.getTime()
+        if (leadDiffMs >= 0) {
+          const leadDiffDays = leadDiffMs / (1000 * 60 * 60 * 24)
+          appointmentLeadTimeMeta.set(apt.id, {
+            days: leadDiffDays,
+            scheduledAt,
+            startAt
+          })
+          leadTimeTotalDays += leadDiffDays
+          leadTimeCount += 1
+        }
+      }
     })
 
     const averageSalesCycleDays =
       salesCycleCount > 0
         ? parseFloat((salesCycleTotalDays / salesCycleCount).toFixed(1))
+        : null
+
+    const averageLeadTimeDays =
+      leadTimeCount > 0
+        ? parseFloat((leadTimeTotalDays / leadTimeCount).toFixed(1))
         : null
     
     // Close Rate: Percent of showed calls that closed
@@ -680,7 +726,9 @@ export async function GET(request: NextRequest) {
             cancelled: 0,
             revenue: 0,
             salesCycleTotalDays: 0,
-            salesCycleCount: 0
+            salesCycleCount: 0,
+            leadTimeTotalDays: 0,
+            leadTimeCount: 0
           }
         }
 
@@ -705,6 +753,12 @@ export async function GET(request: NextRequest) {
           closerData.salesCycleCount += 1
         }
 
+        const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+        if (leadTimeMeta) {
+          closerData.leadTimeTotalDays += leadTimeMeta.days
+          closerData.leadTimeCount += 1
+        }
+
         return acc
       }, {} as CloserBreakdownAccumulator)
     ).map((closer) => {
@@ -724,13 +778,25 @@ export async function GET(request: NextRequest) {
           ? parseFloat((closer.salesCycleTotalDays / closer.salesCycleCount).toFixed(1))
           : null
 
-      const { salesCycleTotalDays, salesCycleCount, ...rest } = closer
+      const averageLeadTimeDays =
+        closer.leadTimeCount > 0
+          ? parseFloat((closer.leadTimeTotalDays / closer.leadTimeCount).toFixed(1))
+          : null
+
+      const {
+        salesCycleTotalDays,
+        salesCycleCount,
+        leadTimeTotalDays,
+        leadTimeCount,
+        ...rest
+      } = closer
       
       return {
         ...rest,
         showRate: closerShowRate,
         closeRate: closerCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
 
@@ -752,7 +818,9 @@ export async function GET(request: NextRequest) {
             revenue: 0,
             noShows: 0,
             salesCycleTotalDays: 0,
-            salesCycleCount: 0
+            salesCycleCount: 0,
+            leadTimeTotalDays: 0,
+            leadTimeCount: 0
           }
         }
 
@@ -780,6 +848,12 @@ export async function GET(request: NextRequest) {
           dayData.salesCycleCount += 1
         }
 
+        const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+        if (leadTimeMeta) {
+          dayData.leadTimeTotalDays += leadTimeMeta.days
+          dayData.leadTimeCount += 1
+        }
+
         return acc
       }, {} as DayBreakdownAccumulator)
     ).map((day: DayBreakdownItem) => {
@@ -799,13 +873,25 @@ export async function GET(request: NextRequest) {
           ? parseFloat((day.salesCycleTotalDays / day.salesCycleCount).toFixed(1))
           : null
 
-      const { salesCycleTotalDays, salesCycleCount, ...rest } = day
+      const averageLeadTimeDays =
+        day.leadTimeCount > 0
+          ? parseFloat((day.leadTimeTotalDays / day.leadTimeCount).toFixed(1))
+          : null
+
+      const {
+        salesCycleTotalDays,
+        salesCycleCount,
+        leadTimeTotalDays,
+        leadTimeCount,
+        ...rest
+      } = day
 
       return {
         ...rest,
         showRate: dayShowRate,
         closeRate: dayCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     }).sort((a, b) => a.dayOfWeek - b.dayOfWeek)
     
@@ -829,19 +915,37 @@ export async function GET(request: NextRequest) {
             objectionData.salesCycleCount =
               (objectionData.salesCycleCount || 0) + 1
           }
+          const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+          if (leadTimeMeta) {
+            objectionData.leadTimeTotalDays =
+              (objectionData.leadTimeTotalDays || 0) + leadTimeMeta.days
+            objectionData.leadTimeCount =
+              (objectionData.leadTimeCount || 0) + 1
+          }
           return acc
         }, {})
     ).map(([_type, data]: [string, ObjectionData]) => {
-      const { salesCycleTotalDays = 0, salesCycleCount = 0, ...rest } = data
+      const {
+        salesCycleTotalDays = 0,
+        salesCycleCount = 0,
+        leadTimeTotalDays = 0,
+        leadTimeCount = 0,
+        ...rest
+      } = data
       const averageSalesCycleDays =
         salesCycleCount > 0
           ? parseFloat((salesCycleTotalDays / salesCycleCount).toFixed(1))
+          : null
+      const averageLeadTimeDays =
+        leadTimeCount > 0
+          ? parseFloat((leadTimeTotalDays / leadTimeCount).toFixed(1))
           : null
 
       return {
         ...rest,
         conversionRate: rest.count > 0 ? ((rest.converted / rest.count) * 100).toFixed(1) : 0,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     }).sort((a, b) => b.count - a.count)
     
@@ -859,7 +963,9 @@ export async function GET(request: NextRequest) {
             cancelled: 0,
             revenue: 0,
             salesCycleTotalDays: 0,
-            salesCycleCount: 0
+            salesCycleCount: 0,
+            leadTimeTotalDays: 0,
+            leadTimeCount: 0
           }
         }
 
@@ -884,6 +990,12 @@ export async function GET(request: NextRequest) {
           calendarData.salesCycleCount += 1
         }
 
+        const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+        if (leadTimeMeta) {
+          calendarData.leadTimeTotalDays += leadTimeMeta.days
+          calendarData.leadTimeCount += 1
+        }
+
         return acc
       }, {} as CalendarBreakdownAccumulator)
     ).map(([_calendar, data]: [string, CalendarBreakdownItem]) => {
@@ -902,14 +1014,25 @@ export async function GET(request: NextRequest) {
         data.salesCycleCount > 0
           ? parseFloat((data.salesCycleTotalDays / data.salesCycleCount).toFixed(1))
           : null
+      const averageLeadTimeDays =
+        data.leadTimeCount > 0
+          ? parseFloat((data.leadTimeTotalDays / data.leadTimeCount).toFixed(1))
+          : null
 
-      const { salesCycleTotalDays, salesCycleCount, ...rest } = data
+      const {
+        salesCycleTotalDays,
+        salesCycleCount,
+        leadTimeTotalDays,
+        leadTimeCount,
+        ...rest
+      } = data
 
       return {
         ...rest,
         showRate: calendarShowRate,
         closeRate: calendarCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
@@ -937,8 +1060,13 @@ export async function GET(request: NextRequest) {
               acc.salesCycleTotalDays += salesCycleMeta.days
               acc.salesCycleCount += 1
             }
+            const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+            if (leadTimeMeta) {
+              acc.leadTimeTotalDays += leadTimeMeta.days
+              acc.leadTimeCount += 1
+            }
             return acc
-          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0, leadTimeTotalDays: 0, leadTimeCount: 0 })
       },
       {
         type: 'Follow Up',
@@ -962,8 +1090,13 @@ export async function GET(request: NextRequest) {
               acc.salesCycleTotalDays += salesCycleMeta.days
               acc.salesCycleCount += 1
             }
+            const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+            if (leadTimeMeta) {
+              acc.leadTimeTotalDays += leadTimeMeta.days
+              acc.leadTimeCount += 1
+            }
             return acc
-          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0 })
+          }, { total: 0, scheduled: 0, cancelled: 0, showed: 0, signed: 0, revenue: 0, salesCycleTotalDays: 0, salesCycleCount: 0, leadTimeTotalDays: 0, leadTimeCount: 0 })
       }
     ].map(type => {
       // Calculate expected calls: scheduled - cancelled
@@ -982,13 +1115,25 @@ export async function GET(request: NextRequest) {
           ? parseFloat((type.salesCycleTotalDays / type.salesCycleCount).toFixed(1))
           : null
 
-      const { salesCycleTotalDays, salesCycleCount, ...rest } = type
+      const averageLeadTimeDays =
+        type.leadTimeCount > 0
+          ? parseFloat((type.leadTimeTotalDays / type.leadTimeCount).toFixed(1))
+          : null
+
+      const {
+        salesCycleTotalDays,
+        salesCycleCount,
+        leadTimeTotalDays,
+        leadTimeCount,
+        ...rest
+      } = type
 
       return {
         ...rest,
         showRate: typeShowRate,
         closeRate: typeCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     })
     
@@ -1026,6 +1171,18 @@ export async function GET(request: NextRequest) {
         },
         { totalDays: 0, count: 0 }
       )
+
+      const leadTimeStats = periodAppointments.reduce(
+        (acc, apt) => {
+          const meta = appointmentLeadTimeMeta.get(apt.id)
+          if (meta) {
+            acc.totalDays += meta.days
+            acc.count += 1
+          }
+          return acc
+        },
+        { totalDays: 0, count: 0 }
+      )
       
       // Calculate expected calls: scheduled - cancelled
       const periodExpectedCalls = scheduled - cancelled
@@ -1043,6 +1200,11 @@ export async function GET(request: NextRequest) {
           ? parseFloat((salesCycleStats.totalDays / salesCycleStats.count).toFixed(1))
           : null
 
+      const averageLeadTimeDays =
+        leadTimeStats.count > 0
+          ? parseFloat((leadTimeStats.totalDays / leadTimeStats.count).toFixed(1))
+          : null
+
       return {
         period: period.charAt(0).toUpperCase() + period.slice(1),
         total: periodAppointments.length,
@@ -1051,7 +1213,8 @@ export async function GET(request: NextRequest) {
         signed,
         showRate: periodShowRate,
         closeRate: periodCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     })
     
@@ -1069,7 +1232,9 @@ export async function GET(request: NextRequest) {
             cancelled: 0,
             revenue: 0,
             salesCycleTotalDays: 0,
-            salesCycleCount: 0
+            salesCycleCount: 0,
+            leadTimeTotalDays: 0,
+            leadTimeCount: 0
           }
         }
 
@@ -1094,6 +1259,12 @@ export async function GET(request: NextRequest) {
           sourceData.salesCycleCount += 1
         }
 
+        const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
+        if (leadTimeMeta) {
+          sourceData.leadTimeTotalDays += leadTimeMeta.days
+          sourceData.leadTimeCount += 1
+        }
+
         return acc
       }, {} as SourceBreakdownAccumulator)
     ).map((source: SourceBreakdownItem) => {
@@ -1112,22 +1283,35 @@ export async function GET(request: NextRequest) {
         source.salesCycleCount > 0
           ? parseFloat((source.salesCycleTotalDays / source.salesCycleCount).toFixed(1))
           : null
+      const averageLeadTimeDays =
+        source.leadTimeCount > 0
+          ? parseFloat((source.leadTimeTotalDays / source.leadTimeCount).toFixed(1))
+          : null
 
-      const { salesCycleTotalDays, salesCycleCount, ...rest } = source
+      const {
+        salesCycleTotalDays,
+        salesCycleCount,
+        leadTimeTotalDays,
+        leadTimeCount,
+        ...rest
+      } = source
 
       return {
         ...rest,
         showRate: sourceShowRate,
         closeRate: sourceCloseRate,
-        averageSalesCycleDays
+        averageSalesCycleDays,
+        averageLeadTimeDays
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
     const mapAppointmentDetail = (apt: AppointmentWithRelations) => {
       const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
+      const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
       return {
         id: apt.id,
         scheduledAt: apt.scheduledAt.toISOString(),
+        startTime: apt.startTime ? apt.startTime.toISOString() : null,
         createdAt: apt.createdAt?.toISOString() || null,
         contactName: apt.contact?.name || 'Unknown contact',
         closerId: apt.closerId,
@@ -1144,7 +1328,10 @@ export async function GET(request: NextRequest) {
           ? parseFloat(salesCycleMeta.days.toFixed(1))
           : null,
         firstCallAt: salesCycleMeta ? salesCycleMeta.firstCallAt.toISOString() : null,
-        closedAt: salesCycleMeta ? salesCycleMeta.closedAt.toISOString() : null
+        closedAt: salesCycleMeta ? salesCycleMeta.closedAt.toISOString() : null,
+        appointmentLeadTimeDays: leadTimeMeta
+          ? parseFloat(leadTimeMeta.days.toFixed(1))
+          : null
       }
     }
 
@@ -1300,6 +1487,19 @@ export async function GET(request: NextRequest) {
           }
           break
         }
+        case 'appointmentleadtime': {
+          const leadTimeAppointments = countableAppointments.filter((apt) =>
+            appointmentLeadTimeMeta.has(apt.id)
+          )
+          detail = {
+            metric: 'appointmentLeadTime',
+            items: leadTimeAppointments.map((apt) => ({
+              ...mapAppointmentDetail(apt),
+              type: 'appointment'
+            }))
+          }
+          break
+        }
         default: {
           detail = {
             metric: detailMetricRaw,
@@ -1329,6 +1529,8 @@ export async function GET(request: NextRequest) {
       timezone: companyTimezone,
       averageSalesCycleDays,
       salesCycleCount,
+      averageAppointmentLeadTimeDays: averageLeadTimeDays,
+      appointmentLeadTimeCount: leadTimeCount,
       
       // Legacy metrics (for backward compatibility)
       totalAppointments,
