@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { submitPCN } from '@/lib/pcn-submission'
 import { PCNSubmission } from '@/types/pcn'
-import { Prisma } from '@prisma/client'
 
 const FIELD_MAP = {
   appointmentId: [

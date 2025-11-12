@@ -154,6 +154,26 @@ export interface UpcomingAppointmentsResponse {
   calendars?: Array<{ key: string; label: string }>
 }
 
+export interface CompletedPCN {
+  id: string
+  scheduledAt: string
+  pcnSubmittedAt: string | null
+  contactName: string
+  closerId: string | null
+  closerName: string
+  status: string
+  outcome: string | null
+  cashCollected: number | null
+  notes: string | null
+}
+
+export interface CompletedPCNsResponse {
+  appointments: CompletedPCN[]
+  totalCount: number
+  timezone?: string
+  closers?: Array<{ id: string; name: string }>
+}
+
 // Option lists for dropdowns
 export const PCN_OPTIONS = {
   whyDidntMoveForward: [

@@ -20,7 +20,9 @@ import {
   PendingPCNCloserSummary,
   PendingPCNsResponse,
   UpcomingAppointment,
-  UpcomingAppointmentsResponse
+  UpcomingAppointmentsResponse,
+  CompletedPCN,
+  CompletedPCNsResponse
 } from '@/types/pcn'
 
 export default function AppointmentsPage() {
@@ -48,6 +50,13 @@ export default function AppointmentsPage() {
   const [upcomingCalendarFilter, setUpcomingCalendarFilter] = useState<string>('all')
   const [upcomingDateFrom, setUpcomingDateFrom] = useState<string>('')
   const [upcomingDateTo, setUpcomingDateTo] = useState<string>('')
+  const [completedPCNs, setCompletedPCNs] = useState<CompletedPCN[]>([])
+  const [completedTotal, setCompletedTotal] = useState<number>(0)
+  const [completedLoading, setCompletedLoading] = useState<boolean>(false)
+  const [completedCloserOptions, setCompletedCloserOptions] = useState<Array<{ id: string; name: string }>>([])
+  const [completedCloserFilter, setCompletedCloserFilter] = useState<string>('all')
+  const [completedDateFrom, setCompletedDateFrom] = useState<string>('')
+  const [completedDateTo, setCompletedDateTo] = useState<string>('')
 
   const appendViewAs = useCallback((url: string) => {
     if (typeof window === 'undefined') return url
@@ -130,6 +139,47 @@ export default function AppointmentsPage() {
     upcomingDateTo
   ])
 
+  const fetchCompletedPCNs = useCallback(async () => {
+    try {
+      setCompletedLoading(true)
+      const params = new URLSearchParams()
+      if (completedDateFrom) {
+        params.append('dateFrom', completedDateFrom)
+      }
+      if (completedDateTo) {
+        params.append('dateTo', completedDateTo)
+      }
+      if (completedCloserFilter !== 'all') {
+        params.append('closerId', completedCloserFilter)
+      }
+      params.append('limit', '500')
+
+      const response = await fetch(
+        appendViewAs(`/api/appointments/completed-pcns?${params.toString()}`),
+        { credentials: 'include' }
+      )
+      const data: CompletedPCNsResponse = await response.json()
+
+      setCompletedPCNs(data.appointments || [])
+      setCompletedTotal(data.totalCount || 0)
+      if (data.timezone) {
+        setTimezone(data.timezone)
+      }
+      if (data.closers) {
+        setCompletedCloserOptions(data.closers)
+      }
+    } catch (error) {
+      console.error('Failed to fetch completed PCNs:', error)
+    } finally {
+      setCompletedLoading(false)
+    }
+  }, [
+    appendViewAs,
+    completedCloserFilter,
+    completedDateFrom,
+    completedDateTo
+  ])
+
   useEffect(() => {
     fetchUser()
     fetchAppointments()
@@ -138,6 +188,10 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchUpcomingAppointments()
   }, [fetchUpcomingAppointments])
+
+  useEffect(() => {
+    fetchCompletedPCNs()
+  }, [fetchCompletedPCNs])
 
   const fetchUser = async () => {
     try {
@@ -250,6 +304,15 @@ export default function AppointmentsPage() {
     }
   }, [scheduledFormatter])
 
+  const formatDateTime = useCallback((iso: string | null | undefined) => {
+    if (!iso) return 'Unknown'
+    try {
+      return scheduledFormatter.format(new Date(iso))
+    } catch {
+      return new Date(iso).toLocaleString()
+    }
+  }, [scheduledFormatter])
+
   const handleClick = (appointmentId: string) => {
     router.push(`/pcn/${appointmentId}`)
   }
@@ -305,6 +368,21 @@ export default function AppointmentsPage() {
       .sort((a, b) => a.label.localeCompare(b.label))
     return [...baseOptions, ...additional]
   }, [upcomingCalendarOptions])
+
+  const completedCloserSelectOptions = useMemo(() => {
+    const baseOptions = [
+      { value: 'all', label: 'All closers' },
+      { value: 'unassigned', label: 'Unassigned' }
+    ]
+    const additional = completedCloserOptions
+      .filter((closer) => closer.id)
+      .map((closer) => ({
+        value: closer.id,
+        label: closer.name || 'Unnamed rep'
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return [...baseOptions, ...additional]
+  }, [completedCloserOptions])
 
   const closerFromQuery = searchParams?.get('closerId')
 
@@ -679,6 +757,126 @@ export default function AppointmentsPage() {
                   </div>
                   <div className="col-span-4 md:col-span-3 text-gray-600">
                     {apt.calendarName || 'Unassigned'}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle>Completed PCNs</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                PCNs that have been submitted. Use the filters to see activity by closer or date range.
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Times shown in {timezone}
+              </p>
+            </div>
+            <Badge variant="outline">
+              {completedTotal} completed
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">From date</label>
+              <Input
+                type="date"
+                value={completedDateFrom}
+                onChange={(e) => setCompletedDateFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">To date</label>
+              <Input
+                type="date"
+                value={completedDateTo}
+                onChange={(e) => setCompletedDateTo(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Closer</label>
+              <Select
+                value={completedCloserFilter}
+                onValueChange={setCompletedCloserFilter}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All closers" />
+                </SelectTrigger>
+                <SelectContent>
+                  {completedCloserSelectOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end justify-start md:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCompletedDateFrom('')
+                  setCompletedDateTo('')
+                  setCompletedCloserFilter('all')
+                }}
+              >
+                Reset filters
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-lg border">
+            <div className="grid grid-cols-12 gap-4 px-4 py-3 text-sm font-medium text-gray-500 border-b bg-gray-50">
+              <div className="col-span-3 md:col-span-2">Submitted</div>
+              <div className="col-span-3 md:col-span-2">Scheduled</div>
+              <div className="col-span-3 md:col-span-3">Contact</div>
+              <div className="hidden md:block md:col-span-2">Closer</div>
+              <div className="hidden lg:block lg:col-span-2">Outcome</div>
+              <div className="col-span-3 md:col-span-3 lg:col-span-1 text-right">Cash</div>
+            </div>
+            {completedLoading ? (
+              <div className="py-6 text-center text-gray-500 text-sm">
+                Loading completed PCNs...
+              </div>
+            ) : completedPCNs.length === 0 ? (
+              <div className="py-6 text-center text-gray-500 text-sm">
+                No completed PCNs for the selected filters.
+              </div>
+            ) : (
+              completedPCNs.map((pcn) => (
+                <div
+                  key={pcn.id}
+                  className="grid grid-cols-12 gap-4 px-4 py-3 text-sm border-b last:border-b-0"
+                >
+                  <div className="col-span-3 md:col-span-2 font-medium">
+                    {formatDateTime(pcn.pcnSubmittedAt)}
+                  </div>
+                  <div className="col-span-3 md:col-span-2 text-gray-600">
+                    {formatScheduledAt(pcn.scheduledAt)}
+                  </div>
+                  <div className="col-span-3 md:col-span-3">
+                    <div className="font-medium">{pcn.contactName}</div>
+                    <div className="md:hidden text-xs text-gray-500 mt-1">
+                      Closer: {pcn.closerName || 'Unassigned'}
+                    </div>
+                  </div>
+                  <div className="hidden md:block md:col-span-2 text-gray-600">
+                    {pcn.closerName || 'Unassigned'}
+                  </div>
+                  <div className="hidden lg:block lg:col-span-2 text-gray-600">
+                    {pcn.outcome ? pcn.outcome.replace('_', ' ') : 'Unknown'}
+                  </div>
+                  <div className="col-span-3 md:col-span-3 lg:col-span-1 text-right text-gray-700 font-medium">
+                    {pcn.cashCollected !== null && pcn.cashCollected !== undefined
+                      ? `$${pcn.cashCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : '—'}
                   </div>
                 </div>
               ))
