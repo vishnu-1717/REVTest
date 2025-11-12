@@ -57,6 +57,9 @@ export default function AppointmentsPage() {
   const [completedCloserFilter, setCompletedCloserFilter] = useState<string>('all')
   const [completedDateFrom, setCompletedDateFrom] = useState<string>('')
   const [completedDateTo, setCompletedDateTo] = useState<string>('')
+  const [assignableClosers, setAssignableClosers] = useState<Array<{ id: string; name: string }>>([])
+  const [assigningMap, setAssigningMap] = useState<Record<string, boolean>>({})
+  const [assignError, setAssignError] = useState<string | null>(null)
 
   const appendViewAs = useCallback((url: string) => {
     if (typeof window === 'undefined') return url
@@ -67,15 +70,18 @@ export default function AppointmentsPage() {
     return `${url}${separator}viewAs=${viewAs}`
   }, [])
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     try {
       setLoading(true)
       // Fetch all pending PCNs when on the appointments page
-      const response = await fetch(appendViewAs('/api/appointments/pending-pcns?all=true&groupBy=closer'), {
-        credentials: 'include'
-      })
+      const response = await fetch(
+        appendViewAs('/api/appointments/pending-pcns?all=true&groupBy=closer'),
+        {
+          credentials: 'include'
+        }
+      )
       const data: PendingPCNsResponse = await response.json()
-      
+
       setAppointments(data.appointments || [])
       setTotalCount(data.totalCount || 0)
       if (data.timezone) {
@@ -84,12 +90,17 @@ export default function AppointmentsPage() {
       if (data.byCloser) {
         setClosers(data.byCloser)
       }
+      if (data.assignableClosers) {
+        setAssignableClosers(data.assignableClosers)
+      } else {
+        setAssignableClosers([])
+      }
     } catch (error) {
       console.error('Failed to fetch appointments:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [appendViewAs])
 
   const fetchUpcomingAppointments = useCallback(async () => {
     try {
@@ -183,7 +194,7 @@ export default function AppointmentsPage() {
   useEffect(() => {
     fetchUser()
     fetchAppointments()
-  }, [])
+  }, [fetchAppointments])
 
   useEffect(() => {
     fetchUpcomingAppointments()
@@ -241,6 +252,42 @@ export default function AppointmentsPage() {
     }
   }
 
+  const handleAssignCloser = useCallback(
+    async (appointmentId: string, closerIdValue: string | null) => {
+      setAssignError(null)
+      setAssigningMap((prev) => ({ ...prev, [appointmentId]: true }))
+
+      try {
+        const response = await fetch(appendViewAs(`/api/appointments/${appointmentId}`), {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ closerId: closerIdValue })
+        })
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          setAssignError(data.error || 'Failed to assign PCN')
+          return
+        }
+
+        await Promise.all([fetchAppointments(), fetchCompletedPCNs()])
+      } catch (error: any) {
+        console.error('Failed to assign PCN:', error)
+        setAssignError(error?.message || 'Failed to assign PCN')
+      } finally {
+        setAssigningMap((prev) => {
+          const next = { ...prev }
+          delete next[appointmentId]
+          return next
+        })
+      }
+    },
+    [appendViewAs, fetchAppointments, fetchCompletedPCNs]
+  )
+
   // Filter and sort appointments based on search query and date sort order
   const filteredAppointments = useMemo(() => {
     let results = appointments
@@ -283,7 +330,7 @@ export default function AppointmentsPage() {
 
       return dateB - dateA
     })
-  }, [appointments, searchQuery, dateFrom, dateTo, dateSort])
+  }, [appointments, searchQuery, dateFrom, dateTo, dateSort, closerFilter])
 
   const scheduledFormatter = useMemo(() => {
     return new Intl.DateTimeFormat('en-US', {
@@ -384,6 +431,34 @@ export default function AppointmentsPage() {
     return [...baseOptions, ...additional]
   }, [completedCloserOptions])
 
+  const assignSelectOptions = useMemo(() => {
+    const unique = new Map<string, string>()
+
+    assignableClosers.forEach((closer) => {
+      if (closer.id) {
+        unique.set(closer.id, closer.name || 'Unnamed rep')
+      }
+    })
+
+    completedCloserOptions.forEach((closer) => {
+      if (closer.id) {
+        unique.set(closer.id, closer.name || 'Unnamed rep')
+      }
+    })
+
+    upcomingCloserOptions.forEach((closer) => {
+      if (closer.id) {
+        unique.set(closer.id, closer.name || 'Unnamed rep')
+      }
+    })
+
+    const sorted = Array.from(unique.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return [{ id: 'unassigned', name: 'Unassigned' }, ...sorted]
+  }, [assignableClosers, completedCloserOptions, upcomingCloserOptions])
+
   const closerFromQuery = searchParams?.get('closerId')
 
   useEffect(() => {
@@ -421,6 +496,12 @@ export default function AppointmentsPage() {
           <p className="text-gray-500">Manage and view all appointments</p>
         </div>
       </div>
+
+      {assignError && (
+        <div className="mb-6 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+          {assignError}
+        </div>
+      )}
 
       {/* Appointments List */}
       <Card>
@@ -593,11 +674,9 @@ export default function AppointmentsPage() {
                       <p className="font-medium">{apt.contactName}</p>
                       {getStatusBadge(apt.status)}
                     </div>
-                    {apt.closerName && (
-                      <p className="text-sm text-gray-600">
-                        Closer: {apt.closerName}
-                      </p>
-                    )}
+                    <p className="text-sm text-gray-600">
+                      Closer: {apt.closerName || 'Unassigned'}
+                    </p>
                     <p className="text-xs text-gray-500 mt-1">
                       Scheduled {formatScheduledAt(apt.scheduledAt)} ({formatDistanceToNow(new Date(apt.scheduledAt), { addSuffix: true })})
                     </p>
@@ -610,6 +689,35 @@ export default function AppointmentsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {isAdmin && !apt.closerId && assignSelectOptions.length > 1 && (
+                        <div
+                          className="relative"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Select
+                            value={apt.closerId ?? 'unassigned'}
+                            onValueChange={(value) => {
+                              const newCloserId = value === 'unassigned' ? null : value
+                              if ((apt.closerId ?? null) === newCloserId) {
+                                return
+                              }
+                              handleAssignCloser(apt.id, newCloserId)
+                            }}
+                            disabled={assigningMap[apt.id] || assignSelectOptions.length <= 1}
+                          >
+                            <SelectTrigger className="w-[180px]">
+                              <SelectValue placeholder="Assign closer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {assignSelectOptions.map((option) => (
+                                <SelectItem key={option.id} value={option.id}>
+                                  {option.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                       <Button size="sm" variant="outline">
                         Submit PCN
                       </Button>
@@ -866,9 +974,60 @@ export default function AppointmentsPage() {
                     <div className="md:hidden text-xs text-gray-500 mt-1">
                       Closer: {pcn.closerName || 'Unassigned'}
                     </div>
+                    {isAdmin && !pcn.closerId && assignSelectOptions.length > 1 && (
+                      <div className="md:hidden mt-2">
+                        <Select
+                          value={pcn.closerId ?? 'unassigned'}
+                          onValueChange={(value) => {
+                            const newCloserId = value === 'unassigned' ? null : value
+                            if ((pcn.closerId ?? null) === newCloserId) {
+                              return
+                            }
+                            handleAssignCloser(pcn.id, newCloserId)
+                          }}
+                          disabled={assigningMap[pcn.id] || assignSelectOptions.length <= 1}
+                        >
+                          <SelectTrigger className="w-full max-w-[220px]">
+                            <SelectValue placeholder="Assign closer" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {assignSelectOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </div>
                   <div className="hidden md:block md:col-span-2 text-gray-600">
-                    {pcn.closerName || 'Unassigned'}
+                    {isAdmin && !pcn.closerId && assignSelectOptions.length > 1 ? (
+                      <Select
+                        value={pcn.closerId ?? 'unassigned'}
+                        onValueChange={(value) => {
+                          const newCloserId = value === 'unassigned' ? null : value
+                          if ((pcn.closerId ?? null) === newCloserId) {
+                            return
+                          }
+                          handleAssignCloser(pcn.id, newCloserId)
+                        }}
+                        disabled={assigningMap[pcn.id] || assignSelectOptions.length <= 1}
+                      >
+                        <SelectTrigger className="w-[200px]">
+                          <SelectValue placeholder="Assign closer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {assignSelectOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      pcn.closerName || 'Unassigned'
+                    )}
                   </div>
                   <div className="hidden lg:block lg:col-span-2 text-gray-600">
                     {pcn.outcome ? pcn.outcome.replace('_', ' ') : 'Unknown'}

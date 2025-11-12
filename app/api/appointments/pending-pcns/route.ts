@@ -133,6 +133,25 @@ export async function GET(request: NextRequest) {
         }
       })
 
+      const assignableCloserWhere: Prisma.UserWhereInput =
+        user.role === 'admin' || user.superAdmin
+          ? {
+              companyId: effectiveCompanyId,
+              isActive: true,
+              superAdmin: false,
+              OR: [
+                { role: { in: ['rep', 'closer'] } },
+                { AppointmentsAsCloser: { some: {} } }
+              ]
+            }
+          : { id: user.id }
+
+      const assignableClosersRaw = await prisma.user.findMany({
+        where: assignableCloserWhere,
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' }
+      })
+
       let byCloser: Array<{
         closerId: string | null
         closerName: string
@@ -149,27 +168,6 @@ export async function GET(request: NextRequest) {
           _min: { scheduledAt: true }
         })
 
-        const closerQueryBase: Prisma.UserWhereInput =
-          user.role === 'admin' || user.superAdmin
-            ? {
-                companyId: effectiveCompanyId,
-                isActive: true,
-                superAdmin: false,
-                OR: [
-                  { role: { in: ['rep', 'closer'] } },
-                  { AppointmentsAsCloser: { some: {} } }
-                ]
-              }
-            : { id: user.id }
-
-        const closers = await prisma.user.findMany({
-          where: closerQueryBase,
-          select: {
-            id: true,
-            name: true
-          }
-        })
-
         const groupMap = new Map<string | null, (typeof groupResults)[number]>()
         groupResults.forEach((entry) => {
           groupMap.set(entry.closerId, entry)
@@ -182,7 +180,7 @@ export async function GET(request: NextRequest) {
           return 'normal'
         }
 
-        byCloser = closers
+        byCloser = assignableClosersRaw
           .map((closer) => {
             const summary = groupMap.get(closer.id) || null
             const oldestMinutes =
@@ -238,7 +236,11 @@ export async function GET(request: NextRequest) {
         totalCount,
         appointments: formatted,
         timezone,
-        byCloser
+        byCloser,
+        assignableClosers: assignableClosersRaw.map((closer) => ({
+          id: closer.id,
+          name: closer.name || 'Unnamed rep'
+        }))
       }
     })
 

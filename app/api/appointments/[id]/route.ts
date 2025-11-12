@@ -245,3 +245,98 @@ export async function DELETE(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getEffectiveUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    if (!user.superAdmin && user.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { id } = await params
+    const effectiveCompanyId = await getEffectiveCompanyId(request.url)
+
+    if (!user.superAdmin && user.companyId !== effectiveCompanyId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch (error) {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
+    const closerIdRaw = body?.closerId
+    const closerId =
+      closerIdRaw === null || closerIdRaw === undefined || closerIdRaw === ''
+        ? null
+        : typeof closerIdRaw === 'string'
+          ? closerIdRaw
+          : undefined
+
+    if (closerId === undefined) {
+      return NextResponse.json({ error: 'closerId must be a string or null' }, { status: 400 })
+    }
+
+    return await withPrisma(async (prisma) => {
+      const appointment = await prisma.appointment.findFirst({
+        where: { id, companyId: effectiveCompanyId },
+        select: { id: true }
+      })
+
+      if (!appointment) {
+        return NextResponse.json({ error: 'Appointment not found' }, { status: 404 })
+      }
+
+      if (closerId) {
+        const closer = await prisma.user.findFirst({
+          where: {
+            id: closerId,
+            companyId: effectiveCompanyId,
+            isActive: true,
+            superAdmin: false
+          },
+          select: { id: true }
+        })
+
+        if (!closer) {
+          return NextResponse.json(
+            { error: 'Selected rep is not available for this company' },
+            { status: 400 }
+          )
+        }
+      }
+
+      const updated = await prisma.appointment.update({
+        where: { id },
+        data: {
+          closerId
+        },
+        select: {
+          id: true,
+          closerId: true
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        appointment: updated
+      })
+    })
+  } catch (error: any) {
+    console.error('[API] Error updating appointment closer:', error)
+    return NextResponse.json(
+      { error: 'Failed to update appointment', details: error.message },
+      { status: 500 }
+    )
+  }
+}
+

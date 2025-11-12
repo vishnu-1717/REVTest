@@ -133,6 +133,7 @@ export interface PendingPCNsResponse {
   appointments: PendingPCN[]
   timezone?: string
   byCloser?: PendingPCNCloserSummary[]
+  assignableClosers?: Array<{ id: string; name: string }>
 }
 
 export interface UpcomingAppointment {
