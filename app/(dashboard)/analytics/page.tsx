@@ -691,7 +691,7 @@ export default function AnalyticsPage() {
   }, [analytics])
 
   const renderWithBadge = (formatted: string, badge?: string) => (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1 text-inherit font-semibold">
       <span>{formatted}</span>
       {badge ? <span>{badge}</span> : null}
     </span>

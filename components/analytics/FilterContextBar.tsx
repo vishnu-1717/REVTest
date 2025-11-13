@@ -29,13 +29,13 @@ export function FilterContextBar({
   appointmentCount
 }: FilterContextBarProps) {
   return (
-    <div className="mb-8 space-y-3 rounded-lg bg-muted/50 p-4">
+    <div className="mb-8 space-y-3 rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-muted-foreground">
             🔍 Current Filter Context:
           </span>
-          <div className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
+          <div className="rounded-full bg-secondary/90 px-3 py-1 text-xs font-medium text-secondary-foreground">
             Showing: {appointmentCount} appointments
           </div>
         </div>

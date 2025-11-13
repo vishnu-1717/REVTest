@@ -8,13 +8,20 @@ type MetricStatus = 'neutral' | 'success' | 'warning' | 'danger'
 
 const statusClasses: Record<MetricStatus, string> = {
   neutral:
-    'border border-border bg-background hover:border-primary/60 dark:bg-neutral-900 dark:border-neutral-800',
+    'border border-border bg-card text-card-foreground shadow-sm hover:border-primary/50 dark:border-neutral-800 dark:bg-neutral-900',
   success:
-    'border border-green-200 bg-green-50 text-green-700 hover:border-green-400 dark:border-green-900 dark:bg-green-950 dark:text-green-200',
+    'border border-green-200 bg-green-100 text-green-900 shadow-sm hover:border-green-400 dark:border-green-900 dark:bg-green-950/70 dark:text-green-100',
   warning:
-    'border border-yellow-200 bg-yellow-50 text-yellow-700 hover:border-yellow-400 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-200',
+    'border border-yellow-200 bg-yellow-100 text-yellow-900 shadow-sm hover:border-yellow-400 dark:border-yellow-900 dark:bg-yellow-950/70 dark:text-yellow-100',
   danger:
-    'border border-red-200 bg-red-50 text-red-700 hover:border-red-400 dark:border-red-900 dark:bg-red-950 dark:text-red-200'
+    'border border-red-200 bg-red-100 text-red-900 shadow-sm hover:border-red-400 dark:border-red-900 dark:bg-red-950/70 dark:text-red-100'
+}
+
+const valueClasses: Record<MetricStatus, string> = {
+  neutral: 'text-foreground dark:text-white',
+  success: 'text-green-800 dark:text-green-200',
+  warning: 'text-yellow-900 dark:text-yellow-100',
+  danger: 'text-red-800 dark:text-red-200'
 }
 
 interface ClickableMetricCardProps {
@@ -26,6 +33,7 @@ interface ClickableMetricCardProps {
   filterKey?: string
   filterValue?: string
   footer?: ReactNode
+  valueClassName?: string
 }
 
 export function ClickableMetricCard({
@@ -36,7 +44,8 @@ export function ClickableMetricCard({
   onClick,
   filterKey,
   filterValue,
-  footer
+  footer,
+  valueClassName
 }: ClickableMetricCardProps) {
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onClick) return
@@ -61,8 +70,12 @@ export function ClickableMetricCard({
       <CardHeader>
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="text-3xl font-bold">{value}</div>
+      <CardContent className="space-y-2 text-sm text-muted-foreground">
+        <div
+          className={cn('text-3xl font-semibold', valueClasses[status], valueClassName)}
+        >
+          {value}
+        </div>
         {description ? (
           <p className="text-xs text-muted-foreground">{description}</p>
         ) : null}
