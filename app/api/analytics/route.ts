@@ -6,6 +6,13 @@ import { AppointmentWhereClause, AppointmentWithRelations, AnalyticsBreakdownIte
 import { convertDateRangeToUtc, getCompanyTimezone } from '@/lib/timezone'
 import { buildComparisonParams, type ComparisonTarget, getComparisonLabel } from '@/lib/analytics-comparison'
 
+const formatDateKey = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // Helper types for analytics aggregations
 interface ObjectionData {
   type: string
@@ -983,8 +990,10 @@ export async function GET(request: NextRequest) {
             revenue: 0,
             salesCycleTotalDays: 0,
             salesCycleCount: 0,
+            averageSalesCycleDays: null,
             leadTimeTotalDays: 0,
-            leadTimeCount: 0
+            leadTimeCount: 0,
+            averageLeadTimeDays: null
           }
         }
 
@@ -1324,6 +1333,37 @@ export async function GET(request: NextRequest) {
       }
     }).sort((a, b) => b.revenue - a.revenue)
     
+    // Group by date for time-series charts
+    const byDate = Object.values(
+      countableAppointments.reduce((acc: Record<string, { date: string; scheduled: number; showed: number; signed: number; cashCollected: number; revenue: number }>, apt) => {
+        const scheduledDate = new Date(apt.scheduledAt)
+        const dateKey = formatDateKey(scheduledDate)
+        if (!acc[dateKey]) {
+          acc[dateKey] = {
+            date: dateKey,
+            scheduled: 0,
+            showed: 0,
+            signed: 0,
+            cashCollected: 0,
+            revenue: 0
+          }
+        }
+
+        const bucket = acc[dateKey]
+        bucket.scheduled += 1
+        if (apt.status === 'showed' || apt.status === 'signed') {
+          bucket.showed += 1
+        }
+        if (apt.status === 'signed') {
+          bucket.signed += 1
+          const collected = apt.cashCollected || 0
+          bucket.cashCollected += collected
+          bucket.revenue += collected
+        }
+        return acc
+      }, {})
+    ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    
     const mapAppointmentDetail = (apt: AppointmentWithRelations) => {
       const salesCycleMeta = appointmentSalesCycleMeta.get(apt.id)
       const leadTimeMeta = appointmentLeadTimeMeta.get(apt.id)
@@ -1571,6 +1611,7 @@ export async function GET(request: NextRequest) {
       byAppointmentType,
       byTimeOfDay,
       byTrafficSource,
+      byDate,
       ...(detail ? { detail } : {})
     }
 

@@ -20,6 +20,9 @@ import { generateInsights, type AnalyticsSnapshot, type Insight } from '@/lib/an
 import { getComparisonLabel, type ComparisonTarget } from '@/lib/analytics-comparison'
 import { useTableState, type TableColumn, type TableState } from '@/components/analytics/table-utils'
 import { SelectedComparisonPanel, type ComparisonMetric } from '@/components/analytics/SelectedComparisonPanel'
+import { TimeSeriesLineChart } from '@/components/analytics/charts/TimeSeriesLineChart'
+import { DayOfWeekBarChart } from '@/components/analytics/charts/DayOfWeekBarChart'
+import { CalendarStackedBarChart } from '@/components/analytics/charts/CalendarStackedBarChart'
 
 interface FilterState {
   dateFrom: string
@@ -372,6 +375,7 @@ export default function AnalyticsPage() {
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters())
   const [compareMode, setCompareMode] = useState(false)
   const [comparisonTarget, setComparisonTarget] = useState<ComparisonTarget>('overall')
+  const [overviewMode, setOverviewMode] = useState<'charts' | 'tables'>('charts')
   const [comparisonData, setComparisonData] = useState<any | null>(null)
   const [comparisonLabel, setComparisonLabel] = useState(getComparisonLabel('overall'))
   const [comparisonInsights, setComparisonInsights] = useState<Insight[]>([])
@@ -1001,6 +1005,23 @@ export default function AnalyticsPage() {
     getId: (row) => String(row.type ?? generateId())
   })
 
+  const timeSeriesData = analytics?.byDate ?? []
+  const dayOfWeekData = analytics?.byDayOfWeek ?? []
+  const calendarChartData = analytics?.byCalendar ?? []
+
+  const handleSetDateRange = (date: string) => {
+    const updatedFilters: FilterState = {
+      ...filters,
+      dateFrom: date,
+      dateTo: date
+    }
+    setFilters(updatedFilters)
+    setDraftFilters(updatedFilters)
+    setActiveQuickView(null)
+    updateUrlFromFilters(updatedFilters)
+    fetchAnalytics(updatedFilters)
+  }
+
   const renderBreakdownTable = <T extends Record<string, any>>(
     title: string,
     table: TableState<T>,
@@ -1424,57 +1445,91 @@ export default function AnalyticsPage() {
           
           {/* Content based on active view */}
           {activeView === 'overview' && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-              {renderBreakdownTable(
-                'By Day of Week',
-                dayOfWeekTable,
-                dayOfWeekColumns,
-                dayOfWeekComparisonMetrics,
-                (row) => row.dayName ?? DAY_NAMES[row.dayOfWeek as number] ?? 'Unknown day',
-                'analytics-by-day-of-week.csv',
-                (row) => {
-                  if (row.dayOfWeek !== undefined) {
-                    handleAddFilter('dayOfWeek', String(row.dayOfWeek))
-                  }
-                },
-                'Search day…'
-              )}
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={overviewMode === 'charts' ? 'default' : 'outline'}
+                  onClick={() => setOverviewMode('charts')}
+                >
+                  Charts
+                </Button>
+                <Button
+                  variant={overviewMode === 'tables' ? 'default' : 'outline'}
+                  onClick={() => setOverviewMode('tables')}
+                >
+                  Tables
+                </Button>
+              </div>
 
-              {renderBreakdownTable(
-                'By Time of Day',
-                timeOfDayTable,
-                timeOfDayColumns,
-                timeOfDayComparisonMetrics,
-                (row) => row.period ?? 'Unknown period',
-                'analytics-by-time-of-day.csv',
-                (row) => {
-                  const filterValue = row.period?.toLowerCase?.()
-                  if (filterValue) {
-                    handleAddFilter('timeOfDay', filterValue)
-                  }
-                },
-                'Search period…'
-              )}
+              {overviewMode === 'charts' ? (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                  <TimeSeriesLineChart
+                    data={timeSeriesData}
+                    onPointClick={(date) => handleSetDateRange(date)}
+                  />
+                  <DayOfWeekBarChart
+                    data={dayOfWeekData}
+                    onBarClick={(dayOfWeek) => handleAddFilter('dayOfWeek', String(dayOfWeek))}
+                  />
+                  <CalendarStackedBarChart
+                    data={calendarChartData}
+                    onBarClick={(calendar) => handleAddFilter('calendar', calendar)}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                  {renderBreakdownTable(
+                    'By Day of Week',
+                    dayOfWeekTable,
+                    dayOfWeekColumns,
+                    dayOfWeekComparisonMetrics,
+                    (row) => row.dayName ?? DAY_NAMES[row.dayOfWeek as number] ?? 'Unknown day',
+                    'analytics-by-day-of-week.csv',
+                    (row) => {
+                      if (row.dayOfWeek !== undefined) {
+                        handleAddFilter('dayOfWeek', String(row.dayOfWeek))
+                      }
+                    },
+                    'Search day…'
+                  )}
 
-              {renderBreakdownTable(
-                'First Call vs Follow Up',
-                appointmentTypeTable,
-                appointmentTypeColumns,
-                appointmentTypeComparisonMetrics,
-                (row) => row.type ?? 'Unknown type',
-                'analytics-by-appointment-type.csv',
-                (row) => {
-                  const value =
-                    row.type === 'First Call'
-                      ? 'first_call'
-                      : row.type === 'Follow Up'
-                        ? 'follow_up'
-                        : row.type
-                  if (value) {
-                    handleAddFilter('appointmentType', value)
-                  }
-                },
-                'Search appointment type…'
+                  {renderBreakdownTable(
+                    'By Time of Day',
+                    timeOfDayTable,
+                    timeOfDayColumns,
+                    timeOfDayComparisonMetrics,
+                    (row) => row.period ?? 'Unknown period',
+                    'analytics-by-time-of-day.csv',
+                    (row) => {
+                      const filterValue = row.period?.toLowerCase?.()
+                      if (filterValue) {
+                        handleAddFilter('timeOfDay', filterValue)
+                      }
+                    },
+                    'Search period…'
+                  )}
+
+                  {renderBreakdownTable(
+                    'First Call vs Follow Up',
+                    appointmentTypeTable,
+                    appointmentTypeColumns,
+                    appointmentTypeComparisonMetrics,
+                    (row) => row.type ?? 'Unknown type',
+                    'analytics-by-appointment-type.csv',
+                    (row) => {
+                      const value =
+                        row.type === 'First Call'
+                          ? 'first_call'
+                          : row.type === 'Follow Up'
+                            ? 'follow_up'
+                            : row.type
+                      if (value) {
+                        handleAddFilter('appointmentType', value)
+                      }
+                    },
+                    'Search appointment type…'
+                  )}
+                </div>
               )}
             </div>
           )}
