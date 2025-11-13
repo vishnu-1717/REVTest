@@ -1,10 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { KeyboardEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import AdvancedFilters from '@/components/AdvancedFilters'
+import {
+  FilterContextBar,
+  type FilterChip as AnalyticsFilterChip
+} from '@/components/analytics/FilterContextBar'
+import { ClickableMetricCard } from '@/components/analytics/ClickableMetricCard'
+import { cn } from '@/lib/utils'
+import { getKpiBadge, getKpiColorClass, getKpiStatus, resolveTarget } from '@/lib/analytics-kpi'
 
 interface FilterState {
   dateFrom: string
@@ -29,6 +35,63 @@ type QuickViewRange =
   | 'last_week'
   | 'last_month'
   | 'this_year'
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const
+
+const STATUS_LABELS: Record<string, string> = {
+  signed: 'Signed',
+  showed: 'Showed',
+  no_show: 'No Show',
+  cancelled: 'Cancelled',
+  scheduled: 'Scheduled'
+}
+
+const APPOINTMENT_TYPE_LABELS: Record<string, string> = {
+  first_call: 'First Call',
+  follow_up: 'Follow Up'
+}
+
+const TIME_OF_DAY_LABELS: Record<string, string> = {
+  morning: 'Morning (6am-12pm)',
+  afternoon: 'Afternoon (12pm-5pm)',
+  evening: 'Evening (5pm-9pm)',
+  night: 'Night (9pm-6am)'
+}
+
+const FOLLOW_UP_LABELS: Record<string, string> = {
+  true: 'Follow-ups Needed',
+  false: 'No Follow-ups Needed'
+}
+
+const parseNumericValue = (value: unknown): number => {
+  if (typeof value === 'number') {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : NaN
+  }
+  return NaN
+}
+
+const formatPercentValue = (value: unknown): string => {
+  const numeric = parseNumericValue(value)
+  if (!Number.isFinite(numeric)) {
+    return '—'
+  }
+  return `${numeric.toFixed(1)}%`
+}
+
+const formatCurrencyValue = (value: unknown, fractionDigits = 0): string => {
+  const numeric = parseNumericValue(value)
+  if (!Number.isFinite(numeric)) {
+    return '—'
+  }
+  return numeric.toLocaleString('en-US', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
+  })
+}
 
 const formatDate = (date: Date): string => {
   const year = date.getFullYear()
@@ -136,7 +199,9 @@ const computeQuickViewRange = (range: QuickViewRange) => {
 
 export default function AnalyticsPage() {
   const [filters, setFilters] = useState<FilterState>(() => createDefaultFilters())
-  
+  const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters())
+  const [compareMode, setCompareMode] = useState(false)
+
   const [analytics, setAnalytics] = useState<any>(null)
   const [closers, setClosers] = useState<any[]>([])
   const [calendars, setCalendars] = useState<string[]>([])
@@ -151,6 +216,129 @@ export default function AnalyticsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
 
+
+  const generateFilterChips = useCallback(
+    (state: FilterState): AnalyticsFilterChip[] => {
+      const chips: AnalyticsFilterChip[] = []
+
+      const addChip = (key: keyof FilterState, value: string, label: string) => {
+        if (!value) return
+        chips.push({
+          key,
+          value,
+          label
+        })
+      }
+
+      if (state.dayOfWeek) {
+        const dayIndex = Number(state.dayOfWeek)
+        const dayLabel = Number.isNaN(dayIndex) ? `Day ${state.dayOfWeek}` : DAY_NAMES[dayIndex] ?? `Day ${state.dayOfWeek}`
+        addChip('dayOfWeek', state.dayOfWeek, dayLabel)
+      }
+
+      if (state.status) {
+        addChip('status', state.status, STATUS_LABELS[state.status] ?? state.status)
+      }
+
+      if (state.closer) {
+        const closerLabel =
+          closers.find((closer) => closer.id === state.closer)?.name || 'Selected Closer'
+        addChip('closer', state.closer, closerLabel)
+      }
+
+      if (state.calendar) {
+        addChip('calendar', state.calendar, state.calendar)
+      }
+
+      if (state.timeOfDay) {
+        addChip('timeOfDay', state.timeOfDay, TIME_OF_DAY_LABELS[state.timeOfDay] ?? state.timeOfDay)
+      }
+
+      if (state.appointmentType) {
+        addChip(
+          'appointmentType',
+          state.appointmentType,
+          APPOINTMENT_TYPE_LABELS[state.appointmentType] ?? state.appointmentType
+        )
+      }
+
+      if (state.objectionType) {
+        addChip('objectionType', state.objectionType, state.objectionType)
+      }
+
+      if (state.followUpNeeded) {
+        addChip(
+          'followUpNeeded',
+          state.followUpNeeded,
+          FOLLOW_UP_LABELS[state.followUpNeeded] ?? 'Follow-up Filter'
+        )
+      }
+
+      if (state.nurtureType) {
+        addChip('nurtureType', state.nurtureType, state.nurtureType)
+      }
+
+      if (state.minDealSize) {
+        const minLabel = Number.isNaN(Number(state.minDealSize))
+          ? `Min Deal ≥ ${state.minDealSize}`
+          : `Min Deal ≥ $${Number(state.minDealSize).toLocaleString()}`
+        addChip('minDealSize', state.minDealSize, minLabel)
+      }
+
+      if (state.maxDealSize) {
+        const maxLabel = Number.isNaN(Number(state.maxDealSize))
+          ? `Max Deal ≤ ${state.maxDealSize}`
+          : `Max Deal ≤ $${Number(state.maxDealSize).toLocaleString()}`
+        addChip('maxDealSize', state.maxDealSize, maxLabel)
+      }
+
+      return chips
+    },
+    [closers]
+  )
+
+  const filterChips = useMemo(
+    () => generateFilterChips(filters),
+    [filters, generateFilterChips]
+  )
+
+  const parseFiltersFromUrl = useCallback((): FilterState | null => {
+    if (typeof window === 'undefined') return null
+    const params = new URLSearchParams(window.location.search)
+    const nextFilters = createDefaultFilters()
+    let hasFilters = false
+
+    ;(Object.keys(nextFilters) as Array<keyof FilterState>).forEach((key) => {
+      const value = params.get(key)
+      if (value) {
+        nextFilters[key] = value
+        hasFilters = true
+      }
+    })
+
+    return hasFilters ? nextFilters : null
+  }, [])
+
+  const updateUrlFromFilters = useCallback((state: FilterState) => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams()
+    ;(Object.entries(state) as Array<[keyof FilterState, string]>).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value)
+      }
+    })
+
+    const currentUrl = new URL(window.location.href)
+    const viewAs = currentUrl.searchParams.get('viewAs')
+    if (viewAs) {
+      params.set('viewAs', viewAs)
+    }
+
+    const newSearch = params.toString()
+    const newUrl = `${currentUrl.pathname}${newSearch ? `?${newSearch}` : ''}`
+    window.history.replaceState({}, '', newUrl)
+  }, [])
+
   const appendViewAs = useCallback((url: string) => {
     if (typeof window === 'undefined') return url
     const params = new URLSearchParams(window.location.search)
@@ -162,8 +350,15 @@ export default function AnalyticsPage() {
   
   useEffect(() => {
     fetchClosers()
-    fetchAnalytics()
-  }, [])
+    const urlFilters = parseFiltersFromUrl()
+    if (urlFilters) {
+      setFilters(urlFilters)
+      setDraftFilters(urlFilters)
+      fetchAnalytics(urlFilters)
+    } else {
+      fetchAnalytics()
+    }
+  }, [parseFiltersFromUrl])
   
   const fetchClosers = async () => {
     try {
@@ -218,12 +413,29 @@ export default function AnalyticsPage() {
   
   const handleApplyFilters = () => {
     setActiveQuickView(null)
-    fetchAnalytics()
+    const appliedFilters = { ...draftFilters }
+    setFilters(appliedFilters)
+    updateUrlFromFilters(appliedFilters)
+    fetchAnalytics(appliedFilters)
   }
 
   const handleFilterChange = (nextFilters: FilterState) => {
     setActiveQuickView(null)
-    setFilters(nextFilters)
+    setDraftFilters(nextFilters)
+  }
+
+  const handleAddFilter = (key: keyof FilterState, value: string) => {
+    if (!value) return
+    const updatedFilters: FilterState = {
+      ...filters,
+      [key]: value
+    }
+
+    setFilters(updatedFilters)
+    setDraftFilters(updatedFilters)
+    setActiveQuickView(null)
+    updateUrlFromFilters(updatedFilters)
+    fetchAnalytics(updatedFilters)
   }
 
   const handleQuickView = (range: QuickViewRange) => {
@@ -237,8 +449,36 @@ export default function AnalyticsPage() {
     }
 
     setFilters(updatedFilters)
+    setDraftFilters(updatedFilters)
     setActiveQuickView(range)
+    updateUrlFromFilters(updatedFilters)
     fetchAnalytics(updatedFilters)
+  }
+
+  const handleRemoveFilter = (key: keyof FilterState) => {
+    const updatedFilters: FilterState = {
+      ...filters,
+      [key]: ''
+    }
+
+    setFilters(updatedFilters)
+    setDraftFilters(updatedFilters)
+    setActiveQuickView(null)
+    updateUrlFromFilters(updatedFilters)
+    fetchAnalytics(updatedFilters)
+  }
+
+  const handleClearAllFilters = () => {
+    const defaultFilters = createDefaultFilters()
+    setFilters(defaultFilters)
+    setDraftFilters(defaultFilters)
+    setActiveQuickView(null)
+    updateUrlFromFilters(defaultFilters)
+    fetchAnalytics(defaultFilters)
+  }
+
+  const handleToggleCompareMode = () => {
+    setCompareMode((prev) => !prev)
   }
   
   const quickViews: Array<{ id: QuickViewRange; label: string }> = [
@@ -328,25 +568,8 @@ export default function AnalyticsPage() {
     [appendViewAs, filters]
   )
 
-  const createMetricCardHandlers = useCallback(
-    (metricKey: string, title: string) => {
-      const handleClick = () => fetchMetricDetails(metricKey, title)
-      const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          fetchMetricDetails(metricKey, title)
-        }
-      }
-
-      return {
-        role: 'button' as const,
-        tabIndex: 0,
-        onClick: handleClick,
-        onKeyDown: handleKeyDown,
-        className:
-          'cursor-pointer transition hover:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500'
-      }
-    },
+  const createMetricCardHandler = useCallback(
+    (metricKey: string, title: string) => () => fetchMetricDetails(metricKey, title),
     [fetchMetricDetails]
   )
 
@@ -367,6 +590,141 @@ export default function AnalyticsPage() {
   const formatLeadTime = (value: number | null | undefined) =>
     formatDaysValue(value)
 
+  const kpi = useMemo(() => {
+    if (!analytics) return null
+
+    const showRateValue = parseNumericValue(analytics.showRate)
+    const showRateStatus = getKpiStatus(showRateValue, resolveTarget('showRate'))
+
+    const cancellationRateValue = parseNumericValue(analytics.cancellationRate)
+    const cancellationRateStatus = getKpiStatus(
+      cancellationRateValue,
+      resolveTarget('cancellationRate'),
+      0.1,
+      'lower'
+    )
+
+    const noShowRateValue = parseNumericValue(analytics.noShowRate)
+    const noShowRateStatus = getKpiStatus(
+      noShowRateValue,
+      resolveTarget('noShowRate'),
+      0.1,
+      'lower'
+    )
+
+    const qualifiedRateValue = parseNumericValue(analytics.qualifiedRate)
+    const qualifiedRateStatus = getKpiStatus(
+      qualifiedRateValue,
+      resolveTarget('qualifiedRate')
+    )
+
+    const closeRateValue = parseNumericValue(analytics.closeRate)
+    const closeRateStatus = getKpiStatus(
+      closeRateValue,
+      resolveTarget('closeRate')
+    )
+
+    const revenuePerScheduledValue = parseNumericValue(
+      analytics.dollarsOverScheduledCallsToDate
+    )
+    const revenuePerScheduledStatus = getKpiStatus(
+      revenuePerScheduledValue,
+      resolveTarget('revenuePerScheduled')
+    )
+
+    const revenuePerShowValue = parseNumericValue(analytics.dollarsOverShow)
+    const revenuePerShowStatus = getKpiStatus(
+      revenuePerShowValue,
+      resolveTarget('revenuePerShow')
+    )
+
+    return {
+      showRate: {
+        value: showRateValue,
+        status: showRateStatus,
+        badge: getKpiBadge(showRateStatus),
+        formatted: formatPercentValue(showRateValue)
+      },
+      cancellationRate: {
+        value: cancellationRateValue,
+        status: cancellationRateStatus,
+        badge: getKpiBadge(cancellationRateStatus),
+        formatted: formatPercentValue(cancellationRateValue)
+      },
+      noShowRate: {
+        value: noShowRateValue,
+        status: noShowRateStatus,
+        badge: getKpiBadge(noShowRateStatus),
+        formatted: formatPercentValue(noShowRateValue)
+      },
+      qualifiedRate: {
+        value: qualifiedRateValue,
+        status: qualifiedRateStatus,
+        badge: getKpiBadge(qualifiedRateStatus),
+        formatted: formatPercentValue(qualifiedRateValue)
+      },
+      closeRate: {
+        value: closeRateValue,
+        status: closeRateStatus,
+        badge: getKpiBadge(closeRateStatus),
+        formatted: formatPercentValue(closeRateValue)
+      },
+      revenuePerScheduled: {
+        value: revenuePerScheduledValue,
+        status: revenuePerScheduledStatus,
+        badge: getKpiBadge(revenuePerScheduledStatus),
+        formatted:
+          Number.isFinite(revenuePerScheduledValue)
+            ? `$${formatCurrencyValue(revenuePerScheduledValue, 2)}`
+            : '—'
+      },
+      revenuePerShow: {
+        value: revenuePerShowValue,
+        status: revenuePerShowStatus,
+        badge: getKpiBadge(revenuePerShowStatus),
+        formatted:
+          Number.isFinite(revenuePerShowValue)
+            ? `$${formatCurrencyValue(revenuePerShowValue, 2)}`
+            : '—'
+      }
+    }
+  }, [analytics])
+
+  const renderWithBadge = (formatted: string, badge?: string) => (
+    <span className="inline-flex items-center gap-1">
+      <span>{formatted}</span>
+      {badge ? <span>{badge}</span> : null}
+    </span>
+  )
+
+  const showRateFormatted = kpi?.showRate.formatted ?? formatPercentValue(analytics?.showRate)
+  const showRateBadge = kpi?.showRate.badge
+  const cancellationRateFormatted =
+    kpi?.cancellationRate.formatted ?? formatPercentValue(analytics?.cancellationRate)
+  const cancellationRateBadge = kpi?.cancellationRate.badge
+  const noShowRateFormatted =
+    kpi?.noShowRate.formatted ?? formatPercentValue(analytics?.noShowRate)
+  const noShowRateBadge = kpi?.noShowRate.badge
+  const qualifiedRateFormatted =
+    kpi?.qualifiedRate.formatted ?? formatPercentValue(analytics?.qualifiedRate)
+  const qualifiedRateBadge = kpi?.qualifiedRate.badge
+  const closeRateFormatted = kpi?.closeRate.formatted ?? formatPercentValue(analytics?.closeRate)
+  const closeRateBadge = kpi?.closeRate.badge
+  const revenuePerScheduledFormatted =
+    kpi?.revenuePerScheduled.formatted ??
+    (() => {
+      const formatted = formatCurrencyValue(analytics?.dollarsOverScheduledCallsToDate, 2)
+      return formatted === '—' ? formatted : `$${formatted}`
+    })()
+  const revenuePerScheduledBadge = kpi?.revenuePerScheduled.badge
+  const revenuePerShowFormatted =
+    kpi?.revenuePerShow.formatted ??
+    (() => {
+      const formatted = formatCurrencyValue(analytics?.dollarsOverShow, 2)
+      return formatted === '—' ? formatted : `$${formatted}`
+    })()
+  const revenuePerShowBadge = kpi?.revenuePerShow.badge
+
   return (
     <>
       <div className="container mx-auto py-10">
@@ -376,6 +734,15 @@ export default function AnalyticsPage() {
         <p className="text-sm text-gray-500 mt-1">Reporting in {timezone}</p>
       </div>
       
+      <FilterContextBar
+        filters={filterChips}
+        onRemoveFilter={(key) => handleRemoveFilter(key as keyof FilterState)}
+        onClearAll={handleClearAllFilters}
+        compareMode={compareMode}
+        onToggleCompare={handleToggleCompareMode}
+        appointmentCount={analytics?.scheduledCallsToDate ?? 0}
+      />
+
       {/* Filters */}
       <Card className="mb-8">
         <CardHeader>
@@ -395,7 +762,7 @@ export default function AnalyticsPage() {
             ))}
           </div>
           <AdvancedFilters
-            filters={filters}
+            filters={draftFilters}
             onFilterChange={handleFilterChange}
             closers={closers}
             calendars={calendars}
@@ -417,236 +784,135 @@ export default function AnalyticsPage() {
         <>
           {/* Primary Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
-            <Card {...createMetricCardHandlers('callsCreated', 'Calls Created')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Calls Created
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.callsCreated || 0}</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Appointments created in time frame
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card {...createMetricCardHandlers('scheduledCallsToDate', 'Scheduled Calls to Date')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Scheduled Calls to Date
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.scheduledCallsToDate || 0}</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Scheduled in time frame
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Cancellation Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.cancellationRate || 0}%</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Percent of scheduled calls canceled
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  No Show Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.noShowRate || 0}%</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Percent of expected calls that no-showed
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card {...createMetricCardHandlers('salesCycle', 'Average Sales Cycle')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Avg Sales Cycle
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
+            <ClickableMetricCard
+              title="Calls Created"
+              value={(analytics.callsCreated || 0).toLocaleString()}
+              description="Appointments created in time frame"
+              onClick={createMetricCardHandler('callsCreated', 'Calls Created')}
+            />
+
+            <ClickableMetricCard
+              title="Scheduled Calls to Date"
+              value={(analytics.scheduledCallsToDate || 0).toLocaleString()}
+              description="Scheduled in time frame"
+              onClick={createMetricCardHandler('scheduledCallsToDate', 'Scheduled Calls to Date')}
+            />
+
+            <ClickableMetricCard
+              title="Cancellation Rate"
+              value={renderWithBadge(cancellationRateFormatted, cancellationRateBadge)}
+              description="Percent of scheduled calls canceled"
+              status={kpi?.cancellationRate.status ?? 'neutral'}
+            />
+
+            <ClickableMetricCard
+              title="No Show Rate"
+              value={renderWithBadge(noShowRateFormatted, noShowRateBadge)}
+              description="Percent of expected calls that no-showed"
+              status={kpi?.noShowRate.status ?? 'neutral'}
+            />
+
+            <ClickableMetricCard
+              title="Avg Sales Cycle"
+              value={
+                <>
                   {formatSalesCycle(analytics.averageSalesCycleDays)}{' '}
                   {typeof analytics.averageSalesCycleDays === 'number' ? 'days' : ''}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Avg days from first call to close ({analytics.salesCycleCount || 0}{' '}
-                  deals)
-                </p>
-              </CardContent>
-            </Card>
+                </>
+              }
+              description={`Avg days from first call to close (${analytics.salesCycleCount || 0} deals)`}
+              onClick={createMetricCardHandler('salesCycle', 'Average Sales Cycle')}
+            />
 
-            <Card
-              {...createMetricCardHandlers(
-                'appointmentLeadTime',
-                'Average Appointment Lead Time'
-              )}
-            >
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Avg Lead Time
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
+            <ClickableMetricCard
+              title="Avg Lead Time"
+              value={
+                <>
                   {formatLeadTime(analytics.averageAppointmentLeadTimeDays)}{' '}
-                  {typeof analytics.averageAppointmentLeadTimeDays === 'number'
-                    ? 'days'
-                    : ''}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Avg days from creation to actual start (
-                  {analytics.appointmentLeadTimeCount || 0} appts)
-                </p>
-              </CardContent>
-            </Card>
+                  {typeof analytics.averageAppointmentLeadTimeDays === 'number' ? 'days' : ''}
+                </>
+              }
+              description={`Avg days from creation to actual start (${analytics.appointmentLeadTimeCount || 0} appts)`}
+              onClick={createMetricCardHandler('appointmentLeadTime', 'Average Appointment Lead Time')}
+            />
           </div>
           
           {/* Performance Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Show Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.showRate || 0}%</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {analytics.callsShown || 0} calls shown
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card {...createMetricCardHandlers('qualifiedCalls', 'Qualified Calls')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Qualified Calls
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.qualifiedCalls || 0}</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Qualified Rate: {analytics.qualifiedRate || 0}%
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card {...createMetricCardHandlers('totalUnitsClosed', 'Total Units Closed')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Total Units Closed
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{analytics.totalUnitsClosed || 0}</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Close Rate: {analytics.closeRate || 0}%
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Scheduled Calls to Closed
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{(analytics.scheduledCallsToClosed || 0).toFixed(1)}%</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Closed ÷ Scheduled
-                </p>
-              </CardContent>
-            </Card>
+            <ClickableMetricCard
+              title="Show Rate"
+              value={renderWithBadge(showRateFormatted, showRateBadge)}
+              description={`${analytics.callsShown || 0} calls shown`}
+              status={kpi?.showRate.status ?? 'neutral'}
+            />
+
+            <ClickableMetricCard
+              title="Qualified Calls"
+              value={(analytics.qualifiedCalls || 0).toLocaleString()}
+              description={
+                <>
+                  Qualified Rate:{' '}
+                  {renderWithBadge(qualifiedRateFormatted, qualifiedRateBadge)}
+                </>
+              }
+              status={kpi?.qualifiedRate.status ?? 'neutral'}
+              onClick={createMetricCardHandler('qualifiedCalls', 'Qualified Calls')}
+            />
+
+            <ClickableMetricCard
+              title="Total Units Closed"
+              value={(analytics.totalUnitsClosed || 0).toLocaleString()}
+              description={
+                <>
+                  Close Rate:{' '}
+                  {renderWithBadge(closeRateFormatted, closeRateBadge)}
+                </>
+              }
+              status={kpi?.closeRate.status ?? 'neutral'}
+              onClick={createMetricCardHandler('totalUnitsClosed', 'Total Units Closed')}
+            />
+
+            <ClickableMetricCard
+              title="Scheduled Calls to Closed"
+              value={`${(analytics.scheduledCallsToClosed || 0).toFixed(1)}%`}
+              description="Closed ÷ Scheduled"
+            />
           </div>
           
           {/* Revenue Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card {...createMetricCardHandlers('cashCollected', 'Cash Collected')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Cash Collected
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  ${(analytics.cashCollected || 0).toLocaleString()}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Total cash collected
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  $ per Scheduled Call
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  ${parseFloat(analytics.dollarsOverScheduledCallsToDate || 0).toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Cash ÷ Scheduled Calls
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  $ per Showed Call
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  ${parseFloat(analytics.dollarsOverShow || 0).toLocaleString('en-US', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Cash ÷ Calls Shown
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card {...createMetricCardHandlers('missingPCNs', 'Missing PCNs')}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Missing PCNs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold text-red-600">
-                  {analytics.missingPCNs || 0}
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Overdue PCN submissions
-                </p>
-              </CardContent>
-            </Card>
+            <ClickableMetricCard
+              title="Cash Collected"
+              value={`$${(analytics.cashCollected || 0).toLocaleString()}`}
+              description="Total cash collected"
+              onClick={createMetricCardHandler('cashCollected', 'Cash Collected')}
+            />
+
+            <ClickableMetricCard
+              title="$ per Scheduled Call"
+              value={renderWithBadge(revenuePerScheduledFormatted, revenuePerScheduledBadge)}
+              description="Cash ÷ Scheduled Calls"
+              status={kpi?.revenuePerScheduled.status ?? 'neutral'}
+            />
+
+            <ClickableMetricCard
+              title="$ per Showed Call"
+              value={renderWithBadge(revenuePerShowFormatted, revenuePerShowBadge)}
+              description="Cash ÷ Calls Shown"
+              status={kpi?.revenuePerShow.status ?? 'neutral'}
+            />
+
+            <ClickableMetricCard
+              title="Missing PCNs"
+              value={
+                <span className="text-red-600">
+                  {(analytics.missingPCNs || 0).toLocaleString()}
+                </span>
+              }
+              description="Overdue PCN submissions"
+              status="danger"
+              onClick={createMetricCardHandler('missingPCNs', 'Missing PCNs')}
+            />
           </div>
           
           {/* View Tabs */}
@@ -705,7 +971,18 @@ export default function AnalyticsPage() {
                       </thead>
                       <tbody>
                         {analytics.byDayOfWeek?.map((day: any) => (
-                          <tr key={day.dayName} className="border-b">
+                          <tr
+                            key={day.dayOfWeek ?? day.dayName}
+                            className={cn(
+                              'border-b transition-colors',
+                              day.dayOfWeek !== undefined ? 'cursor-pointer hover:bg-accent' : ''
+                            )}
+                            onClick={() => {
+                              if (day.dayOfWeek !== undefined) {
+                                handleAddFilter('dayOfWeek', String(day.dayOfWeek))
+                              }
+                            }}
+                          >
                             <td className="py-2">{day.dayName}</td>
                             <td className="text-right">{day.total}</td>
                             <td className="text-right">{day.showRate}%</td>
@@ -717,7 +994,7 @@ export default function AnalyticsPage() {
                               {formatLeadTime(day.averageLeadTimeDays)}
                             </td>
                             <td className="text-right">${day.revenue?.toLocaleString()}</td>
-                          </tr>
+                            </tr>
                         ))}
                       </tbody>
                     </table>
@@ -744,20 +1021,37 @@ export default function AnalyticsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {analytics.byTimeOfDay?.map((period: any) => (
-                          <tr key={period.period} className="border-b">
-                            <td className="py-2">{period.period}</td>
-                            <td className="text-right">{period.total}</td>
-                            <td className="text-right">{period.showRate}%</td>
-                            <td className="text-right">{period.closeRate}%</td>
-                            <td className="text-right">
-                              {formatSalesCycle(period.averageSalesCycleDays)}
-                            </td>
-                            <td className="text-right">
-                              {formatLeadTime(period.averageLeadTimeDays)}
-                            </td>
-                          </tr>
-                        ))}
+                        {analytics.byTimeOfDay?.map((period: any) => {
+                          const filterValue = period.period?.toLowerCase?.()
+                          const label = filterValue
+                            ? TIME_OF_DAY_LABELS[filterValue] ?? period.period
+                            : period.period
+                          return (
+                            <tr
+                              key={period.period}
+                              className={cn(
+                                'border-b transition-colors',
+                                filterValue ? 'cursor-pointer hover:bg-accent' : ''
+                              )}
+                              onClick={() => {
+                                if (filterValue) {
+                                  handleAddFilter('timeOfDay', filterValue)
+                                }
+                              }}
+                            >
+                              <td className="py-2">{period.period}</td>
+                              <td className="text-right">{period.total}</td>
+                              <td className="text-right">{period.showRate}%</td>
+                              <td className="text-right">{period.closeRate}%</td>
+                              <td className="text-right">
+                                {formatSalesCycle(period.averageSalesCycleDays)}
+                              </td>
+                              <td className="text-right">
+                                {formatLeadTime(period.averageLeadTimeDays)}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -785,7 +1079,19 @@ export default function AnalyticsPage() {
                       </thead>
                       <tbody>
                         {analytics.byAppointmentType?.map((type: any) => (
-                          <tr key={type.type} className="border-b">
+                          <tr
+                            key={type.type}
+                            className={cn('border-b transition-colors', 'cursor-pointer hover:bg-accent')}
+                            onClick={() => {
+                              const value =
+                                type.type === 'First Call'
+                                  ? 'first_call'
+                                  : type.type === 'Follow Up'
+                                    ? 'follow_up'
+                                    : type.type
+                              handleAddFilter('appointmentType', value)
+                            }}
+                          >
                             <td className="py-2">{type.type}</td>
                             <td className="text-right">{type.total}</td>
                             <td className="text-right">{type.showRate}%</td>
@@ -829,7 +1135,18 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody>
                       {analytics.byCloser?.map((closer: any) => (
-                        <tr key={closer.closerEmail} className="border-b">
+                        <tr
+                          key={closer.closerEmail}
+                          className={cn(
+                            'border-b transition-colors',
+                            closer.closerId ? 'cursor-pointer hover:bg-accent' : ''
+                          )}
+                          onClick={() => {
+                            if (closer.closerId) {
+                              handleAddFilter('closer', closer.closerId)
+                            }
+                          }}
+                        >
                           <td className="py-2">{closer.closerName}</td>
                           <td className="text-right">{closer.total}</td>
                           <td className="text-right">{closer.showRate}%</td>
@@ -875,7 +1192,18 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody>
                       {analytics.byCalendar?.map((cal: any) => (
-                        <tr key={cal.calendar} className="border-b">
+                        <tr
+                          key={cal.calendar}
+                          className={cn(
+                            'border-b transition-colors',
+                            cal.calendar ? 'cursor-pointer hover:bg-accent' : ''
+                          )}
+                          onClick={() => {
+                            if (cal.calendar) {
+                              handleAddFilter('calendar', cal.calendar)
+                            }
+                          }}
+                        >
                           <td className="py-2">{cal.calendar}</td>
                           <td className="text-right">{cal.total}</td>
                           <td className="text-right">{cal.showRate}%</td>
@@ -919,7 +1247,18 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody>
                       {analytics.byObjection?.map((obj: any) => (
-                        <tr key={obj.type} className="border-b">
+                        <tr
+                          key={obj.type}
+                          className={cn(
+                            'border-b transition-colors',
+                            obj.type ? 'cursor-pointer hover:bg-accent' : ''
+                          )}
+                          onClick={() => {
+                            if (obj.type) {
+                              handleAddFilter('objectionType', obj.type)
+                            }
+                          }}
+                        >
                           <td className="py-2">{obj.type}</td>
                           <td className="text-right">{obj.count}</td>
                           <td className="text-right">{obj.converted}</td>
