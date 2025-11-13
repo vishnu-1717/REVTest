@@ -538,6 +538,12 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     console.log('[GHL Webhook] Existing appointment found:', !!appointment, appointment?.id)
 
     // Parse dates from webhook (use parsed date if available, otherwise parse raw string)
+    console.log('[GHL Webhook] Raw date values from webhook:')
+    console.log('  - webhook.startTime:', webhook.startTime)
+    console.log('  - webhook.startTimeParsed:', webhook.startTimeParsed)
+    console.log('  - webhook.endTime:', webhook.endTime)
+    console.log('  - timezone:', timezone)
+    
     const startTimeDate =
       webhook.startTimeParsed ||
       parseGHLDate(webhook.startTime, timezone) ||
@@ -547,7 +553,19 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
       webhook.endTimeParsed ||
       (webhook.endTime ? parseGHLDate(webhook.endTime, timezone) : null)
 
-    console.log('[GHL Webhook] Parsed dates - startTime:', startTimeDate, 'endTime:', endTimeDate)
+    console.log('[GHL Webhook] Parsed dates:')
+    console.log('  - startTimeDate:', startTimeDate.toISOString(), `(${startTimeDate.toLocaleString('en-US', { timeZone: timezone })})`)
+    console.log('  - endTimeDate:', endTimeDate?.toISOString() || 'null', endTimeDate ? `(${endTimeDate.toLocaleString('en-US', { timeZone: timezone })})` : '')
+    
+    // Warn if the parsed date seems wrong (e.g., in the past when it should be future)
+    if (startTimeDate && startTimeDate < new Date()) {
+      const hoursAgo = (Date.now() - startTimeDate.getTime()) / (1000 * 60 * 60)
+      if (hoursAgo > 24) {
+        console.warn(`[GHL Webhook] ⚠️  WARNING: Parsed startTime is ${hoursAgo.toFixed(1)} hours in the past. This might be incorrect.`)
+        console.warn(`[GHL Webhook]   Raw startTime value: "${webhook.startTime}"`)
+        console.warn(`[GHL Webhook]   Parsed as: ${startTimeDate.toISOString()}`)
+      }
+    }
 
     if (appointment) {
       // Update existing appointment

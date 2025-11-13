@@ -72,6 +72,9 @@ export async function GET(request: NextRequest) {
         dateFrom && dateFrom > tenMinutesAgo ? dateFrom : tenMinutesAgo
       const effectiveDateTo = dateTo || undefined
 
+      // IMPORTANT: We use scheduledAt (not createdAt) to determine if an appointment
+      // should appear in upcoming appointments. An appointment is "upcoming" if it is
+      // scheduled in the future or within the last 10 minutes, regardless of when it was created.
       const baseWhereClause: Prisma.AppointmentWhereInput = {
         companyId: effectiveCompanyId,
         status: 'scheduled',

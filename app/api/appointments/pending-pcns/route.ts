@@ -44,6 +44,9 @@ export async function GET(request: NextRequest) {
       const currentTime = new Date()
       const tenMinutesAgo = new Date(currentTime.getTime() - 10 * 60 * 1000)
 
+      // IMPORTANT: We use scheduledAt (not createdAt) to determine if an appointment
+      // should appear in pending PCNs. An appointment is "pending" if it was scheduled
+      // more than 10 minutes ago, regardless of when it was created in the system.
       const baseWhereClause: Prisma.AppointmentWhereInput = {
         companyId: effectiveCompanyId,
         pcnSubmitted: false,

@@ -12,44 +12,57 @@ type SubmitPCNParams = {
   actorName?: string | null
 }
 
-export function validatePCNSubmission(submission: PCNSubmission): string | null {
+export function validatePCNSubmission(
+  submission: PCNSubmission,
+  options: { strict?: boolean } = {}
+): string | null {
+  const { strict = true } = options
+
   if (!submission.callOutcome) {
     return 'Call outcome is required'
   }
 
   switch (submission.callOutcome) {
     case 'showed':
-      if (!submission.firstCallOrFollowUp) {
+      // In strict mode, require firstCallOrFollowUp
+      if (strict && !submission.firstCallOrFollowUp) {
         return 'Please indicate if this was a first call or follow-up'
       }
-      if (submission.wasOfferMade === undefined || submission.wasOfferMade === null) {
+      // In strict mode, require wasOfferMade
+      if (strict && (submission.wasOfferMade === undefined || submission.wasOfferMade === null)) {
         return 'Please indicate if an offer was made'
       }
-      if (submission.wasOfferMade && !submission.whyDidntMoveForward) {
+      // Only require whyDidntMoveForward if offer was made AND we're in strict mode
+      if (strict && submission.wasOfferMade && !submission.whyDidntMoveForward) {
         return 'Please provide a reason why the prospect didn\'t move forward'
       }
-      if (submission.followUpScheduled && !submission.followUpDate) {
+      // Only require follow-up date if follow-up is scheduled AND we're in strict mode
+      if (strict && submission.followUpScheduled && !submission.followUpDate) {
         return 'Please provide follow-up date'
       }
-      if (submission.followUpScheduled && !submission.nurtureType) {
+      // Only require nurture type if follow-up is scheduled AND we're in strict mode
+      if (strict && submission.followUpScheduled && !submission.nurtureType) {
         return 'Please select nurture type for follow-up'
       }
       break
 
     case 'signed':
-      if (!submission.cashCollected || submission.cashCollected <= 0) {
+      // In strict mode, require cash collected
+      if (strict && (!submission.cashCollected || submission.cashCollected <= 0)) {
         return 'Please enter the cash collected amount'
       }
       break
 
     case 'no_show':
-      if (submission.noShowCommunicative === undefined || submission.noShowCommunicative === null) {
+      // In strict mode, require noShowCommunicative
+      if (strict && (submission.noShowCommunicative === undefined || submission.noShowCommunicative === null)) {
         return 'Please indicate if the no-show was communicative'
       }
       break
 
     case 'cancelled':
-      if (!submission.cancellationReason) {
+      // In strict mode, require cancellation reason
+      if (strict && !submission.cancellationReason) {
         return 'Please provide a cancellation reason'
       }
       break
@@ -63,9 +76,10 @@ export async function submitPCN({
   companyId,
   submission,
   actorUserId = null,
-  actorName = null
-}: SubmitPCNParams) {
-  const validationError = validatePCNSubmission(submission)
+  actorName = null,
+  strictValidation = true
+}: SubmitPCNParams & { strictValidation?: boolean }) {
+  const validationError = validatePCNSubmission(submission, { strict: strictValidation })
   if (validationError) {
     throw new Error(validationError)
   }
@@ -79,13 +93,12 @@ export async function submitPCN({
   }
 
   return await withPrisma(async (prisma) => {
-    const existingAppointment = await prisma.appointment.findFirst({
+    // Try to find appointment by ghlAppointmentId first (most common case for webhooks)
+    // Then fall back to id lookup
+    let existingAppointment = await prisma.appointment.findFirst({
       where: {
         companyId,
-        OR: [
-          { id: appointmentId },
-          { ghlAppointmentId: appointmentId }
-        ]
+        ghlAppointmentId: appointmentId
       },
       include: {
         contact: { select: { id: true, name: true, email: true } },
@@ -93,8 +106,22 @@ export async function submitPCN({
       }
     })
 
+    // If not found by ghlAppointmentId, try by id
     if (!existingAppointment) {
-      throw new Error('Appointment not found or access denied')
+      existingAppointment = await prisma.appointment.findFirst({
+        where: {
+          companyId,
+          id: appointmentId
+        },
+        include: {
+          contact: { select: { id: true, name: true, email: true } },
+          closer: { select: { id: true, name: true, commissionRole: true, customCommissionRate: true } }
+        }
+      })
+    }
+
+    if (!existingAppointment) {
+      throw new Error(`Appointment not found or access denied. Searched for ghlAppointmentId="${appointmentId}" and id="${appointmentId}" in companyId="${companyId}"`)
     }
 
     const newStatus = statusMap[submission.callOutcome] || existingAppointment.status

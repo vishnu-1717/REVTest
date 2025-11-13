@@ -126,10 +126,15 @@ export async function POST(request: NextRequest) {
       calendarName = getStringValue(body.calendarName)
 
       // Safely access calendar object properties
+      // IMPORTANT: GHL often sends the actual appointment startTime/endTime in calendar.startTime/calendar.endTime
+      // This should be checked BEFORE falling back to custom fields like "Appointment Date"
       if (body.calendar && typeof body.calendar === 'object' && !Array.isArray(body.calendar)) {
         const calendar = body.calendar as Record<string, unknown>
         calendarId = calendarId || getStringValue(calendar.id)
         calendarName = calendarName || getStringValue(calendar.calendarName) || getStringValue(calendar.name)
+        // PRIORITY: Check calendar.startTime/endTime for the actual appointment times
+        startTime = startTime || getStringValue(calendar.startTime) || getStringValue(calendar.start_time)
+        endTime = endTime || getStringValue(calendar.endTime) || getStringValue(calendar.end_time)
       }
 
       assignedUserId = getStringValue(body.assignedUserId) || getStringValue(body.assigned_user_id) || getStringValue(body.assignedUser)

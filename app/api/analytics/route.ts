@@ -468,7 +468,8 @@ export async function GET(request: NextRequest) {
     const scheduled = countableAppointments.filter(a => a.status !== 'cancelled').length
     const showed = callsShown
     
-    // Calculate missing PCNs (overdue if not submitted by 6PM Eastern on appointment day)
+    // Calculate missing PCNs (overdue if not submitted and scheduled more than 10 minutes ago)
+    // This matches the Pending PCNs API logic for consistency
     // Only count appointments with status "scheduled" - all other statuses don't need PCNs
     const isPCNOverdue = (appointment: AppointmentWithRelations): boolean => {
       // Exclude if PCN already submitted
@@ -483,26 +484,14 @@ export async function GET(request: NextRequest) {
       const inclusionFlag = (appointment as any).appointmentInclusionFlag
       if (inclusionFlag === 0) return false
       
+      // Check if appointment was scheduled more than 10 minutes ago
+      // This matches the Pending PCNs API logic for consistency between dashboard and analytics
       const scheduledDate = new Date(appointment.scheduledAt)
       const now = new Date()
+      const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000)
       
-      const scheduledDay = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate())
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      
-      // If scheduled date is in the past, it's overdue
-      if (scheduledDay < today) {
-        return true
-      }
-      
-      // If scheduled date is today, check if it's past 6PM Eastern (18:00)
-      if (scheduledDay.getTime() === today.getTime()) {
-        let easternHour = now.getUTCHours() - 5
-        if (easternHour < 0) easternHour += 24
-        
-        return easternHour >= 18 // 6PM Eastern
-      }
-      
-      return false
+      // If scheduled more than 10 minutes ago, it's overdue
+      return scheduledDate <= tenMinutesAgo
     }
     
     const overduePCNAppointments = filteredAppointments.filter(isPCNOverdue)

@@ -37,7 +37,14 @@ const FIELD_MAP = {
     'why didnt move forward',
     'pcn_why_didnt_move_forward',
     'call notes - why didn\'t the prospect move forward?',
-    'call notes - why didnt move forward'
+    'call notes - why didnt move forward',
+    'PCN - Why didn&#39;t the prospect move forward?', // HTML encoded
+    'Call Notes - Why didn&#39;t the prospect move forward?', // HTML encoded
+    'PCN - Why didn\'t the prospect move forward?',
+    'Call Notes - Why didn\'t the prospect move forward?',
+    'why didnt the prospect move forward',
+    'why didn\'t move forward',
+    'why didnt the prospect move forward?'
   ],
   nurtureType: [
     'pcn - nurture type',
@@ -298,11 +305,20 @@ export async function POST(request: NextRequest) {
         return logFailure(403, 'Invalid secret')
       }
 
+      // Try multiple ways to extract appointment ID
       const rawAppointmentId =
         extractField<string>(flattened, FIELD_MAP.appointmentId) ||
         flattened['appointment.id'] ||
         flattened['data.appointmentId'] ||
-        payload['appointmentId']
+        flattened['appointmentId'] ||
+        flattened['PCN - Appointment ID'] ||
+        flattened['Call Notes - Appointment ID'] ||
+        payload['appointmentId'] ||
+        payload['appointment.id'] ||
+        payload['PCN - Appointment ID'] ||
+        payload['Call Notes - Appointment ID'] ||
+        (payload as any)?.appointment?.id ||
+        (payload as any)?.data?.appointmentId
 
       const appointmentId = typeof rawAppointmentId === 'string' ? rawAppointmentId.trim() : ''
 
@@ -330,6 +346,7 @@ export async function POST(request: NextRequest) {
         'no_showed': 'no_show',
         'no showed': 'no_show',
         noshow: 'no_show',
+        noshowed: 'no_show',
         cancelled: 'cancelled',
         canceled: 'cancelled'
       }
@@ -474,6 +491,55 @@ export async function POST(request: NextRequest) {
         submission.firstCallOrFollowUp = submission.followUpScheduled ? 'follow_up' : 'first_call'
       }
 
+      // Apply defaults for missing required fields when not in strict mode
+      // This makes the webhook handler more forgiving for GHL submissions
+      if (canonicalOutcome === 'showed') {
+        // Default firstCallOrFollowUp if not provided
+        if (!submission.firstCallOrFollowUp) {
+          submission.firstCallOrFollowUp = submission.followUpScheduled ? 'follow_up' : 'first_call'
+        }
+        // Default wasOfferMade to false if not provided
+        if (submission.wasOfferMade === undefined || submission.wasOfferMade === null) {
+          submission.wasOfferMade = false
+        }
+        // If offer was made but no reason provided, use a default
+        if (submission.wasOfferMade && !submission.whyDidntMoveForward) {
+          submission.whyDidntMoveForward = 'Not specified'
+        }
+        // If follow-up scheduled but no date, clear the flag
+        if (submission.followUpScheduled && !submission.followUpDate) {
+          submission.followUpScheduled = false
+        }
+        // If follow-up scheduled but no nurture type, use default
+        if (submission.followUpScheduled && !submission.nurtureType) {
+          submission.nurtureType = 'other'
+        }
+      }
+
+      if (canonicalOutcome === 'cancelled' && !submission.cancellationReason) {
+        submission.cancellationReason = 'Not specified'
+      }
+
+      if (canonicalOutcome === 'no_show' && (submission.noShowCommunicative === undefined || submission.noShowCommunicative === null)) {
+        submission.noShowCommunicative = false
+      }
+
+      if (canonicalOutcome === 'signed' && (!submission.cashCollected || submission.cashCollected <= 0)) {
+        // Try to extract from other fields
+        const cashFromOtherFields = parseCash(
+          extractField(flattened, ['Payment Amount', 'Charged Amount', 'Deposit Amount', 'PaymentAmount', 'ChargedAmount', 'DepositAmount']) ||
+          flattened['Payment Amount'] ||
+          flattened['Charged Amount'] ||
+          flattened['Deposit Amount']
+        )
+        if (cashFromOtherFields && cashFromOtherFields > 0) {
+          submission.cashCollected = cashFromOtherFields
+        } else {
+          // Default to 0 if not found (webhook mode is lenient)
+          submission.cashCollected = 0
+        }
+      }
+
       let result
       try {
         result = await submitPCN({
@@ -481,7 +547,8 @@ export async function POST(request: NextRequest) {
           companyId: company.id,
           submission,
           actorUserId: null,
-          actorName: 'GHL Survey Automation'
+          actorName: 'GHL Survey Automation',
+          strictValidation: false // Use non-strict validation for webhook submissions
         })
       } catch (submitError: any) {
         console.error('[PCN Survey] submitPCN failed:', submitError)
