@@ -11,10 +11,15 @@ import {
 } from '@/components/analytics/FilterContextBar'
 import { ClickableMetricCard } from '@/components/analytics/ClickableMetricCard'
 import { ComparisonView } from '@/components/analytics/ComparisonView'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { getKpiBadge, getKpiColorClass, getKpiStatus, resolveTarget } from '@/lib/analytics-kpi'
 import { generateInsights, type AnalyticsSnapshot, type Insight } from '@/lib/analytics-insights'
-import { getComparisonLabel, buildComparisonParams, type ComparisonTarget } from '@/lib/analytics-comparison'
+import { getComparisonLabel, type ComparisonTarget } from '@/lib/analytics-comparison'
+import { useTableState, type TableColumn, type TableState } from '@/components/analytics/table-utils'
+import { SelectedComparisonPanel, type ComparisonMetric } from '@/components/analytics/SelectedComparisonPanel'
 
 interface FilterState {
   dateFrom: string
@@ -232,6 +237,136 @@ const computeQuickViewRange = (range: QuickViewRange) => {
   }
 }
 
+const formatNumber = (value: unknown, fractionDigits = 0): string => {
+  const numeric = parseNumericValue(value)
+  if (!Number.isFinite(numeric)) return '—'
+  return numeric.toLocaleString(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
+  })
+}
+
+const formatCurrencyString = (value: unknown, fractionDigits = 0): string => {
+  const formatted = formatCurrencyValue(value, fractionDigits)
+  return formatted === '—' ? formatted : `$${formatted}`
+}
+
+const formatPercentString = (value: unknown): string => formatPercentValue(value)
+
+const dayOfWeekColumns: TableColumn<any>[] = [
+  { key: 'dayName', label: 'Day', searchAccessor: (row) => row.dayName ?? '' },
+  { key: 'total', label: 'Appts', numeric: true, format: (_, row) => formatNumber(row.total), sortAccessor: (row) => row.total ?? 0 },
+  { key: 'showRate', label: 'Show%', numeric: true, format: (_, row) => formatPercentString(row.showRate), sortAccessor: (row) => Number(row.showRate ?? 0) },
+  { key: 'closeRate', label: 'Close%', numeric: true, format: (_, row) => formatPercentString(row.closeRate), sortAccessor: (row) => Number(row.closeRate ?? 0) },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) },
+  { key: 'revenue', label: 'Revenue', numeric: true, format: (_, row) => formatCurrencyString(row.revenue), sortAccessor: (row) => Number(row.revenue ?? 0) }
+]
+
+const dayOfWeekComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'total', label: 'Appointments', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'showRate', label: 'Show Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'closeRate', label: 'Close Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'revenue', label: 'Revenue', format: (value) => formatCurrencyString(value), higherIsBetter: true }
+]
+
+const timeOfDayColumns: TableColumn<any>[] = [
+  { key: 'period', label: 'Period', searchAccessor: (row) => row.period ?? '' },
+  { key: 'total', label: 'Appts', numeric: true, format: (_, row) => formatNumber(row.total), sortAccessor: (row) => row.total ?? 0 },
+  { key: 'showRate', label: 'Show%', numeric: true, format: (_, row) => formatPercentString(row.showRate), sortAccessor: (row) => Number(row.showRate ?? 0) },
+  { key: 'closeRate', label: 'Close%', numeric: true, format: (_, row) => formatPercentString(row.closeRate), sortAccessor: (row) => Number(row.closeRate ?? 0) },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) }
+]
+
+const timeOfDayComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'total', label: 'Appointments', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'showRate', label: 'Show Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'closeRate', label: 'Close Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false }
+]
+
+const appointmentTypeColumns: TableColumn<any>[] = [
+  { key: 'type', label: 'Type', searchAccessor: (row) => row.type ?? '' },
+  { key: 'total', label: 'Appts', numeric: true, format: (_, row) => formatNumber(row.total), sortAccessor: (row) => row.total ?? 0 },
+  { key: 'showRate', label: 'Show%', numeric: true, format: (_, row) => formatPercentString(row.showRate), sortAccessor: (row) => Number(row.showRate ?? 0) },
+  { key: 'closeRate', label: 'Close%', numeric: true, format: (_, row) => formatPercentString(row.closeRate), sortAccessor: (row) => Number(row.closeRate ?? 0) },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) },
+  { key: 'revenue', label: 'Revenue', numeric: true, format: (_, row) => formatCurrencyString(row.revenue), sortAccessor: (row) => Number(row.revenue ?? 0) }
+]
+
+const appointmentTypeComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'total', label: 'Appointments', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'showRate', label: 'Show Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'closeRate', label: 'Close Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'revenue', label: 'Revenue', format: (value) => formatCurrencyString(value), higherIsBetter: true }
+]
+
+const closerColumns: TableColumn<any>[] = [
+  { key: 'closerName', label: 'Closer', searchAccessor: (row) => row.closerName ?? row.closerEmail ?? '' },
+  { key: 'total', label: 'Appts', numeric: true, format: (_, row) => formatNumber(row.total), sortAccessor: (row) => row.total ?? 0 },
+  { key: 'showRate', label: 'Show%', numeric: true, format: (_, row) => formatPercentString(row.showRate), sortAccessor: (row) => Number(row.showRate ?? 0) },
+  { key: 'closeRate', label: 'Close%', numeric: true, format: (_, row) => formatPercentString(row.closeRate), sortAccessor: (row) => Number(row.closeRate ?? 0) },
+  { key: 'signed', label: 'Deals', numeric: true, format: (_, row) => formatNumber(row.signed), sortAccessor: (row) => row.signed ?? 0 },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) },
+  { key: 'revenue', label: 'Revenue', numeric: true, format: (_, row) => formatCurrencyString(row.revenue), sortAccessor: (row) => Number(row.revenue ?? 0) }
+]
+
+const closerComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'total', label: 'Appointments', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'showRate', label: 'Show Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'closeRate', label: 'Close Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'signed', label: 'Deals Closed', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'revenue', label: 'Revenue', format: (value) => formatCurrencyString(value), higherIsBetter: true }
+]
+
+const calendarColumns: TableColumn<any>[] = [
+  { key: 'calendar', label: 'Calendar', searchAccessor: (row) => row.calendar ?? '' },
+  { key: 'total', label: 'Appts', numeric: true, format: (_, row) => formatNumber(row.total), sortAccessor: (row) => row.total ?? 0 },
+  { key: 'showRate', label: 'Show%', numeric: true, format: (_, row) => formatPercentString(row.showRate), sortAccessor: (row) => Number(row.showRate ?? 0) },
+  { key: 'closeRate', label: 'Close%', numeric: true, format: (_, row) => formatPercentString(row.closeRate), sortAccessor: (row) => Number(row.closeRate ?? 0) },
+  { key: 'signed', label: 'Deals', numeric: true, format: (_, row) => formatNumber(row.signed), sortAccessor: (row) => row.signed ?? 0 },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) },
+  { key: 'revenue', label: 'Revenue', numeric: true, format: (_, row) => formatCurrencyString(row.revenue), sortAccessor: (row) => Number(row.revenue ?? 0) }
+]
+
+const calendarComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'total', label: 'Appointments', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'showRate', label: 'Show Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'closeRate', label: 'Close Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'signed', label: 'Deals', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'revenue', label: 'Revenue', format: (value) => formatCurrencyString(value), higherIsBetter: true }
+]
+
+const objectionColumns: TableColumn<any>[] = [
+  { key: 'type', label: 'Objection', searchAccessor: (row) => row.type ?? '' },
+  { key: 'count', label: 'Count', numeric: true, format: (_, row) => formatNumber(row.count), sortAccessor: (row) => row.count ?? 0 },
+  { key: 'converted', label: 'Converted', numeric: true, format: (_, row) => formatNumber(row.converted), sortAccessor: (row) => row.converted ?? 0 },
+  { key: 'conversionRate', label: 'Conversion Rate', numeric: true, format: (_, row) => formatPercentString(row.conversionRate), sortAccessor: (row) => Number(row.conversionRate ?? 0) },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', numeric: true, format: (_, row) => formatNumber(row.averageSalesCycleDays, 1), sortAccessor: (row) => Number(row.averageSalesCycleDays ?? 0) },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', numeric: true, format: (_, row) => formatNumber(row.averageLeadTimeDays, 1), sortAccessor: (row) => Number(row.averageLeadTimeDays ?? 0) }
+]
+
+const objectionComparisonMetrics: ComparisonMetric<any>[] = [
+  { key: 'count', label: 'Count', format: (value) => formatNumber(value), higherIsBetter: false },
+  { key: 'converted', label: 'Converted', format: (value) => formatNumber(value), higherIsBetter: true },
+  { key: 'conversionRate', label: 'Conversion Rate (%)', format: (value) => formatPercentString(value), higherIsBetter: true },
+  { key: 'averageSalesCycleDays', label: 'Avg Cycle (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false },
+  { key: 'averageLeadTimeDays', label: 'Avg Lead (days)', format: (value) => formatNumber(value, 1), higherIsBetter: false }
+]
+
 export default function AnalyticsPage() {
   const [filters, setFilters] = useState<FilterState>(() => createDefaultFilters())
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters())
@@ -242,7 +377,7 @@ export default function AnalyticsPage() {
   const [comparisonInsights, setComparisonInsights] = useState<Insight[]>([])
   const [comparisonLoading, setComparisonLoading] = useState(false)
   const [comparisonError, setComparisonError] = useState<string | null>(null)
-
+  
   const [analytics, setAnalytics] = useState<any>(null)
   const [closers, setClosers] = useState<any[]>([])
   const [calendars, setCalendars] = useState<string[]>([])
@@ -397,7 +532,7 @@ export default function AnalyticsPage() {
       setDraftFilters(urlFilters)
       fetchAnalytics(urlFilters)
     } else {
-      fetchAnalytics()
+    fetchAnalytics()
     }
   }, [parseFiltersFromUrl])
   
@@ -824,6 +959,248 @@ export default function AnalyticsPage() {
     })()
   const revenuePerShowBadge = kpi?.revenuePerShow.badge
 
+  const hasDayOfWeekFilter = Array.isArray(filters.dayOfWeek)
+    ? filters.dayOfWeek.length > 0
+    : Boolean(filters.dayOfWeek)
+
+  const generateId = () => Math.random().toString(36).slice(2, 10)
+
+  const dayOfWeekTable = useTableState({
+    data: analytics?.byDayOfWeek ?? [],
+    columns: dayOfWeekColumns,
+    getId: (row) => String(row.dayOfWeek ?? row.dayName ?? generateId())
+  })
+
+  const timeOfDayTable = useTableState({
+    data: analytics?.byTimeOfDay ?? [],
+    columns: timeOfDayColumns,
+    getId: (row) => String(row.period ?? generateId())
+  })
+
+  const appointmentTypeTable = useTableState({
+    data: analytics?.byAppointmentType ?? [],
+    columns: appointmentTypeColumns,
+    getId: (row) => String(row.type ?? generateId())
+  })
+
+  const closerTable = useTableState({
+    data: analytics?.byCloser ?? [],
+    columns: closerColumns,
+    getId: (row) => String(row.closerEmail ?? row.closerId ?? row.closerName ?? generateId())
+  })
+
+  const calendarTable = useTableState({
+    data: analytics?.byCalendar ?? [],
+    columns: calendarColumns,
+    getId: (row) => String(row.calendar ?? generateId())
+  })
+
+  const objectionTable = useTableState({
+    data: analytics?.byObjection ?? [],
+    columns: objectionColumns,
+    getId: (row) => String(row.type ?? generateId())
+  })
+
+  const renderBreakdownTable = <T extends Record<string, any>>(
+    title: string,
+    table: TableState<T>,
+    columns: TableColumn<T>[],
+    metrics: ComparisonMetric<T>[],
+    getName: (row: T) => string,
+    exportFileName: string,
+    onRowClick?: (row: T) => void,
+    searchPlaceholder = 'Search…',
+    emptyMessage = 'No records found for the current filters.'
+  ) => {
+    const pageRowIds = table.displayedRows.map((row) => table.getId(row))
+    const allSelected = pageRowIds.length > 0 && pageRowIds.every((id) => table.isSelected(id))
+    const someSelected = pageRowIds.some((id) => table.isSelected(id)) && !allSelected
+    const startIndex = table.page * table.pageSize
+    const endIndex = Math.min(startIndex + table.pageSize, table.allRows.length)
+
+    return (
+      <Card>
+        <CardHeader className="space-y-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <CardTitle>{title}</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              {table.selectedRows.length > 0 ? (
+                <Button variant="ghost" size="sm" onClick={table.clearSelection}>
+                  Clear Selection
+                </Button>
+              ) : null}
+              <Button variant="outline" size="sm" onClick={() => table.exportCsv(exportFileName)}>
+                Export CSV
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <Input
+              value={table.searchTerm}
+              onChange={(event) => {
+                table.setSearchTerm(event.target.value)
+                table.setPage(0)
+              }}
+              placeholder={searchPlaceholder}
+              className="w-full md:w-64"
+            />
+
+            <div className="flex items-center gap-2">
+              <Select
+                value={String(table.pageSize)}
+                onValueChange={(value) => {
+                  table.setPageSize(Number(value))
+                  table.setPage(0)
+                }}
+              >
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Rows" />
+                </SelectTrigger>
+                <SelectContent>
+                  {table.pageSizeOptions.map((size) => (
+                    <SelectItem key={size} value={String(size)}>
+                      {size} / page
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="overflow-x-auto rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr className="border-b">
+                  <th className="w-10 px-3 py-2">
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                      onClick={(event) => event.stopPropagation()}
+                      onCheckedChange={() => {
+                        const shouldSelect = !allSelected
+                        table.setSelection(pageRowIds, shouldSelect)
+                      }}
+                      aria-label="Toggle select all rows"
+                    />
+                  </th>
+                  {columns.map((column) => (
+                    <th
+                      key={String(column.key)}
+                      className={cn('px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground', column.numeric && 'text-right')}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => table.toggleSort(column.key)}
+                        className="flex items-center gap-1"
+                      >
+                        <span>{column.label}</span>
+                        {table.sortKey === column.key ? (
+                          <span>{table.sortDirection === 'asc' ? '▲' : '▼'}</span>
+                        ) : null}
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.displayedRows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={columns.length + 1}
+                      className="px-3 py-6 text-center text-sm text-muted-foreground"
+                    >
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                ) : (
+                  table.displayedRows.map((row) => {
+                    const id = table.getId(row)
+                    const isRowSelected = table.isSelected(id)
+                    const clickable = Boolean(onRowClick)
+
+                    return (
+                      <tr
+                        key={id}
+                        className={cn(
+                          'border-b transition-colors',
+                          clickable && 'cursor-pointer hover:bg-accent',
+                          isRowSelected && 'bg-accent/40'
+                        )}
+                        onClick={() => onRowClick?.(row)}
+                      >
+                        <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
+                          <Checkbox
+                            checked={isRowSelected}
+                            onCheckedChange={() => table.toggleSelect(id)}
+                            aria-label={`Select ${getName(row)}`}
+                          />
+                        </td>
+                        {columns.map((column) => {
+                          const rawValue = (row as any)[column.key]
+                          const formatted = column.format
+                            ? column.format(rawValue, row)
+                            : rawValue ?? '—'
+                          return (
+                            <td
+                              key={String(column.key)}
+                              className={cn('whitespace-nowrap px-3 py-2 text-sm text-foreground', column.numeric ? 'text-right' : 'text-left')}
+                            >
+                              {formatted}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-3 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+            <span>
+              {table.allRows.length === 0
+                ? 'No results'
+                : `Showing ${startIndex + 1}–${endIndex} of ${table.allRows.length}`}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.setPage(Math.max(table.page - 1, 0))}
+                disabled={table.page === 0}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {table.page + 1} of {table.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.setPage(Math.min(table.page + 1, table.totalPages - 1))}
+                disabled={table.page >= table.totalPages - 1}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+
+          {metrics.length > 0 && table.selectedRows.length >= 2 ? (
+            <SelectedComparisonPanel
+              rows={table.selectedRows}
+              metrics={metrics}
+              title={`Compare Selected (${table.selectedRows.length})`}
+              description="Baseline is the first selected row. Select rows in the order you want to compare."
+              getName={getName}
+            />
+          ) : null}
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <>
       <div className="container mx-auto py-10">
@@ -841,7 +1218,7 @@ export default function AnalyticsPage() {
         onToggleCompare={handleToggleCompareMode}
         appointmentCount={analytics?.scheduledCallsToDate ?? 0}
       />
-
+      
       {/* Filters */}
       <Card className="mb-8">
         <CardHeader>
@@ -890,6 +1267,7 @@ export default function AnalyticsPage() {
             error={comparisonError}
             onRetry={handleComparisonRetry}
             insights={comparisonInsights}
+            canUseAllOtherDays={hasDayOfWeekFilter}
           />
         </div>
       ) : null}
@@ -944,7 +1322,7 @@ export default function AnalyticsPage() {
               onClick={createMetricCardHandler('appointmentLeadTime', 'Average Appointment Lead Time')}
             />
           </div>
-
+          
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             <ClickableMetricCard
               title="Show Rate"
@@ -980,7 +1358,7 @@ export default function AnalyticsPage() {
               description="Closed ÷ Scheduled"
             />
           </div>
-
+          
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             <ClickableMetricCard
               title="Cash Collected"
@@ -1007,7 +1385,7 @@ export default function AnalyticsPage() {
               status="danger"
               onClick={createMetricCardHandler('missingPCNs', 'Missing PCNs')}
             />
-          </div>
+                </div>
         </>
       ) : null}
 
@@ -1043,346 +1421,119 @@ export default function AnalyticsPage() {
               By Objection
             </Button>
           </div>
-
+          
           {/* Content based on active view */}
           {activeView === 'overview' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* By Day of Week */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>By Day of Week</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2">Day</th>
-                          <th className="text-right py-2">Appts</th>
-                          <th className="text-right py-2">Show%</th>
-                          <th className="text-right py-2">Close%</th>
-                          <th className="text-right py-2">Avg Cycle (days)</th>
-                          <th className="text-right py-2">Avg Lead (days)</th>
-                          <th className="text-right py-2">Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.byDayOfWeek?.map((day: any) => (
-                          <tr
-                            key={day.dayOfWeek ?? day.dayName}
-                            className={cn(
-                              'border-b transition-colors',
-                              day.dayOfWeek !== undefined ? 'cursor-pointer hover:bg-accent' : ''
-                            )}
-                            onClick={() => {
-                              if (day.dayOfWeek !== undefined) {
-                                handleAddFilter('dayOfWeek', String(day.dayOfWeek))
-                              }
-                            }}
-                          >
-                            <td className="py-2">{day.dayName}</td>
-                            <td className="text-right">{day.total}</td>
-                            <td className="text-right">{day.showRate}%</td>
-                            <td className="text-right">{day.closeRate}%</td>
-                            <td className="text-right">
-                              {formatSalesCycle(day.averageSalesCycleDays)}
-                            </td>
-                            <td className="text-right">
-                              {formatLeadTime(day.averageLeadTimeDays)}
-                            </td>
-                            <td className="text-right">${day.revenue?.toLocaleString()}</td>
-                            </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* By Time of Day */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>By Time of Day</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2">Period</th>
-                          <th className="text-right py-2">Appts</th>
-                          <th className="text-right py-2">Show%</th>
-                          <th className="text-right py-2">Close%</th>
-                          <th className="text-right py-2">Avg Cycle (days)</th>
-                          <th className="text-right py-2">Avg Lead (days)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.byTimeOfDay?.map((period: any) => {
-                          const filterValue = period.period?.toLowerCase?.()
-                          const label = filterValue
-                            ? TIME_OF_DAY_LABELS[filterValue] ?? period.period
-                            : period.period
-                          return (
-                            <tr
-                              key={period.period}
-                              className={cn(
-                                'border-b transition-colors',
-                                filterValue ? 'cursor-pointer hover:bg-accent' : ''
-                              )}
-                              onClick={() => {
-                                if (filterValue) {
-                                  handleAddFilter('timeOfDay', filterValue)
-                                }
-                              }}
-                            >
-                              <td className="py-2">{period.period}</td>
-                              <td className="text-right">{period.total}</td>
-                              <td className="text-right">{period.showRate}%</td>
-                              <td className="text-right">{period.closeRate}%</td>
-                              <td className="text-right">
-                                {formatSalesCycle(period.averageSalesCycleDays)}
-                              </td>
-                              <td className="text-right">
-                                {formatLeadTime(period.averageLeadTimeDays)}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* By Appointment Type */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>First Call vs Follow Up</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-2">Type</th>
-                          <th className="text-right py-2">Appts</th>
-                          <th className="text-right py-2">Show%</th>
-                          <th className="text-right py-2">Close%</th>
-                          <th className="text-right py-2">Avg Cycle (days)</th>
-                          <th className="text-right py-2">Avg Lead (days)</th>
-                          <th className="text-right py-2">Revenue</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.byAppointmentType?.map((type: any) => (
-                          <tr
-                            key={type.type}
-                            className={cn('border-b transition-colors', 'cursor-pointer hover:bg-accent')}
-                            onClick={() => {
-                              const value =
-                                type.type === 'First Call'
-                                  ? 'first_call'
-                                  : type.type === 'Follow Up'
-                                    ? 'follow_up'
-                                    : type.type
-                              handleAddFilter('appointmentType', value)
-                            }}
-                          >
-                            <td className="py-2">{type.type}</td>
-                            <td className="text-right">{type.total}</td>
-                            <td className="text-right">{type.showRate}%</td>
-                            <td className="text-right">{type.closeRate}%</td>
-                            <td className="text-right">
-                              {formatSalesCycle(type.averageSalesCycleDays)}
-                            </td>
-                            <td className="text-right">
-                              {formatLeadTime(type.averageLeadTimeDays)}
-                            </td>
-                            <td className="text-right">${type.revenue?.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+              {renderBreakdownTable(
+                'By Day of Week',
+                dayOfWeekTable,
+                dayOfWeekColumns,
+                dayOfWeekComparisonMetrics,
+                (row) => row.dayName ?? DAY_NAMES[row.dayOfWeek as number] ?? 'Unknown day',
+                'analytics-by-day-of-week.csv',
+                (row) => {
+                  if (row.dayOfWeek !== undefined) {
+                    handleAddFilter('dayOfWeek', String(row.dayOfWeek))
+                  }
+                },
+                'Search day…'
+              )}
+
+              {renderBreakdownTable(
+                'By Time of Day',
+                timeOfDayTable,
+                timeOfDayColumns,
+                timeOfDayComparisonMetrics,
+                (row) => row.period ?? 'Unknown period',
+                'analytics-by-time-of-day.csv',
+                (row) => {
+                  const filterValue = row.period?.toLowerCase?.()
+                  if (filterValue) {
+                    handleAddFilter('timeOfDay', filterValue)
+                  }
+                },
+                'Search period…'
+              )}
+
+              {renderBreakdownTable(
+                'First Call vs Follow Up',
+                appointmentTypeTable,
+                appointmentTypeColumns,
+                appointmentTypeComparisonMetrics,
+                (row) => row.type ?? 'Unknown type',
+                'analytics-by-appointment-type.csv',
+                (row) => {
+                  const value =
+                    row.type === 'First Call'
+                      ? 'first_call'
+                      : row.type === 'Follow Up'
+                        ? 'follow_up'
+                        : row.type
+                  if (value) {
+                    handleAddFilter('appointmentType', value)
+                  }
+                },
+                'Search appointment type…'
+              )}
             </div>
           )}
           
           {activeView === 'closers' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance by Closer</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Closer</th>
-                        <th className="text-right py-2">Appts</th>
-                        <th className="text-right py-2">Show%</th>
-                        <th className="text-right py-2">Close%</th>
-                        <th className="text-right py-2">Deals</th>
-                        <th className="text-right py-2">Avg Cycle (days)</th>
-                        <th className="text-right py-2">Avg Lead (days)</th>
-                        <th className="text-right py-2">Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.byCloser?.map((closer: any) => (
-                        <tr
-                          key={closer.closerEmail}
-                          className={cn(
-                            'border-b transition-colors',
-                            closer.closerId ? 'cursor-pointer hover:bg-accent' : ''
-                          )}
-                          onClick={() => {
-                            if (closer.closerId) {
-                              handleAddFilter('closer', closer.closerId)
-                            }
-                          }}
-                        >
-                          <td className="py-2">{closer.closerName}</td>
-                          <td className="text-right">{closer.total}</td>
-                          <td className="text-right">{closer.showRate}%</td>
-                          <td className="text-right">{closer.closeRate}%</td>
-                          <td className="text-right">{closer.signed}</td>
-                          <td className="text-right">
-                            {formatSalesCycle(closer.averageSalesCycleDays)}
-                          </td>
-                          <td className="text-right">
-                            {formatLeadTime(closer.averageLeadTimeDays)}
-                          </td>
-                          <td className="text-right font-semibold">
-                            ${closer.revenue?.toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div>
+              {renderBreakdownTable(
+                'Performance by Closer',
+                closerTable,
+                closerColumns,
+                closerComparisonMetrics,
+                (row) => row.closerName ?? row.closerEmail ?? 'Unknown closer',
+                'analytics-by-closer.csv',
+                (row) => {
+                  if (row.closerId) {
+                    handleAddFilter('closer', row.closerId)
+                  }
+                },
+                'Search closer…'
+              )}
                 </div>
-              </CardContent>
-            </Card>
           )}
           
           {activeView === 'calendars' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance by Calendar/Traffic Source</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Calendar</th>
-                        <th className="text-right py-2">Appts</th>
-                        <th className="text-right py-2">Show%</th>
-                        <th className="text-right py-2">Close%</th>
-                        <th className="text-right py-2">Deals</th>
-                        <th className="text-right py-2">Avg Cycle (days)</th>
-                        <th className="text-right py-2">Avg Lead (days)</th>
-                        <th className="text-right py-2">Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.byCalendar?.map((cal: any) => (
-                        <tr
-                          key={cal.calendar}
-                          className={cn(
-                            'border-b transition-colors',
-                            cal.calendar ? 'cursor-pointer hover:bg-accent' : ''
-                          )}
-                          onClick={() => {
-                            if (cal.calendar) {
-                              handleAddFilter('calendar', cal.calendar)
-                            }
-                          }}
-                        >
-                          <td className="py-2">{cal.calendar}</td>
-                          <td className="text-right">{cal.total}</td>
-                          <td className="text-right">{cal.showRate}%</td>
-                          <td className="text-right">{cal.closeRate}%</td>
-                          <td className="text-right">{cal.signed}</td>
-                          <td className="text-right">
-                            {formatSalesCycle(cal.averageSalesCycleDays)}
-                          </td>
-                          <td className="text-right">
-                            {formatLeadTime(cal.averageLeadTimeDays)}
-                          </td>
-                          <td className="text-right font-semibold">
-                            ${cal.revenue?.toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div>
+              {renderBreakdownTable(
+                'Performance by Calendar/Traffic Source',
+                calendarTable,
+                calendarColumns,
+                calendarComparisonMetrics,
+                (row) => row.calendar ?? 'Unknown calendar',
+                'analytics-by-calendar.csv',
+                (row) => {
+                  if (row.calendar) {
+                    handleAddFilter('calendar', row.calendar)
+                  }
+                },
+                'Search calendar…'
+              )}
                 </div>
-              </CardContent>
-            </Card>
           )}
           
           {activeView === 'objections' && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Objection Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-2">Objection Type</th>
-                        <th className="text-right py-2">Count</th>
-                        <th className="text-right py-2">Converted</th>
-                        <th className="text-right py-2">Conversion Rate</th>
-                        <th className="text-right py-2">Avg Cycle (days)</th>
-                        <th className="text-right py-2">Avg Lead (days)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.byObjection?.map((obj: any) => (
-                        <tr
-                          key={obj.type}
-                          className={cn(
-                            'border-b transition-colors',
-                            obj.type ? 'cursor-pointer hover:bg-accent' : ''
-                          )}
-                          onClick={() => {
-                            if (obj.type) {
-                              handleAddFilter('objectionType', obj.type)
-                            }
-                          }}
-                        >
-                          <td className="py-2">{obj.type}</td>
-                          <td className="text-right">{obj.count}</td>
-                          <td className="text-right">{obj.converted}</td>
-                          <td className="text-right">
-                            <span className={`font-semibold ${
-                              parseFloat(obj.conversionRate) > 20 
-                                ? 'text-green-600' 
-                                : parseFloat(obj.conversionRate) > 10
-                                ? 'text-yellow-600'
-                                : 'text-red-600'
-                            }`}>
-                              {obj.conversionRate}%
-                            </span>
-                          </td>
-                          <td className="text-right">
-                            {formatSalesCycle(obj.averageSalesCycleDays)}
-                          </td>
-                          <td className="text-right">
-                            {formatLeadTime(obj.averageLeadTimeDays)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div>
+              {renderBreakdownTable(
+                'Objection Analysis',
+                objectionTable,
+                objectionColumns,
+                objectionComparisonMetrics,
+                (row) => row.type ?? 'Unknown objection',
+                'analytics-by-objection.csv',
+                (row) => {
+                  if (row.type) {
+                    handleAddFilter('objectionType', row.type)
+                  }
+                },
+                'Search objection…'
+              )}
                 </div>
-              </CardContent>
-            </Card>
           )}
         </>
       )}

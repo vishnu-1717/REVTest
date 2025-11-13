@@ -22,6 +22,7 @@ interface ComparisonViewProps {
   error: string | null
   onRetry?: () => void
   insights: Insight[]
+  canUseAllOtherDays: boolean
 }
 
 interface MetricConfig {
@@ -177,7 +178,8 @@ export function ComparisonView({
   loading,
   error,
   onRetry,
-  insights
+  insights,
+  canUseAllOtherDays
 }: ComparisonViewProps) {
   const metricCards = useMemo(
     () =>
@@ -236,6 +238,7 @@ export function ComparisonView({
           onChange={onTargetChange}
           className="w-full max-w-xs"
           disabled={loading}
+          canUseAllOtherDays={canUseAllOtherDays}
         />
       </div>
 
