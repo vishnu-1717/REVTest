@@ -226,11 +226,11 @@ export function ComparisonView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Comparison Mode</h2>
+          <h2 className="text-lg font-bold text-foreground">Comparison Mode</h2>
           <p className="text-sm text-muted-foreground">
-            Analyze how the current filter set stacks against another perspective.
+            Analyze how the current filter set compares against another segment or time period.
           </p>
         </div>
         <ComparisonTargetSelector
@@ -261,13 +261,15 @@ export function ComparisonView({
         </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{metricCards}</div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {metricCards}
+          </div>
 
           {insights.length > 0 ? (
-            <Card className="border-border bg-card shadow-sm">
+            <Card className="border border-border bg-card shadow-sm">
               <CardHeader>
                 <CardTitle className="text-sm font-semibold text-muted-foreground">
-                  Insights
+                  Key Insights
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -276,26 +278,26 @@ export function ComparisonView({
                     <li
                       key={insight.id}
                       className={cn(
-                        'flex items-start gap-3 rounded-md border px-3 py-2 shadow-sm',
+                        'flex items-start gap-3 rounded-lg border px-3 py-2',
                         insight.sentiment === 'positive'
-                          ? 'border-green-200 bg-green-50 text-green-900'
+                          ? 'border-green-400 bg-green-50 text-green-900'
                           : insight.sentiment === 'negative'
-                          ? 'border-red-200 bg-red-50 text-red-900'
+                          ? 'border-red-400 bg-red-50 text-red-900'
                           : 'border-border bg-card text-foreground'
                       )}
                     >
-                      <span className="text-xs font-medium uppercase text-muted-foreground">
+                      <span className="text-xs font-bold uppercase text-muted-foreground">
                         {insight.metric}
                       </span>
-                      <span className="text-sm leading-snug">{insight.message}</span>
+                      <span className="leading-snug">{insight.message}</span>
                     </li>
                   ))}
                 </ul>
               </CardContent>
             </Card>
           ) : (
-            <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-sm text-muted-foreground">
-              No standout differences detected yet. Adjust your filters or try another comparison target.
+            <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+              No standout differences detected yet. Adjust filters or pick another comparison target.
             </div>
           )}
         </>

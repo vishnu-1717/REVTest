@@ -8,20 +8,20 @@ type MetricStatus = 'neutral' | 'success' | 'warning' | 'danger'
 
 const statusClasses: Record<MetricStatus, string> = {
   neutral:
-    'border border-border bg-card text-card-foreground shadow-sm hover:border-primary/50 dark:border-neutral-800 dark:bg-neutral-900',
+    'border border-border bg-card text-card-foreground shadow-sm hover:border-border/80',
   success:
-    'border border-green-200 bg-green-100 text-green-900 shadow-sm hover:border-green-400 dark:border-green-900 dark:bg-green-950/70 dark:text-green-100',
+    'border border-green-400 bg-green-50 text-green-900 shadow-sm hover:border-green-500',
   warning:
-    'border border-yellow-200 bg-yellow-100 text-yellow-900 shadow-sm hover:border-yellow-400 dark:border-yellow-900 dark:bg-yellow-950/70 dark:text-yellow-100',
+    'border border-amber-400 bg-amber-50 text-amber-900 shadow-sm hover:border-amber-500',
   danger:
-    'border border-red-200 bg-red-100 text-red-900 shadow-sm hover:border-red-400 dark:border-red-900 dark:bg-red-950/70 dark:text-red-100'
+    'border border-red-400 bg-red-50 text-red-900 shadow-sm hover:border-red-500'
 }
 
 const valueClasses: Record<MetricStatus, string> = {
-  neutral: 'text-foreground dark:text-white',
-  success: 'text-green-800 dark:text-green-200',
-  warning: 'text-yellow-900 dark:text-yellow-100',
-  danger: 'text-red-800 dark:text-red-200'
+  neutral: 'text-foreground',
+  success: 'text-green-800',
+  warning: 'text-amber-800',
+  danger: 'text-red-800'
 }
 
 interface ClickableMetricCardProps {
@@ -62,23 +62,19 @@ export function ClickableMetricCard({
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'h-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-        onClick ? 'cursor-pointer hover:shadow-md' : '',
+        'h-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+        onClick ? 'cursor-pointer hover:shadow-lg' : '',
         statusClasses[status]
       )}
     >
       <CardHeader>
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm text-muted-foreground">
-        <div
-          className={cn('text-3xl font-semibold', valueClasses[status], valueClassName)}
-        >
+        <div className={cn('text-3xl font-semibold', valueClasses[status], valueClassName)}>
           {value}
         </div>
-        {description ? (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        ) : null}
+        {description ? <p>{description}</p> : null}
         {filterKey ? (
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
             Click to add filter {filterValue ? `· ${filterValue}` : ''}
@@ -87,6 +83,5 @@ export function ClickableMetricCard({
         {footer}
       </CardContent>
     </Card>
-  )
-}
+  )}
 
