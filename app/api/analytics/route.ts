@@ -4,6 +4,7 @@ import { getEffectiveUser, canViewAllData } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
 import { AppointmentWhereClause, AppointmentWithRelations, AnalyticsBreakdownItem } from '@/types'
 import { convertDateRangeToUtc, getCompanyTimezone } from '@/lib/timezone'
+import { buildComparisonParams, type ComparisonTarget, getComparisonLabel } from '@/lib/analytics-comparison'
 
 // Helper types for analytics aggregations
 interface ObjectionData {
@@ -295,11 +296,29 @@ export async function GET(request: NextRequest) {
     
     // Apply day of week filter if provided (post-query filter)
     let filteredAppointments: AppointmentWithRelations[] = appointments
-    if (searchParams.get('dayOfWeek')) {
-      const dayOfWeek = parseInt(searchParams.get('dayOfWeek')!)
-      filteredAppointments = appointments.filter(apt => 
-        new Date(apt.scheduledAt).getDay() === dayOfWeek
-      )
+    if (searchParams.getAll('dayOfWeek').length > 0) {
+      const validDays = searchParams
+        .getAll('dayOfWeek')
+        .map((value) => parseInt(value, 10))
+        .filter((value) => !Number.isNaN(value))
+
+      if (validDays.length > 0) {
+        filteredAppointments = filteredAppointments.filter((apt) =>
+          validDays.includes(new Date(apt.scheduledAt).getDay())
+        )
+      }
+    }
+
+    const excludeDayParams = searchParams.getAll('excludeDayOfWeek')
+    if (excludeDayParams.length > 0) {
+      const excluded = excludeDayParams
+        .map((value) => parseInt(value, 10))
+        .filter((value) => !Number.isNaN(value))
+      if (excluded.length > 0) {
+        filteredAppointments = filteredAppointments.filter((apt) =>
+          !excluded.includes(new Date(apt.scheduledAt).getDay())
+        )
+      }
     }
     
     // Apply time of day filter if provided
@@ -1509,7 +1528,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const responsePayload = {
       // New metrics
       callsCreated,
       scheduledCallsToDate,
@@ -1531,7 +1550,7 @@ export async function GET(request: NextRequest) {
       salesCycleCount,
       averageAppointmentLeadTimeDays: averageLeadTimeDays,
       appointmentLeadTimeCount: leadTimeCount,
-      
+
       // Legacy metrics (for backward compatibility)
       totalAppointments,
       scheduled,
@@ -1543,7 +1562,7 @@ export async function GET(request: NextRequest) {
       scheduledCallCloseRate: parseFloat(scheduledCallCloseRate),
       revenuePerScheduledCall: parseFloat(revenuePerScheduledCall),
       revenuePerShowedCall: parseFloat(revenuePerShowedCall),
-      
+
       // Breakdowns
       byCloser,
       byDayOfWeek,
@@ -1553,6 +1572,36 @@ export async function GET(request: NextRequest) {
       byTimeOfDay,
       byTrafficSource,
       ...(detail ? { detail } : {})
+    }
+
+    const compareWithParam = request.nextUrl.searchParams.get('compareWith') as ComparisonTarget | null
+
+    if (compareWithParam) {
+      const compareTarget = compareWithParam
+      const comparisonParams = buildComparisonParams(request.nextUrl.searchParams, compareTarget, request.nextUrl.searchParams.get('dayOfWeek'))
+      const comparisonUrl = `${request.nextUrl.origin}${request.nextUrl.pathname}?${comparisonParams.toString()}`
+      const comparisonResponse = await fetch(comparisonUrl, {
+        headers: Object.fromEntries(request.headers.entries()),
+        cache: 'no-store'
+      })
+      const comparisonPayload = await comparisonResponse.json()
+
+      return NextResponse.json({
+        primary: responsePayload,
+        comparison: comparisonPayload?.primary ?? comparisonPayload,
+        meta: {
+          comparisonTarget: compareTarget,
+          comparisonLabel: getComparisonLabel(compareTarget)
+        }
+      })
+    }
+
+    return NextResponse.json({
+      primary: responsePayload,
+      meta: {
+        comparisonTarget: null,
+        comparisonLabel: null
+      }
     })
     
   } catch (error) {

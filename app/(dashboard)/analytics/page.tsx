@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import AdvancedFilters from '@/components/AdvancedFilters'
@@ -9,8 +10,11 @@ import {
   type FilterChip as AnalyticsFilterChip
 } from '@/components/analytics/FilterContextBar'
 import { ClickableMetricCard } from '@/components/analytics/ClickableMetricCard'
+import { ComparisonView } from '@/components/analytics/ComparisonView'
 import { cn } from '@/lib/utils'
 import { getKpiBadge, getKpiColorClass, getKpiStatus, resolveTarget } from '@/lib/analytics-kpi'
+import { generateInsights, type AnalyticsSnapshot, type Insight } from '@/lib/analytics-insights'
+import { getComparisonLabel, buildComparisonParams, type ComparisonTarget } from '@/lib/analytics-comparison'
 
 interface FilterState {
   dateFrom: string
@@ -91,6 +95,37 @@ const formatCurrencyValue = (value: unknown, fractionDigits = 0): string => {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits
   })
+}
+
+const toAnalyticsSnapshot = (data: any | null | undefined): AnalyticsSnapshot | null => {
+  if (!data) {
+    return null
+  }
+
+  return {
+    showRate: parseNumericValue(data.showRate),
+    closeRate: parseNumericValue(data.closeRate),
+    cancellationRate: parseNumericValue(data.cancellationRate),
+    noShowRate: parseNumericValue(data.noShowRate),
+    qualifiedRate: parseNumericValue(data.qualifiedRate),
+    cashCollected: Number(data.cashCollected ?? 0),
+    scheduledCallsToDate: Number(data.scheduledCallsToDate ?? 0),
+    qualifiedCalls: Number(data.qualifiedCalls ?? 0),
+    totalUnitsClosed: Number(data.totalUnitsClosed ?? 0),
+    dollarsOverScheduledCallsToDate: parseNumericValue(data.dollarsOverScheduledCallsToDate),
+    dollarsOverShow: parseNumericValue(data.dollarsOverShow),
+    averageSalesCycleDays: parseNumericValue(data.averageSalesCycleDays),
+    averageAppointmentLeadTimeDays: parseNumericValue(data.averageAppointmentLeadTimeDays)
+  }
+}
+
+const MS_IN_DAY = 1000 * 60 * 60 * 24
+
+const toDateSafe = (value?: string | null): Date | null => {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map((part) => parseInt(part, 10))
+  if (!year || !month || !day) return null
+  return new Date(year, month - 1, day)
 }
 
 const formatDate = (date: Date): string => {
@@ -201,6 +236,12 @@ export default function AnalyticsPage() {
   const [filters, setFilters] = useState<FilterState>(() => createDefaultFilters())
   const [draftFilters, setDraftFilters] = useState<FilterState>(() => createDefaultFilters())
   const [compareMode, setCompareMode] = useState(false)
+  const [comparisonTarget, setComparisonTarget] = useState<ComparisonTarget>('overall')
+  const [comparisonData, setComparisonData] = useState<any | null>(null)
+  const [comparisonLabel, setComparisonLabel] = useState(getComparisonLabel('overall'))
+  const [comparisonInsights, setComparisonInsights] = useState<Insight[]>([])
+  const [comparisonLoading, setComparisonLoading] = useState(false)
+  const [comparisonError, setComparisonError] = useState<string | null>(null)
 
   const [analytics, setAnalytics] = useState<any>(null)
   const [closers, setClosers] = useState<any[]>([])
@@ -375,41 +416,63 @@ export default function AnalyticsPage() {
     }
   }
   
-  const fetchAnalytics = async (overrideFilters?: FilterState) => {
+  const fetchAnalytics = async (overrideFilters?: FilterState, comparisonOverride?: ComparisonTarget | null) => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       const filtersToUse = overrideFilters ?? filters
-
       Object.entries(filtersToUse).forEach(([key, value]) => {
         if (value) params.append(key, value)
       })
-      
-      // Include viewAs parameter from current URL if present
       const urlParams = new URLSearchParams(window.location.search)
       const viewAs = urlParams.get('viewAs')
       if (viewAs) {
         params.append('viewAs', viewAs)
       }
-      
-      const res = await fetch(`/api/analytics?${params}`, {
-        credentials: 'include'
-      })
+      const compareTarget = comparisonOverride ?? (compareMode ? comparisonTarget : null)
+      if (compareTarget) {
+        params.append('compareWith', compareTarget)
+      }
+      const res = await fetch(`/api/analytics?${params}`, { credentials: 'include' })
       const data = await res.json()
-      setAnalytics(data)
-      if (data.timezone) {
-        setTimezone(data.timezone)
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to fetch analytics')
       }
-      
-      // Extract unique calendars
-      if (data.byCalendar) {
-        setCalendars(data.byCalendar.map((c: any) => c.calendar))
+      const primaryData = data.primary ?? data
+      setAnalytics(primaryData)
+      if (primaryData.timezone) {
+        setTimezone(primaryData.timezone)
       }
-    } catch (error) {
+      if (primaryData.byCalendar) {
+        setCalendars(primaryData.byCalendar.map((c: any) => c.calendar))
+      }
+      if (compareTarget && data.comparison) {
+        setComparisonData(data.comparison)
+        const primarySnapshot = toAnalyticsSnapshot(primaryData)
+        const comparisonSnapshot = toAnalyticsSnapshot(data.comparison)
+        setComparisonInsights(generateInsights(primarySnapshot, comparisonSnapshot))
+        setComparisonLabel(data.meta?.comparisonLabel || getComparisonLabel(compareTarget))
+        setComparisonError(null)
+      } else {
+        setComparisonData(null)
+        setComparisonInsights([])
+      }
+    } catch (error: any) {
       console.error('Failed to fetch analytics:', error)
+      if (compareMode) {
+        setComparisonError(error?.message || 'Failed to load comparison data')
+      }
     }
     setLoading(false)
   }
+
+  const fetchComparisonData = useCallback(
+    async (baseFilters: FilterState, primaryData: any, targetOverride?: ComparisonTarget) => {
+      const target = targetOverride ?? comparisonTarget ?? 'overall'
+      await fetchAnalytics(baseFilters, target)
+    },
+    [comparisonTarget]
+  )
   
   const handleApplyFilters = () => {
     setActiveQuickView(null)
@@ -478,7 +541,29 @@ export default function AnalyticsPage() {
   }
 
   const handleToggleCompareMode = () => {
-    setCompareMode((prev) => !prev)
+    const next = !compareMode
+    setCompareMode(next)
+    if (!next) {
+      setComparisonData(null)
+      setComparisonError(null)
+      setComparisonInsights([])
+      setComparisonLabel(getComparisonLabel('overall'))
+    } else if (analytics) {
+      fetchComparisonData(filters, analytics, comparisonTarget)
+    }
+  }
+
+  const handleComparisonTargetChange = (target: ComparisonTarget) => {
+    setComparisonTarget(target)
+    if (compareMode && analytics) {
+      fetchComparisonData(filters, analytics, target)
+    }
+  }
+
+  const handleComparisonRetry = () => {
+    if (analytics) {
+      fetchComparisonData(filters, analytics, comparisonTarget)
+    }
   }
   
   const quickViews: Array<{ id: QuickViewRange; label: string }> = [
@@ -589,6 +674,20 @@ export default function AnalyticsPage() {
 
   const formatLeadTime = (value: number | null | undefined) =>
     formatDaysValue(value)
+
+  useEffect(() => {
+    if (!compareMode) {
+      setComparisonData(null)
+      setComparisonInsights([])
+      setComparisonError(null)
+      setComparisonLoading(false)
+      return
+    }
+
+    if (analytics) {
+      fetchComparisonData(filters, analytics, comparisonTarget)
+    }
+  }, [compareMode, comparisonTarget, analytics, filters, fetchComparisonData])
 
   const kpi = useMemo(() => {
     if (!analytics) return null
@@ -779,39 +878,49 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
       
-      {/* Key Metrics */}
-      {analytics && (
+      {compareMode && analytics ? (
+        <div className="mb-8">
+          <ComparisonView
+            primaryData={analytics}
+            comparisonData={comparisonData}
+            comparisonLabel={comparisonLabel}
+            comparisonTarget={comparisonTarget}
+            onTargetChange={handleComparisonTargetChange}
+            loading={comparisonLoading}
+            error={comparisonError}
+            onRetry={handleComparisonRetry}
+            insights={comparisonInsights}
+          />
+        </div>
+      ) : null}
+
+      {!compareMode && analytics ? (
         <>
-          {/* Primary Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-6 mb-8">
             <ClickableMetricCard
               title="Calls Created"
               value={(analytics.callsCreated || 0).toLocaleString()}
               description="Appointments created in time frame"
               onClick={createMetricCardHandler('callsCreated', 'Calls Created')}
             />
-
             <ClickableMetricCard
               title="Scheduled Calls to Date"
               value={(analytics.scheduledCallsToDate || 0).toLocaleString()}
               description="Scheduled in time frame"
               onClick={createMetricCardHandler('scheduledCallsToDate', 'Scheduled Calls to Date')}
             />
-
             <ClickableMetricCard
               title="Cancellation Rate"
               value={renderWithBadge(cancellationRateFormatted, cancellationRateBadge)}
               description="Percent of scheduled calls canceled"
               status={kpi?.cancellationRate.status ?? 'neutral'}
             />
-
             <ClickableMetricCard
               title="No Show Rate"
               value={renderWithBadge(noShowRateFormatted, noShowRateBadge)}
               description="Percent of expected calls that no-showed"
               status={kpi?.noShowRate.status ?? 'neutral'}
             />
-
             <ClickableMetricCard
               title="Avg Sales Cycle"
               value={
@@ -823,7 +932,6 @@ export default function AnalyticsPage() {
               description={`Avg days from first call to close (${analytics.salesCycleCount || 0} deals)`}
               onClick={createMetricCardHandler('salesCycle', 'Average Sales Cycle')}
             />
-
             <ClickableMetricCard
               title="Avg Lead Time"
               value={
@@ -836,87 +944,76 @@ export default function AnalyticsPage() {
               onClick={createMetricCardHandler('appointmentLeadTime', 'Average Appointment Lead Time')}
             />
           </div>
-          
-          {/* Performance Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             <ClickableMetricCard
               title="Show Rate"
               value={renderWithBadge(showRateFormatted, showRateBadge)}
               description={`${analytics.callsShown || 0} calls shown`}
               status={kpi?.showRate.status ?? 'neutral'}
             />
-
             <ClickableMetricCard
               title="Qualified Calls"
               value={(analytics.qualifiedCalls || 0).toLocaleString()}
               description={
                 <>
-                  Qualified Rate:{' '}
-                  {renderWithBadge(qualifiedRateFormatted, qualifiedRateBadge)}
+                  Qualified Rate: {renderWithBadge(qualifiedRateFormatted, qualifiedRateBadge)}
                 </>
               }
               status={kpi?.qualifiedRate.status ?? 'neutral'}
               onClick={createMetricCardHandler('qualifiedCalls', 'Qualified Calls')}
             />
-
             <ClickableMetricCard
               title="Total Units Closed"
               value={(analytics.totalUnitsClosed || 0).toLocaleString()}
               description={
                 <>
-                  Close Rate:{' '}
-                  {renderWithBadge(closeRateFormatted, closeRateBadge)}
+                  Close Rate: {renderWithBadge(closeRateFormatted, closeRateBadge)}
                 </>
               }
               status={kpi?.closeRate.status ?? 'neutral'}
               onClick={createMetricCardHandler('totalUnitsClosed', 'Total Units Closed')}
             />
-
             <ClickableMetricCard
               title="Scheduled Calls to Closed"
               value={`${(analytics.scheduledCallsToClosed || 0).toFixed(1)}%`}
               description="Closed ÷ Scheduled"
             />
           </div>
-          
-          {/* Revenue Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
             <ClickableMetricCard
               title="Cash Collected"
               value={`$${(analytics.cashCollected || 0).toLocaleString()}`}
               description="Total cash collected"
               onClick={createMetricCardHandler('cashCollected', 'Cash Collected')}
             />
-
             <ClickableMetricCard
               title="$ per Scheduled Call"
               value={renderWithBadge(revenuePerScheduledFormatted, revenuePerScheduledBadge)}
               description="Cash ÷ Scheduled Calls"
               status={kpi?.revenuePerScheduled.status ?? 'neutral'}
             />
-
             <ClickableMetricCard
               title="$ per Showed Call"
               value={renderWithBadge(revenuePerShowFormatted, revenuePerShowBadge)}
               description="Cash ÷ Calls Shown"
               status={kpi?.revenuePerShow.status ?? 'neutral'}
             />
-
             <ClickableMetricCard
               title="Missing PCNs"
-              value={
-                <span className="text-red-600">
-                  {(analytics.missingPCNs || 0).toLocaleString()}
-                </span>
-              }
+              value={<span className="text-red-600">{(analytics.missingPCNs || 0).toLocaleString()}</span>}
               description="Overdue PCN submissions"
               status="danger"
               onClick={createMetricCardHandler('missingPCNs', 'Missing PCNs')}
             />
           </div>
-          
-          {/* View Tabs */}
-          <div className="flex gap-2 mb-6">
+        </>
+      ) : null}
+
+      {analytics && (
+        <>
+          <div className="mb-6 flex gap-2">
             <Button
               variant={activeView === 'overview' ? 'default' : 'outline'}
               onClick={() => setActiveView('overview')}
@@ -946,7 +1043,7 @@ export default function AnalyticsPage() {
               By Objection
             </Button>
           </div>
-          
+
           {/* Content based on active view */}
           {activeView === 'overview' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
