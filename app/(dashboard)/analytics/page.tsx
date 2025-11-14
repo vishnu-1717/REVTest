@@ -667,14 +667,6 @@ export default function AnalyticsPage() {
     fetchAnalytics(mergedFilters)
   }, [fetchAnalytics])
 
-  const fetchComparisonData = useCallback(
-    async (baseFilters: FilterState, primaryData: any, targetOverride?: ComparisonTarget) => {
-      const target = targetOverride ?? comparisonTarget ?? 'overall'
-      await fetchAnalytics(baseFilters, target)
-    },
-    [comparisonTarget]
-  )
-  
   const handleApplyFilters = () => {
     setActiveQuickView(null)
     const appliedFilters = { ...draftFilters }
@@ -749,22 +741,20 @@ export default function AnalyticsPage() {
       setComparisonError(null)
       setComparisonInsights([])
       setComparisonLabel(getComparisonLabel('overall'))
-    } else if (analytics) {
-      fetchComparisonData(filters, analytics, comparisonTarget)
+    } else {
+      fetchAnalytics(filters, comparisonTarget)
     }
   }
 
   const handleComparisonTargetChange = (target: ComparisonTarget) => {
     setComparisonTarget(target)
-    if (compareMode && analytics) {
-      fetchComparisonData(filters, analytics, target)
+    if (compareMode) {
+      fetchAnalytics(filters, target)
     }
   }
 
   const handleComparisonRetry = () => {
-    if (analytics) {
-      fetchComparisonData(filters, analytics, comparisonTarget)
-    }
+    fetchAnalytics(filters, comparisonTarget)
   }
   
   const quickViews: Array<{ id: QuickViewRange; label: string }> = [
@@ -893,10 +883,8 @@ export default function AnalyticsPage() {
       return
     }
 
-    if (analytics) {
-      fetchComparisonData(filters, analytics, comparisonTarget)
-    }
-  }, [compareMode, comparisonTarget, analytics, filters, fetchComparisonData])
+    fetchAnalytics(filters, comparisonTarget)
+  }, [compareMode, comparisonTarget, filters])
 
   const kpi = useMemo(() => {
     if (!analytics) return null
