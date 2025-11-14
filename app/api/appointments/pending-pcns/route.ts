@@ -310,7 +310,8 @@ export async function GET(request: NextRequest) {
         appointments: formatted,
         timezone,
         byCloser,
-        assignableClosers
+        assignableClosers,
+        hiddenCloserIds: hiddenCloserIdsStorage
       }
     })
 

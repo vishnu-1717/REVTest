@@ -25,6 +25,8 @@ import {
   CompletedPCNsResponse
 } from '@/types/pcn'
 
+const INACTIVE_CLOSER_ID = '__inactive__'
+
 export default function AppointmentsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -58,6 +60,7 @@ export default function AppointmentsPage() {
   const [completedDateFrom, setCompletedDateFrom] = useState<string>('')
   const [completedDateTo, setCompletedDateTo] = useState<string>('')
   const [assignableClosers, setAssignableClosers] = useState<Array<{ id: string; name: string }>>([])
+  const [hiddenCloserIds, setHiddenCloserIds] = useState<string[]>([])
   const [assigningMap, setAssigningMap] = useState<Record<string, boolean>>({})
   const [assignError, setAssignError] = useState<string | null>(null)
 
@@ -95,6 +98,7 @@ export default function AppointmentsPage() {
       } else {
         setAssignableClosers([])
       }
+      setHiddenCloserIds(data.hiddenCloserIds ?? [])
     } catch (error) {
       console.error('Failed to fetch appointments:', error)
     } finally {
@@ -295,6 +299,10 @@ export default function AppointmentsPage() {
     if (closerFilter !== 'all') {
       if (closerFilter === 'unassigned') {
         results = results.filter((apt) => !apt.closerId)
+      } else if (closerFilter === INACTIVE_CLOSER_ID) {
+        results = results.filter((apt) =>
+          apt.closerId ? hiddenCloserIds.includes(apt.closerId) : false
+        )
       } else {
         results = results.filter((apt) => apt.closerId === closerFilter)
       }
@@ -330,7 +338,7 @@ export default function AppointmentsPage() {
 
       return dateB - dateA
     })
-  }, [appointments, searchQuery, dateFrom, dateTo, dateSort, closerFilter])
+  }, [appointments, searchQuery, dateFrom, dateTo, dateSort, closerFilter, hiddenCloserIds])
 
   const scheduledFormatter = useMemo(() => {
     return new Intl.DateTimeFormat('en-US', {
