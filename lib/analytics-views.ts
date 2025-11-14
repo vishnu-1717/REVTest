@@ -3,7 +3,7 @@
  * Manages saved filter combinations and layout preferences
  */
 
-import { FilterState } from '@/types/analytics'
+import { FilterState } from '@/app/(dashboard)/analytics/page'
 
 export interface AnalyticsView {
   id: string

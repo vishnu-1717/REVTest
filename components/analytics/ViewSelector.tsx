@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Bookmark, BookmarkCheck, Plus, Settings } from 'lucide-react'
 import {
   Select,
@@ -23,7 +23,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { AnalyticsView, loadViews, saveView, deleteView } from '@/lib/analytics-views'
-import { FilterState } from '@/types/analytics'
+import { FilterState } from '@/app/(dashboard)/analytics/page'
 
 interface ViewSelectorProps {
   currentViewId?: string
