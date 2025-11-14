@@ -45,6 +45,10 @@ export function ViewSelector({
   const [saveViewName, setSaveViewName] = useState('')
   const [saveViewDescription, setSaveViewDescription] = useState('')
 
+  useEffect(() => {
+    setViews(loadViews())
+  }, [])
+
   const handleSaveView = () => {
     if (!saveViewName.trim()) {
       return
