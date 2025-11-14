@@ -40,7 +40,7 @@ export function ViewSelector({
   currentLayout,
   onSaveView
 }: ViewSelectorProps) {
-  const [views, setViews] = useState<AnalyticsView[]>([])
+  const [views, setViews] = useState<AnalyticsView[]>(() => loadViews())
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false)
   const [saveViewName, setSaveViewName] = useState('')
   const [saveViewDescription, setSaveViewDescription] = useState('')
