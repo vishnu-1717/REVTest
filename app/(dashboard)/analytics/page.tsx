@@ -24,23 +24,8 @@ import { TimeSeriesLineChart } from '@/components/analytics/charts/TimeSeriesLin
 import { DayOfWeekBarChart } from '@/components/analytics/charts/DayOfWeekBarChart'
 import { CalendarStackedBarChart } from '@/components/analytics/charts/CalendarStackedBarChart'
 import { ViewSelector } from '@/components/analytics/ViewSelector'
-import { AnalyticsView, loadViews, decodeUrlToView, encodeViewToUrl } from '@/lib/analytics-views'
-
-export interface FilterState {
-  dateFrom: string
-  dateTo: string
-  closer: string
-  status: string
-  dayOfWeek: string
-  objectionType: string
-  appointmentType: string
-  followUpNeeded: string
-  nurtureType: string
-  minDealSize: string
-  maxDealSize: string
-  calendar: string
-  timeOfDay: string
-}
+import { AnalyticsView, decodeUrlToView, encodeViewToUrl } from '@/lib/analytics-views'
+import type { FilterState } from '@/types/analytics'
 
 type QuickViewRange =
   | 'today'
