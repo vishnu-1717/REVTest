@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { PendingPCNCloserSummary, PendingPCNsResponse } from '@/types/pcn'
 import { formatMinutesOverdue } from '@/lib/utils'
 
+const INACTIVE_CLOSER_ID = '__inactive__'
+
 const getViewAsCompany = () => {
   if (typeof window === 'undefined') return null
   const params = new URLSearchParams(window.location.search)
@@ -88,6 +90,10 @@ export function PendingPCNsWidget() {
 
   const handleNavigateToCloser = useCallback(
     (closerId: string | null) => {
+      if (closerId === INACTIVE_CLOSER_ID) {
+        router.push('/appointments?closerId=inactive')
+        return
+      }
       const value = closerId ?? 'unassigned'
       router.push(`/appointments?closerId=${encodeURIComponent(value)}`)
     },
@@ -116,44 +122,52 @@ export function PendingPCNsWidget() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredSummaries.map((summary) => (
-                <button
-                  type="button"
-                  key={summary.closerId ?? 'unassigned'}
-                  className={`rounded-lg border p-4 text-left transition hover:shadow-sm ${
-                    summary.pendingCount > 0
-                      ? getUrgencyStyles(summary.urgencyLevel)
-                      : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
-                  }`}
-                  onClick={() => handleNavigateToCloser(summary.closerId)}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {summary.closerName}
-                        {summary.pendingCount === 0 && ' ✅'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {summary.pendingCount === 0
-                          ? 'All PCNs submitted'
-                          : `${summary.pendingCount} missing PCN${
-                              summary.pendingCount === 1 ? '' : 's'
-                            }`}
-                      </p>
+              {filteredSummaries.map((summary) => {
+                const summaryKey =
+                  summary.closerId === INACTIVE_CLOSER_ID
+                    ? 'inactive'
+                    : summary.closerId ?? 'unassigned'
+                const subtitle =
+                  summary.pendingCount === 0
+                    ? 'All PCNs submitted'
+                    : summary.closerId === INACTIVE_CLOSER_ID
+                      ? `${summary.pendingCount} missing PCNs (inactive/hidden reps)`
+                      : `${summary.pendingCount} missing PCN${
+                          summary.pendingCount === 1 ? '' : 's'
+                        }`
+                return (
+                  <button
+                    type="button"
+                    key={summaryKey}
+                    className={`rounded-lg border p-4 text-left transition hover:shadow-sm ${
+                      summary.pendingCount > 0
+                        ? getUrgencyStyles(summary.urgencyLevel)
+                        : 'border-gray-200 bg-gray-50 text-gray-500 hover:bg-gray-100'
+                    }`}
+                    onClick={() => handleNavigateToCloser(summary.closerId)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {summary.closerName}
+                          {summary.pendingCount === 0 && ' ✅'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">{subtitle}</p>
+                      </div>
+                      {summary.pendingCount > 0 && (
+                        <span className="text-lg font-bold text-gray-700">
+                          {summary.pendingCount}
+                        </span>
+                      )}
                     </div>
-                    {summary.pendingCount > 0 && (
-                      <span className="text-lg font-bold text-gray-700">
-                        {summary.pendingCount}
-                      </span>
+                    {summary.pendingCount > 0 && summary.oldestMinutes !== null && (
+                      <p className="mt-3 text-xs text-gray-600">
+                        Oldest outstanding: {formatMinutesOverdue(summary.oldestMinutes)} ago
+                      </p>
                     )}
-                  </div>
-                  {summary.pendingCount > 0 && summary.oldestMinutes !== null && (
-                    <p className="mt-3 text-xs text-gray-600">
-                      Oldest outstanding: {formatMinutesOverdue(summary.oldestMinutes)} ago
-                    </p>
-                  )}
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
 
             <div className="text-center pt-2">

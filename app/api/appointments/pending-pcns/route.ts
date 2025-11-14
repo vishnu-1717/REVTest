@@ -18,13 +18,23 @@ export async function GET(request: NextRequest) {
     const limit = url.searchParams.get('limit')
     const all = url.searchParams.get('all') === 'true'
     const groupByCloser = url.searchParams.get('groupBy') === 'closer'
-    const closerIdParam = url.searchParams.get('closerId')
-    const closerFilter =
+    const closerIdParamRaw = url.searchParams.get('closerId')
+    const closerIdParam =
+      closerIdParamRaw && closerIdParamRaw.trim().length > 0 ? closerIdParamRaw.trim() : undefined
+    const closerFilterType =
       closerIdParam === 'unassigned'
-        ? null
-        : closerIdParam && closerIdParam.trim().length > 0
-          ? closerIdParam
-          : undefined
+        ? 'unassigned'
+        : closerIdParam === 'inactive'
+          ? 'inactive'
+          : closerIdParam
+            ? 'specific'
+            : undefined
+    let closerFilter: string | null | undefined
+    if (closerFilterType === 'unassigned') {
+      closerFilter = null
+    } else if (closerFilterType === 'specific' && closerIdParam) {
+      closerFilter = closerIdParam
+    }
 
     const effectiveCompanyId = await getEffectiveCompanyId(request.url)
 
@@ -77,8 +87,9 @@ export async function GET(request: NextRequest) {
         listWhereClause.closerId = closerFilter
       }
       
+      const hasCloserFilter = typeof closerFilter !== 'undefined' || closerFilterType === 'inactive'
       let takeLimit: number | undefined = undefined
-      if (!all && !(groupByCloser && typeof closerFilter === 'undefined')) {
+      if (!all && !(groupByCloser && !hasCloserFilter)) {
         if (limit) {
           takeLimit = parseInt(limit, 10)
         } else {
@@ -94,8 +105,7 @@ export async function GET(request: NextRequest) {
       }>
 
       let pendingAppointments: PendingAppointmentWithRelations[] = []
-      const shouldFetchAppointments =
-        !groupByCloser || typeof closerFilter !== 'undefined' || all
+      const shouldFetchAppointments = !groupByCloser || hasCloserFilter || all
 
       if (shouldFetchAppointments) {
         pendingAppointments = await prisma.appointment.findMany({
@@ -140,10 +150,9 @@ export async function GET(request: NextRequest) {
         user.role === 'admin' || user.superAdmin
           ? {
               companyId: effectiveCompanyId,
-              isActive: true,
               superAdmin: false,
               OR: [
-                { role: { in: ['rep', 'closer'] } },
+                { role: { in: ['rep', 'closer', 'admin'] } },
                 { AppointmentsAsCloser: { some: {} } }
               ]
             }
@@ -151,10 +160,17 @@ export async function GET(request: NextRequest) {
 
       const assignableClosersRaw = await prisma.user.findMany({
         where: assignableCloserWhere,
-        select: { id: true, name: true },
+        select: { id: true, name: true, isActive: true },
         orderBy: { name: 'asc' }
       })
 
+      const visibleCloserEntries =
+        user.role === 'admin' || user.superAdmin
+          ? assignableClosersRaw.filter((closer) => closer.isActive)
+          : assignableClosersRaw
+      const visibleCloserIdSet = new Set(visibleCloserEntries.map((closer) => closer.id))
+
+      let hiddenCloserIdsStorage: string[] = []
       let byCloser: Array<{
         closerId: string | null
         closerName: string
@@ -163,7 +179,10 @@ export async function GET(request: NextRequest) {
         urgencyLevel: 'normal' | 'medium' | 'high'
       }> | undefined = undefined
 
-      if (groupByCloser) {
+      const shouldGroup =
+        groupByCloser || closerFilterType === 'inactive'
+
+      if (shouldGroup) {
         const groupResults = await prisma.appointment.groupBy({
           by: ['closerId'],
           where: baseWhereClause,
@@ -183,56 +202,107 @@ export async function GET(request: NextRequest) {
           return 'normal'
         }
 
-        byCloser = assignableClosersRaw
-          .map((closer) => {
-            const summary = groupMap.get(closer.id) || null
-            const oldestMinutes =
-              summary && summary._min.scheduledAt
-                ? Math.floor((now - summary._min.scheduledAt.getTime()) / (1000 * 60))
-                : null
+        const hiddenCloserIds = new Set<string>()
+        groupResults.forEach((entry) => {
+          if (entry.closerId && !visibleCloserIdSet.has(entry.closerId)) {
+            hiddenCloserIds.add(entry.closerId)
+          }
+        })
 
-            const pendingCount = summary ? summary._count._all : 0
-
-            return pendingCount > 0
-              ? {
-                  closerId: closer.id,
-                  closerName: closer.name || 'Unknown rep',
-                  pendingCount,
-                  oldestMinutes,
-                  urgencyLevel: computeUrgency(oldestMinutes)
-                }
-              : null
-          })
-          .filter(Boolean) as Array<{
-            closerId: string
-            closerName: string
-            pendingCount: number
-            oldestMinutes: number | null
-            urgencyLevel: 'normal' | 'medium' | 'high'
-          }>
-
-        const unassignedSummary = groupMap.get(null)
-        if (unassignedSummary) {
-          const oldestMinutes =
-            unassignedSummary._min.scheduledAt
-              ? Math.floor((now - unassignedSummary._min.scheduledAt.getTime()) / (1000 * 60))
-              : null
-          byCloser.push({
-            closerId: null,
-            closerName: 'Unassigned',
-            pendingCount: unassignedSummary._count._all,
-            oldestMinutes,
-            urgencyLevel: computeUrgency(oldestMinutes)
-          })
+        if (closerFilterType === 'inactive') {
+          hiddenCloserIdsStorage = Array.from(hiddenCloserIds)
+          listWhereClause.closerId =
+            hiddenCloserIdsStorage.length > 0
+              ? { in: hiddenCloserIdsStorage }
+              : { in: ['__no_hidden__'] }
         }
 
-        byCloser.sort((a, b) => {
-          if (b.pendingCount !== a.pendingCount) {
-            return b.pendingCount - a.pendingCount
+        if (groupByCloser) {
+          byCloser = visibleCloserEntries
+            .map((closer) => {
+              const summary = groupMap.get(closer.id) || null
+              const oldestMinutes =
+                summary && summary._min.scheduledAt
+                  ? Math.floor((now - summary._min.scheduledAt.getTime()) / (1000 * 60))
+                  : null
+
+              const pendingCount = summary ? summary._count._all : 0
+
+              return pendingCount > 0
+                ? {
+                    closerId: closer.id,
+                    closerName: closer.name || 'Unknown rep',
+                    pendingCount,
+                    oldestMinutes,
+                    urgencyLevel: computeUrgency(oldestMinutes)
+                  }
+                : null
+            })
+            .filter(Boolean) as Array<{
+              closerId: string
+              closerName: string
+              pendingCount: number
+              oldestMinutes: number | null
+              urgencyLevel: 'normal' | 'medium' | 'high'
+            }>
+
+          const hiddenSummary = Array.from(hiddenCloserIds).reduce(
+            (acc, closerId) => {
+              const summary = groupMap.get(closerId)
+              if (!summary) return acc
+              const minutes =
+                summary._min.scheduledAt !== null
+                  ? Math.floor((now - summary._min.scheduledAt.getTime()) / (1000 * 60))
+                  : null
+              acc.pendingCount += summary._count._all
+              if (minutes !== null) {
+                acc.oldestMinutes =
+                  acc.oldestMinutes === null ? minutes : Math.min(acc.oldestMinutes, minutes)
+              }
+              return acc
+            },
+            { pendingCount: 0, oldestMinutes: null as number | null }
+          )
+
+          const unassignedSummary = groupMap.get(null)
+          if (unassignedSummary) {
+            const oldestMinutes =
+              unassignedSummary._min.scheduledAt
+                ? Math.floor((now - unassignedSummary._min.scheduledAt.getTime()) / (1000 * 60))
+                : null
+            byCloser.push({
+              closerId: null,
+              closerName: 'Unassigned',
+              pendingCount: unassignedSummary._count._all,
+              oldestMinutes,
+              urgencyLevel: computeUrgency(oldestMinutes)
+            })
           }
-          return a.closerName.localeCompare(b.closerName)
-        })
+
+          if (hiddenSummary.pendingCount > 0) {
+            const hiddenMinutes = hiddenSummary.oldestMinutes
+            byCloser.push({
+              closerId: '__inactive__',
+              closerName: 'Inactive / Hidden reps',
+              pendingCount: hiddenSummary.pendingCount,
+              oldestMinutes: hiddenMinutes,
+              urgencyLevel: computeUrgency(hiddenMinutes)
+            })
+          }
+
+          byCloser.sort((a, b) => {
+            if (b.pendingCount !== a.pendingCount) {
+              return b.pendingCount - a.pendingCount
+            }
+            return a.closerName.localeCompare(b.closerName)
+          })
+        }
       }
+
+      const assignableClosers = assignableClosersRaw.map((closer) => ({
+        id: closer.id,
+        name: closer.name || 'Unnamed rep'
+      }))
 
       return {
         count: formatted.length,
@@ -240,10 +310,7 @@ export async function GET(request: NextRequest) {
         appointments: formatted,
         timezone,
         byCloser,
-        assignableClosers: assignableClosersRaw.map((closer) => ({
-          id: closer.id,
-          name: closer.name || 'Unnamed rep'
-        }))
+        assignableClosers
       }
     })
 
