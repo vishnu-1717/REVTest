@@ -23,8 +23,10 @@ import { SelectedComparisonPanel, type ComparisonMetric } from '@/components/ana
 import { TimeSeriesLineChart } from '@/components/analytics/charts/TimeSeriesLineChart'
 import { DayOfWeekBarChart } from '@/components/analytics/charts/DayOfWeekBarChart'
 import { CalendarStackedBarChart } from '@/components/analytics/charts/CalendarStackedBarChart'
+import { ViewSelector } from '@/components/analytics/ViewSelector'
+import { AnalyticsView, loadViews, decodeUrlToView, encodeViewToUrl } from '@/lib/analytics-views'
 
-interface FilterState {
+export interface FilterState {
   dateFrom: string
   dateTo: string
   closer: string
@@ -389,6 +391,7 @@ export default function AnalyticsPage() {
   const [activeView, setActiveView] = useState<'overview' | 'closers' | 'calendars' | 'objections'>('overview')
   const [timezone, setTimezone] = useState('UTC')
   const [activeQuickView, setActiveQuickView] = useState<QuickViewRange | null>(null)
+  const [currentViewId, setCurrentViewId] = useState<string>('overview')
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [detailTitle, setDetailTitle] = useState('')
   const [detailMetricKey, setDetailMetricKey] = useState<string | null>(null)
@@ -501,23 +504,23 @@ export default function AnalyticsPage() {
 
   const updateUrlFromFilters = useCallback((state: FilterState) => {
     if (typeof window === 'undefined') return
-    const params = new URLSearchParams()
-    ;(Object.entries(state) as Array<[keyof FilterState, string]>).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, value)
-      }
-    })
-
+    const layout = {
+      activeView,
+      overviewMode,
+      compareMode,
+      comparisonTarget
+    }
+    const params = encodeViewToUrl(state, layout)
     const currentUrl = new URL(window.location.href)
     const viewAs = currentUrl.searchParams.get('viewAs')
     if (viewAs) {
-      params.set('viewAs', viewAs)
+      const urlParams = new URLSearchParams(params)
+      urlParams.set('viewAs', viewAs)
+      window.history.replaceState({}, '', `${currentUrl.pathname}?${urlParams.toString()}`)
+    } else {
+      window.history.replaceState({}, '', `${currentUrl.pathname}${params ? `?${params}` : ''}`)
     }
-
-    const newSearch = params.toString()
-    const newUrl = `${currentUrl.pathname}${newSearch ? `?${newSearch}` : ''}`
-    window.history.replaceState({}, '', newUrl)
-  }, [])
+  }, [activeView, overviewMode, compareMode, comparisonTarget])
 
   const appendViewAs = useCallback((url: string) => {
     if (typeof window === 'undefined') return url
@@ -530,15 +533,44 @@ export default function AnalyticsPage() {
   
   useEffect(() => {
     fetchClosers()
-    const urlFilters = parseFiltersFromUrl()
-    if (urlFilters) {
-      setFilters(urlFilters)
-      setDraftFilters(urlFilters)
-      fetchAnalytics(urlFilters)
-    } else {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const { filters: urlFilters, layout: urlLayout } = decodeUrlToView(params)
+      
+      if (Object.keys(urlFilters).length > 0 || urlLayout) {
+        // Merge URL filters with defaults
+        const defaultFilters = createDefaultFilters()
+        const mergedFilters: FilterState = {
+          ...defaultFilters,
+          ...urlFilters
+        }
+        setFilters(mergedFilters)
+        setDraftFilters(mergedFilters)
+        
+        if (urlLayout) {
+          if (urlLayout.activeView) {
+            setActiveView(urlLayout.activeView)
+          }
+          if (urlLayout.overviewMode) {
+            setOverviewMode(urlLayout.overviewMode)
+          }
+          if (urlLayout.compareMode !== undefined) {
+            setCompareMode(urlLayout.compareMode)
+          }
+          if (urlLayout.comparisonTarget) {
+            setComparisonTarget(urlLayout.comparisonTarget as ComparisonTarget)
+          }
+        }
+        
+        fetchAnalytics(mergedFilters)
+      } else {
     fetchAnalytics()
+      }
+    } else {
+      fetchAnalytics()
     }
-  }, [parseFiltersFromUrl])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   
   const fetchClosers = async () => {
     try {
@@ -604,6 +636,51 @@ export default function AnalyticsPage() {
     }
     setLoading(false)
   }
+
+  const handleViewChange = useCallback((view: AnalyticsView) => {
+    setCurrentViewId(view.id)
+    // Merge view filters with defaults to ensure all required fields are present
+    const defaultFilters = createDefaultFilters()
+    const mergedFilters: FilterState = {
+      ...defaultFilters,
+      ...view.filters
+    }
+    setFilters(mergedFilters)
+    setDraftFilters(mergedFilters)
+    
+    // Apply layout preferences
+    if (view.layout) {
+      if (view.layout.activeView) {
+        setActiveView(view.layout.activeView)
+      }
+      if (view.layout.overviewMode) {
+        setOverviewMode(view.layout.overviewMode)
+      }
+      if (view.layout.compareMode !== undefined) {
+        setCompareMode(view.layout.compareMode)
+      }
+      if (view.layout.comparisonTarget) {
+        setComparisonTarget(view.layout.comparisonTarget as ComparisonTarget)
+      }
+    }
+    
+    // Update URL
+    if (typeof window !== 'undefined') {
+      const params = encodeViewToUrl(mergedFilters, view.layout)
+      const currentUrl = new URL(window.location.href)
+      const viewAs = currentUrl.searchParams.get('viewAs')
+      if (viewAs) {
+        const urlParams = new URLSearchParams(params)
+        urlParams.set('viewAs', viewAs)
+        window.history.replaceState({}, '', `${currentUrl.pathname}?${urlParams.toString()}`)
+      } else {
+        window.history.replaceState({}, '', `${currentUrl.pathname}${params ? `?${params}` : ''}`)
+      }
+    }
+    
+    // Fetch analytics with new filters
+    fetchAnalytics(mergedFilters)
+  }, [fetchAnalytics])
 
   const fetchComparisonData = useCallback(
     async (baseFilters: FilterState, primaryData: any, targetOverride?: ComparisonTarget) => {
@@ -713,6 +790,14 @@ export default function AnalyticsPage() {
     { id: 'last_month', label: 'Last Month' },
     { id: 'this_year', label: 'This Year' }
   ]
+
+  const toggleButtonClasses = (isActive: boolean) =>
+    cn(
+      'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+      isActive
+        ? 'bg-slate-900 text-white border-slate-900 hover:bg-slate-900 hover:text-white'
+        : 'bg-white text-slate-900 border-slate-300 hover:bg-slate-900 hover:text-white'
+    )
 
   const detailDateFormatter = useMemo(
     () =>
@@ -1092,7 +1177,7 @@ export default function AnalyticsPage() {
         <CardContent className="space-y-4">
           <div className="overflow-x-auto rounded-md border">
             <table className="w-full text-sm">
-              <thead className="bg-muted/50">
+              <thead className="bg-slate-100 text-slate-600">
                 <tr className="border-b">
                   <th className="w-10 px-3 py-2">
                     <Checkbox
@@ -1108,7 +1193,7 @@ export default function AnalyticsPage() {
                   {columns.map((column) => (
                     <th
                       key={String(column.key)}
-                      className={cn('px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground', column.numeric && 'text-right')}
+                      className={cn('px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-slate-700', column.numeric && 'text-right')}
                     >
                       <button
                         type="button"
@@ -1144,9 +1229,9 @@ export default function AnalyticsPage() {
                       <tr
                         key={id}
                         className={cn(
-                          'border-b transition-colors',
-                          clickable && 'cursor-pointer hover:bg-accent',
-                          isRowSelected && 'bg-accent/40'
+                          'group border-b bg-white text-slate-900 transition-colors hover:bg-slate-900 hover:text-white',
+                          clickable && 'cursor-pointer',
+                          isRowSelected && 'bg-slate-900 text-white'
                         )}
                         onClick={() => onRowClick?.(row)}
                       >
@@ -1165,7 +1250,11 @@ export default function AnalyticsPage() {
                           return (
                             <td
                               key={String(column.key)}
-                              className={cn('whitespace-nowrap px-3 py-2 text-sm text-foreground', column.numeric ? 'text-right' : 'text-left')}
+                              className={cn(
+                                'whitespace-nowrap px-3 py-2 text-sm text-slate-900 transition-colors group-hover:text-white',
+                                column.numeric ? 'text-right' : 'text-left',
+                                isRowSelected && 'text-white'
+                              )}
                             >
                               {formatted}
                             </td>
@@ -1226,9 +1315,24 @@ export default function AnalyticsPage() {
     <>
       <div className="container mx-auto py-10">
       <div className="mb-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
         <h1 className="text-3xl font-bold mb-2">Sales Analytics</h1>
         <p className="text-gray-600">Deep dive into your sales performance</p>
         <p className="text-sm text-gray-500 mt-1">Reporting in {timezone}</p>
+          </div>
+          <ViewSelector
+            currentViewId={currentViewId}
+            onViewChange={handleViewChange}
+            currentFilters={filters}
+            currentLayout={{
+              activeView,
+              overviewMode,
+              compareMode,
+              comparisonTarget
+            }}
+          />
+        </div>
       </div>
       
       <FilterContextBar
@@ -1448,18 +1552,20 @@ export default function AnalyticsPage() {
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
                 <Button
-                  variant={overviewMode === 'charts' ? 'default' : 'outline'}
+                  variant="ghost"
+                  className={toggleButtonClasses(overviewMode === 'charts')}
                   onClick={() => setOverviewMode('charts')}
                 >
                   Charts
                 </Button>
                 <Button
-                  variant={overviewMode === 'tables' ? 'default' : 'outline'}
+                  variant="ghost"
+                  className={toggleButtonClasses(overviewMode === 'tables')}
                   onClick={() => setOverviewMode('tables')}
                 >
                   Tables
                 </Button>
-              </div>
+                  </div>
 
               {overviewMode === 'charts' ? (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
@@ -1475,7 +1581,7 @@ export default function AnalyticsPage() {
                     data={calendarChartData}
                     onBarClick={(calendar) => handleAddFilter('calendar', calendar)}
                   />
-                </div>
+                  </div>
               ) : (
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
                   {renderBreakdownTable(
@@ -1529,7 +1635,7 @@ export default function AnalyticsPage() {
                     },
                     'Search appointment type…'
                   )}
-                </div>
+                  </div>
               )}
             </div>
           )}
