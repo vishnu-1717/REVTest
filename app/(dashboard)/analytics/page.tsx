@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -383,6 +383,7 @@ export default function AnalyticsPage() {
   const [detailItems, setDetailItems] = useState<any[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
+  const lastFetchKeyRef = useRef<string | null>(null)
 
 
   const generateFilterChips = useCallback(
@@ -547,12 +548,12 @@ export default function AnalyticsPage() {
           }
         }
         
-        fetchAnalytics(mergedFilters)
+        fetchAnalytics(mergedFilters, null, true)
       } else {
-    fetchAnalytics()
+        fetchAnalytics(undefined, null, true)
       }
     } else {
-      fetchAnalytics()
+      fetchAnalytics(undefined, null, true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -572,55 +573,71 @@ export default function AnalyticsPage() {
     }
   }
   
-  const fetchAnalytics = async (overrideFilters?: FilterState, comparisonOverride?: ComparisonTarget | null) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
+  const fetchAnalytics = useCallback(
+    async (
+      overrideFilters?: FilterState,
+      comparisonOverride?: ComparisonTarget | null,
+      force = false
+    ) => {
       const filtersToUse = overrideFilters ?? filters
-      Object.entries(filtersToUse).forEach(([key, value]) => {
-        if (value) params.append(key, value)
-      })
-      const urlParams = new URLSearchParams(window.location.search)
-      const viewAs = urlParams.get('viewAs')
-      if (viewAs) {
-        params.append('viewAs', viewAs)
-      }
       const compareTarget = comparisonOverride ?? (compareMode ? comparisonTarget : null)
-      if (compareTarget) {
-        params.append('compareWith', compareTarget)
+      const requestKey = `${JSON.stringify(filtersToUse)}|${compareTarget ?? 'primary'}`
+      if (!force && lastFetchKeyRef.current === requestKey) {
+        return
       }
-      const res = await fetch(`/api/analytics?${params}`, { credentials: 'include' })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data?.error || 'Failed to fetch analytics')
+      lastFetchKeyRef.current = requestKey
+
+      setLoading(true)
+      try {
+        const params = new URLSearchParams()
+        Object.entries(filtersToUse).forEach(([key, value]) => {
+          if (value) params.append(key, value)
+        })
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search)
+          const viewAs = urlParams.get('viewAs')
+          if (viewAs) {
+            params.append('viewAs', viewAs)
+          }
+        }
+        if (compareTarget) {
+          params.append('compareWith', compareTarget)
+        }
+        const res = await fetch(`/api/analytics?${params}`, { credentials: 'include' })
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data?.error || 'Failed to fetch analytics')
+        }
+        const primaryData = data.primary ?? data
+        setAnalytics(primaryData)
+        if (primaryData.timezone) {
+          setTimezone(primaryData.timezone)
+        }
+        if (primaryData.byCalendar) {
+          setCalendars(primaryData.byCalendar.map((c: any) => c.calendar))
+        }
+        if (compareTarget && data.comparison) {
+          setComparisonData(data.comparison)
+          const primarySnapshot = toAnalyticsSnapshot(primaryData)
+          const comparisonSnapshot = toAnalyticsSnapshot(data.comparison)
+          setComparisonInsights(generateInsights(primarySnapshot, comparisonSnapshot))
+          setComparisonLabel(data.meta?.comparisonLabel || getComparisonLabel(compareTarget))
+          setComparisonError(null)
+        } else {
+          setComparisonData(null)
+          setComparisonInsights([])
+        }
+      } catch (error: any) {
+        console.error('Failed to fetch analytics:', error)
+        if (compareMode) {
+          setComparisonError(error?.message || 'Failed to load comparison data')
+        }
+      } finally {
+        setLoading(false)
       }
-      const primaryData = data.primary ?? data
-      setAnalytics(primaryData)
-      if (primaryData.timezone) {
-        setTimezone(primaryData.timezone)
-      }
-      if (primaryData.byCalendar) {
-        setCalendars(primaryData.byCalendar.map((c: any) => c.calendar))
-      }
-      if (compareTarget && data.comparison) {
-        setComparisonData(data.comparison)
-        const primarySnapshot = toAnalyticsSnapshot(primaryData)
-        const comparisonSnapshot = toAnalyticsSnapshot(data.comparison)
-        setComparisonInsights(generateInsights(primarySnapshot, comparisonSnapshot))
-        setComparisonLabel(data.meta?.comparisonLabel || getComparisonLabel(compareTarget))
-        setComparisonError(null)
-      } else {
-        setComparisonData(null)
-        setComparisonInsights([])
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch analytics:', error)
-      if (compareMode) {
-        setComparisonError(error?.message || 'Failed to load comparison data')
-      }
-    }
-    setLoading(false)
-  }
+    },
+    [compareMode, comparisonTarget, filters]
+  )
 
   const handleViewChange = useCallback((view: AnalyticsView) => {
     setCurrentViewId(view.id)
@@ -741,20 +758,21 @@ export default function AnalyticsPage() {
       setComparisonError(null)
       setComparisonInsights([])
       setComparisonLabel(getComparisonLabel('overall'))
+      lastFetchKeyRef.current = null
     } else {
-      fetchAnalytics(filters, comparisonTarget)
+      fetchAnalytics(filters, comparisonTarget, true)
     }
   }
 
   const handleComparisonTargetChange = (target: ComparisonTarget) => {
     setComparisonTarget(target)
     if (compareMode) {
-      fetchAnalytics(filters, target)
+      fetchAnalytics(filters, target, true)
     }
   }
 
   const handleComparisonRetry = () => {
-    fetchAnalytics(filters, comparisonTarget)
+    fetchAnalytics(filters, comparisonTarget, true)
   }
   
   const quickViews: Array<{ id: QuickViewRange; label: string }> = [
@@ -880,11 +898,12 @@ export default function AnalyticsPage() {
       setComparisonInsights([])
       setComparisonError(null)
       setComparisonLoading(false)
+      lastFetchKeyRef.current = null
       return
     }
 
     fetchAnalytics(filters, comparisonTarget)
-  }, [compareMode, comparisonTarget, filters])
+  }, [compareMode, comparisonTarget, filters, fetchAnalytics])
 
   const kpi = useMemo(() => {
     if (!analytics) return null
