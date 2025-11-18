@@ -380,6 +380,7 @@ export default function UnmatchedPaymentsPage() {
                       </div>
                     )}
                   </div>
+                  </div>
                   
                   <Button onClick={() => setSelectedPayment(payment)}>
                     Match Manually
