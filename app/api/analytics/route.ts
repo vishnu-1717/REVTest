@@ -1456,7 +1456,76 @@ export async function GET(request: NextRequest) {
                 : null
           }))
 
-          const saleItems = filteredSales.map((sale) => {
+          // For detail query, fetch all sales in the date range, not just those linked to countableAppointments
+          const allSalesInRange = await withPrisma(async (prisma) => {
+            const saleWhere: any = {
+              companyId: effectiveCompanyId,
+              status: 'paid'
+            }
+            
+            // Filter by paid date if date range is provided
+            if (scheduledFrom || scheduledTo) {
+              saleWhere.paidAt = {}
+              if (scheduledFrom) {
+                saleWhere.paidAt.gte = scheduledFrom
+              }
+              if (scheduledTo) {
+                saleWhere.paidAt.lte = scheduledTo
+              }
+            }
+            
+            // If user can't view all data, filter by their closer ID via appointment relation
+            if (!canViewAllData(user)) {
+              // First, get all appointment IDs for this user
+              const userAppointments = await prisma.appointment.findMany({
+                where: {
+                  companyId: effectiveCompanyId,
+                  closerId: user.id
+                },
+                select: { id: true }
+              })
+              const userAppointmentIds = userAppointments.map(a => a.id)
+              if (userAppointmentIds.length === 0) return []
+              saleWhere.appointmentId = { in: userAppointmentIds }
+            }
+            
+            const sales = await prisma.sale.findMany({
+              where: saleWhere,
+              select: {
+                id: true,
+                amount: true,
+                appointmentId: true,
+                paidAt: true
+              },
+              take: detailLimit
+            })
+            
+            // Fetch appointments for these sales to get contact/closer info
+            const saleAppointmentIds = sales.map(s => s.appointmentId).filter(Boolean) as string[]
+            if (saleAppointmentIds.length > 0) {
+              const saleAppointments = await prisma.appointment.findMany({
+                where: {
+                  id: { in: saleAppointmentIds },
+                  companyId: effectiveCompanyId
+                },
+                include: {
+                  contact: true,
+                  closer: true
+                }
+              })
+              
+              // Add these appointments to the detail map if not already there
+              saleAppointments.forEach((apt) => {
+                if (!appointmentDetailMap.has(apt.id)) {
+                  appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt as AppointmentWithRelations))
+                }
+              })
+            }
+            
+            return sales
+          })
+
+          const saleItems = allSalesInRange.map((sale) => {
             const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
             return {
               type: 'sale',
@@ -1473,9 +1542,29 @@ export async function GET(request: NextRequest) {
             }
           })
 
+          // Combine and deduplicate by appointment ID (prefer sale over appointment if both exist)
+          const itemsByAppointmentId = new Map<string, any>()
+          
+          // Add appointment items first
+          appointmentItems.forEach((item) => {
+            if (item.id) {
+              itemsByAppointmentId.set(item.id, item)
+            }
+          })
+          
+          // Add/override with sale items (sales take precedence as they represent actual payments)
+          saleItems.forEach((item) => {
+            if (item.appointmentId) {
+              itemsByAppointmentId.set(item.appointmentId, item)
+            } else {
+              // Sale without appointment ID - add it with a unique key
+              itemsByAppointmentId.set(`sale-${item.saleId}`, item)
+            }
+          })
+
           detail = {
             metric: 'totalUnitsClosed',
-            items: [...appointmentItems, ...saleItems]
+            items: Array.from(itemsByAppointmentId.values())
           }
           break
         }
