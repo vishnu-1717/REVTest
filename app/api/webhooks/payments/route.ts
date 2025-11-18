@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { withPrisma } from '@/lib/db'
+import { findAppointmentForPayment } from '@/lib/payment-matcher'
 
 type IncomingPayment = {
   processor?: string
@@ -240,11 +241,39 @@ export async function POST(request: NextRequest) {
       })
 
       if (!matchedAppointment) {
+        // Run payment matcher to find suggested matches
+        const matchResult = await findAppointmentForPayment(companyId, {
+          email: customerEmail,
+          name: customerName || contactName || undefined,
+          phone: contactPhone || undefined,
+          amount,
+          processor: processor || 'unknown',
+          externalId: paymentId,
+          appointmentId: appointmentIdHint || undefined,
+        })
+
+        // Format suggested matches for storage (include confidence and reason)
+        const suggestedMatches = (matchResult.matches || []).map((match: any) => {
+          const apt = match.appointment || match
+          return {
+            id: apt.id,
+            contactName: apt.contact?.name || 'Unknown',
+            contactEmail: apt.contact?.email || null,
+            closerName: apt.closer?.name || 'Unassigned',
+            scheduledAt: apt.scheduledAt?.toISOString() || null,
+            cashCollected: apt.cashCollected || null,
+            status: apt.status || null,
+            confidence: match.confidence || 0.5,
+            matchReason: match.reason || `Matched by ${match.method || 'unknown'}`,
+            matchMethod: match.method || 'unknown',
+          }
+        })
+
         const unmatched = await prisma.unmatchedPayment.create({
           data: {
             saleId: sale.id,
             companyId,
-            suggestedMatches: [],
+            suggestedMatches: suggestedMatches.length > 0 ? suggestedMatches : [],
           },
           select: { id: true },
         })
