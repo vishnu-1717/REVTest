@@ -97,7 +97,11 @@ model Calendar {
   trafficSource String?
   calendarType  String?
 
-  // OPTIONAL: Auto-assign appointments to specific closer
+  // Mark calendars as approved for closer appointments
+  // Only appointments from approved calendars will be created
+  isCloserCalendar Boolean @default(false)
+
+  // OPTIONAL: Default closer for this calendar (not automatically assigned - for reference only)
   defaultCloserId String?
   defaultCloser   User?   @relation(fields: [defaultCloserId], references: [id], onDelete: SetNull)
 

@@ -23,7 +23,7 @@ export async function PATCH(
     const { id } = await params
     
     // Validate updates
-    const allowedFields = ['trafficSource', 'calendarType', 'defaultCloserId']
+    const allowedFields = ['trafficSource', 'calendarType', 'defaultCloserId', 'isCloserCalendar']
     const filteredUpdates: any = {}
     
     for (const [key, value] of Object.entries(updates)) {
@@ -33,6 +33,20 @@ export async function PATCH(
     }
     
     await withPrisma(async (prisma) => {
+      // Validate defaultCloserId is an active user if provided
+      if (filteredUpdates.defaultCloserId) {
+        const closer = await prisma.user.findFirst({
+          where: {
+            id: filteredUpdates.defaultCloserId,
+            companyId: companyId,
+            isActive: true
+          }
+        })
+        if (!closer) {
+          throw new Error('Default closer must be an active user in your company')
+        }
+      }
+      
       return await prisma.calendar.update({
         where: {
           id: id,

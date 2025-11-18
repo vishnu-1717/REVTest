@@ -114,6 +114,12 @@ export default async function DashboardLayout({
                         >
                           Payments
                         </Link>
+                        <Link
+                          href="/admin/calendars"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Calendars
+                        </Link>
                         <div className="border-t my-1" />
                         <Link
                           href="/admin/integrations"

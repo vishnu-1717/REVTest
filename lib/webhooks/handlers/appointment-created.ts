@@ -366,54 +366,40 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
 
     if (calendar) {
       console.log('[GHL Webhook] ✅ Found calendar:', calendar.name)
+      console.log('[GHL Webhook]   - isCloserCalendar:', calendar.isCloserCalendar)
     } else {
       console.warn('[GHL Webhook] ⚠️ Calendar not found in database. ghlCalendarId:', webhook.calendarId)
+      console.warn('[GHL Webhook] Calendar must be synced and approved before appointments can be created.')
+      console.warn('[GHL Webhook] Go to Admin > Calendars to sync and approve calendars.')
       console.warn('[GHL Webhook] Available calendars:')
       const allCalendars = await prisma.calendar.findMany({
         where: { companyId: company.id },
-        select: { name: true, ghlCalendarId: true }
+        select: { name: true, ghlCalendarId: true, isCloserCalendar: true }
       })
       if (allCalendars.length === 0) {
-        console.warn('[GHL Webhook]   No calendars synced yet. Go to GHL setup to sync calendars.')
+        console.warn('[GHL Webhook]   No calendars synced yet. Go to Admin > Calendars to sync calendars.')
       } else {
-        allCalendars.forEach(c => console.warn(`  - ${c.name} (${c.ghlCalendarId})`))
+        allCalendars.forEach(c => 
+          console.warn(`  - ${c.name} (${c.ghlCalendarId}) - Approved: ${c.isCloserCalendar ? 'Yes' : 'No'}`)
+        )
       }
-
-      // Auto-create calendar if we have both ID and name from webhook
-      if (webhook.calendarId && webhook.calendarName) {
-        console.log('[GHL Webhook] 🆕 Auto-creating missing calendar:', webhook.calendarName)
-        try {
-          calendar = await prisma.calendar.create({
-            data: {
-              companyId: company.id,
-              ghlCalendarId: webhook.calendarId,
-              name: webhook.calendarName,
-              isActive: true
-            },
-            include: { defaultCloser: true }
-          })
-          console.log('[GHL Webhook] ✅ Calendar auto-created successfully')
-        } catch (createError) {
-          const errorMessage = createError instanceof Error ? createError.message : 'Unknown error'
-          console.error('[GHL Webhook] Failed to auto-create calendar:', errorMessage)
-          const existingCalendar = await prisma.calendar.findFirst({
-            where: {
-              companyId: company.id,
-              ghlCalendarId: webhook.calendarId
-            },
-            include: { defaultCloser: true }
-          })
-          if (existingCalendar) {
-            calendar = existingCalendar
-            console.log('[GHL Webhook] ✅ Using existing calendar after conflict')
-          }
-        }
-      } else {
-        console.log('[GHL Webhook] Cannot auto-create calendar - missing calendarId or calendarName')
-      }
+      
+      // DO NOT auto-create calendars - require manual sync and approval
+      console.log('[GHL Webhook] ❌ Rejecting appointment: Calendar not found and must be manually synced')
+      return
     }
   } else {
-    console.log('[GHL Webhook] ⚠️ No calendarId in webhook payload - appointment will not be linked to a calendar')
+    console.log('[GHL Webhook] ⚠️ No calendarId in webhook payload')
+    console.log('[GHL Webhook] ❌ Rejecting appointment: No calendar information provided')
+    return
+  }
+
+  // Check if calendar is approved for closer appointments
+  if (!calendar.isCloserCalendar) {
+    console.log('[GHL Webhook] ❌ Rejecting appointment: Calendar is not approved for closer appointments')
+    console.log('[GHL Webhook]   Calendar:', calendar.name)
+    console.log('[GHL Webhook]   Go to Admin > Calendars to approve this calendar')
+    return
   }
 
   // Find setter and closer - intelligently determine which role
@@ -427,7 +413,8 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     const assignedUser = await prisma.user.findFirst({
       where: {
         companyId: company.id,
-        ghlUserId: webhook.assignedUserId
+        ghlUserId: webhook.assignedUserId,
+        isActive: true // Only assign to active users
       }
     })
 
@@ -476,11 +463,8 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     }
   }
 
-  // Priority 2: Use calendar's default closer if no closer assigned yet
-  if (!setter && !closer && calendar?.defaultCloser) {
-    closer = calendar.defaultCloser
-    console.log('[GHL Webhook] ✅ Using calendar default CLOSER:', closer.name)
-  }
+  // Note: We do NOT use calendar.defaultCloser - if no closer is found, appointment remains unassigned
+  // This ensures appointments are only assigned to closers that are explicitly matched
 
   if (!closer || !setter) {
     const fallbackMatch = await resolveFallbackAssignee()
@@ -516,11 +500,32 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     })
 
     if (recentCloserAppointment?.closerId) {
-      closer = await prisma.user.findUnique({ where: { id: recentCloserAppointment.closerId } }) || null
-      if (closer) {
+      const recentCloser = await prisma.user.findUnique({ 
+        where: { id: recentCloserAppointment.closerId },
+        select: { id: true, name: true, isActive: true }
+      })
+      
+      // Only use recent closer if they are still active
+      if (recentCloser && recentCloser.isActive) {
+        closer = recentCloser as User
         console.log('[GHL Webhook] ✅ Reusing recent closer for contact:', closer.name)
+      } else if (recentCloser && !recentCloser.isActive) {
+        console.log('[GHL Webhook] ⚠️ Recent closer is inactive, skipping assignment')
       }
     }
+  }
+
+  // Verify assigned closer is active (if a closer was assigned)
+  if (closer && !closer.isActive) {
+    console.log('[GHL Webhook] ⚠️ Assigned closer is inactive:', closer.name)
+    console.log('[GHL Webhook] Setting closer to null (appointment will be unassigned)')
+    closer = null
+  }
+
+  // Final validation: Calendar must be approved (already checked above, but double-check)
+  if (!calendar || !calendar.isCloserCalendar) {
+    console.log('[GHL Webhook] ❌ Final check failed: Calendar not approved')
+    return
   }
 
   // Determine if this is first call (not a reschedule/follow-up)
@@ -641,3 +646,4 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
   }
   })
 }
+

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { withPrisma } from '@/lib/db'
 import { GHLClient } from '@/lib/ghl-api'
 import { GHLWebhookExtended, GHLWebhookPayload } from '@/types'
@@ -29,6 +30,8 @@ function getStringValue(value: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
+  let webhookEventId: string | null = null
+  
   try {
     // Log the raw request for debugging
     const rawBody = await request.text()
@@ -433,7 +436,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Find company by GHL location ID (needed for both API fetch and normal processing)
-    let company = await withPrisma(async (prisma) => {
+    const company = await withPrisma(async (prisma) => {
       const found = await prisma.company.findFirst({
         where: { ghlLocationId: webhook.locationId }
       })
@@ -447,6 +450,31 @@ export async function POST(request: NextRequest) {
       }
       return found
     })
+    
+    // Determine event type for webhook event logging
+    const eventType = webhook.appointmentStatus || webhook.type || 'appointment'
+    
+    // Create webhook event record for audit trail (only if we have a company)
+    if (company) {
+      try {
+        const webhookEvent = await withPrisma(async (prisma) => {
+          return await prisma.webhookEvent.create({
+            data: {
+              processor: 'ghl',
+              eventType: eventType,
+              payload: body as Prisma.InputJsonValue, // Cast to Prisma Json type
+              processed: false,
+              companyId: company.id,
+            },
+          })
+        })
+        webhookEventId = webhookEvent.id
+        console.log('[GHL Webhook] Webhook event saved:', webhookEventId)
+      } catch (eventError) {
+        console.error('[GHL Webhook] Failed to save webhook event:', eventError)
+        // Continue processing even if event saving fails
+      }
+    }
     
     if (!company) {
       console.error('[GHL Webhook] Company not found for location:', webhook.locationId)
@@ -529,8 +557,8 @@ export async function POST(request: NextRequest) {
         }
         
         // Find or create contact
-        let contact = await withPrisma(async (prisma) => {
-          let existing = await prisma.contact.findFirst({
+        const contact = await withPrisma(async (prisma) => {
+          const existing = await prisma.contact.findFirst({
             where: {
               companyId: company.id,
               ghlContactId: webhook.contactId
@@ -555,6 +583,23 @@ export async function POST(request: NextRequest) {
         
         console.log('[GHL Webhook] Contact synced:', contact.id, 'Name:', contact.name)
         
+        // Mark webhook event as processed
+        if (webhookEventId) {
+          try {
+            await withPrisma(async (prisma) => {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId! },
+                data: { 
+                  processed: true,
+                  processedAt: new Date(),
+                },
+              })
+            })
+          } catch (updateError) {
+            console.error('[GHL Webhook] Failed to update webhook event:', updateError)
+          }
+        }
+        
         return NextResponse.json({ 
           received: true, 
           warning: 'Appointment webhook received but appointmentId is missing. Contact synced successfully.',
@@ -564,6 +609,24 @@ export async function POST(request: NextRequest) {
       
       // If we still don't have appointmentId and no company/contact, return error
       if (!webhook.appointmentId) {
+        // Mark webhook event as processed with warning
+        if (webhookEventId) {
+          try {
+            await withPrisma(async (prisma) => {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId! },
+                data: { 
+                  processed: true,
+                  processedAt: new Date(),
+                  error: 'Appointment webhook received but appointmentId is missing',
+                },
+              })
+            })
+          } catch (updateError) {
+            console.error('[GHL Webhook] Failed to update webhook event:', updateError)
+          }
+        }
+        
         return NextResponse.json({ 
           received: true, 
           warning: 'Appointment webhook received but appointmentId is missing. Please check GHL workflow merge fields.' 
@@ -618,10 +681,48 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('[GHL Webhook] Successfully processed webhook')
+    
+    // Mark webhook event as processed
+    if (webhookEventId) {
+      try {
+        await withPrisma(async (prisma) => {
+          await prisma.webhookEvent.update({
+            where: { id: webhookEventId! },
+            data: { 
+              processed: true,
+              processedAt: new Date(),
+            },
+          })
+        })
+      } catch (updateError) {
+        console.error('[GHL Webhook] Failed to update webhook event:', updateError)
+      }
+    }
+    
     return NextResponse.json({ received: true })
 
   } catch (error) {
     console.error('[GHL Webhook] Error processing webhook:', error)
+    
+    // Mark webhook event as processed with error
+    if (webhookEventId) {
+      try {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+        await withPrisma(async (prisma) => {
+          await prisma.webhookEvent.update({
+            where: { id: webhookEventId! },
+            data: { 
+              processed: true,
+              processedAt: new Date(),
+              error: errorMessage,
+            },
+          })
+        })
+      } catch (updateError) {
+        console.error('[GHL Webhook] Failed to update webhook event with error:', updateError)
+      }
+    }
+    
     if (error instanceof Error) {
       console.error('[GHL Webhook] Error stack:', error.stack)
       console.error('[GHL Webhook] Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)))

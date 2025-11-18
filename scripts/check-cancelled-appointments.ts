@@ -67,3 +67,5 @@ async function checkCancelledAppointments() {
 
 checkCancelledAppointments()
 
+
+
