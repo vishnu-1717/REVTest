@@ -1621,21 +1621,33 @@ export default function AnalyticsPage() {
                 detailItems.map((item, index) => {
                   const key = item.id || item.saleId || `${detailMetricKey}-${index}`
                   return (
-                    <div key={key} className="border rounded-md p-4 space-y-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium">
+                    <div key={key} className="border rounded-md p-4 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex-1 space-y-1">
+                          <p className="font-semibold text-base text-gray-900">
                             {item.contactName ||
                               item.saleId ||
                               item.appointmentId ||
                               `Record ${index + 1}`}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            Closer: {item.closerName || 'Unassigned'}
-                          </p>
+                          {item.contactEmail && (
+                            <p className="text-sm text-gray-600">
+                              {item.contactEmail}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                            <span>
+                              <span className="font-medium">Closer:</span> {item.closerName || 'Unassigned'}
+                            </span>
+                            {item.scheduledAt && (
+                              <span>
+                                <span className="font-medium">Scheduled:</span> {formatDetailDate(item.scheduledAt)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {item.amount !== undefined && item.amount !== null && (
-                          <p className="text-sm font-semibold text-gray-800">
+                          <p className="text-lg font-semibold text-gray-900">
                             ${Number(item.amount).toLocaleString('en-US', {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2
@@ -1643,11 +1655,8 @@ export default function AnalyticsPage() {
                           </p>
                         )}
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 border-t pt-2">
                         {item.type && <span>Type: {item.type}</span>}
-                        {item.scheduledAt && (
-                          <span>Scheduled: {formatDetailDate(item.scheduledAt)}</span>
-                        )}
                         {item.createdAt && (
                           <span>Created: {formatDetailDate(item.createdAt)}</span>
                         )}
@@ -1694,7 +1703,7 @@ export default function AnalyticsPage() {
                           )}
                       </div>
                       {item.notes && (
-                        <p className="text-sm text-gray-600">Notes: {item.notes}</p>
+                        <p className="text-sm text-gray-600 pt-1">Notes: {item.notes}</p>
                       )}
                     </div>
                   )
