@@ -777,9 +777,12 @@ export default function AnalyticsPage() {
           setDetailError(data?.error || 'Failed to load details')
           setDetailItems([])
         } else {
-          setDetailItems(data.detail?.items || [])
-          if (data.timezone) {
-            setTimezone(data.timezone)
+          // The API returns { primary: { detail: { items: [...] } } } or { detail: { items: [...] } }
+          const detailData = data.primary?.detail || data.detail
+          setDetailItems(detailData?.items || [])
+          const timezoneData = data.primary?.timezone || data.timezone
+          if (timezoneData) {
+            setTimezone(timezoneData)
           }
         }
       } catch (error: any) {
