@@ -311,21 +311,22 @@ export default function CalendarsPage() {
                     Default Closer
                   </Label>
                   <Select
-                    value={cal.defaultCloserId || ''}
+                    value={cal.defaultCloserId || 'unassigned'}
                     onValueChange={(value) => {
                       const updated = [...calendars]
                       const index = updated.findIndex(c => c.id === cal.id)
                       if (index >= 0) {
-                        updated[index].defaultCloserId = value || null
-                        if (value) {
+                        if (value === 'unassigned') {
+                          updated[index].defaultCloserId = null
+                          updated[index].defaultCloser = null
+                        } else {
+                          updated[index].defaultCloserId = value
                           const selectedUser = users.find(u => u.id === value)
                           updated[index].defaultCloser = selectedUser ? {
                             id: selectedUser.id,
                             name: selectedUser.name,
                             email: selectedUser.email
                           } : null
-                        } else {
-                          updated[index].defaultCloser = null
                         }
                         setCalendars(updated)
                       }
@@ -335,7 +336,7 @@ export default function CalendarsPage() {
                       <SelectValue placeholder="Unassigned (no default closer)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Unassigned (no default closer)</SelectItem>
+                      <SelectItem value="unassigned">Unassigned (no default closer)</SelectItem>
                       {users.map(user => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.name} ({user.email})
