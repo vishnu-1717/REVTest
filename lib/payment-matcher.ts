@@ -301,7 +301,8 @@ export async function findAppointmentForPayment(
     
     // Method 4: Fuzzy match by name with Levenshtein distance + multi-criteria scoring
     if (paymentData.name) {
-      const nameWords = paymentData.name.toLowerCase().split(' ').filter(w => w.length > 2)
+      const paymentName = paymentData.name // Store in const for type narrowing
+      const nameWords = paymentName.toLowerCase().split(' ').filter(w => w.length > 2)
       
       // Find contacts with similar names (broader search)
       const contacts = await prisma.contact.findMany({
@@ -314,7 +315,7 @@ export async function findAppointmentForPayment(
             }
           })) : [{
             name: {
-              contains: paymentData.name.substring(0, 3),
+              contains: paymentName.substring(0, 3),
               mode: 'insensitive' as const
             }
           }]
@@ -346,7 +347,7 @@ export async function findAppointmentForPayment(
           // Calculate fuzzy name similarity and multi-criteria scores for each appointment
           const matchesWithScores = appointments.map(apt => {
             const contactName = apt.contact?.name || ''
-            const nameSimilarity = calculateSimilarity(paymentData.name, contactName)
+            const nameSimilarity = calculateSimilarity(paymentName, contactName)
             
             // Only consider if name similarity is above threshold
             if (nameSimilarity < 0.4) {
