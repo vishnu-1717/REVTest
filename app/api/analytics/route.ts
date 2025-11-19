@@ -606,20 +606,20 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const salesByAppointmentId = new Map<
+    const salesMetadataByAppointmentId = new Map<
       string,
       { paidAt: Date | null; amount: number }
     >()
     filteredSales.forEach((sale) => {
       if (!sale.appointmentId) return
       const paidAtDate = sale.paidAt ? new Date(sale.paidAt) : null
-      const existing = salesByAppointmentId.get(sale.appointmentId)
+      const existing = salesMetadataByAppointmentId.get(sale.appointmentId)
       if (
         !existing ||
         (paidAtDate &&
           (!existing.paidAt || paidAtDate.getTime() < existing.paidAt.getTime()))
       ) {
-        salesByAppointmentId.set(sale.appointmentId, {
+        salesMetadataByAppointmentId.set(sale.appointmentId, {
           paidAt: paidAtDate,
           amount: Number(sale.amount)
         })
@@ -648,7 +648,7 @@ export async function GET(request: NextRequest) {
 
     countableAppointments.forEach((apt) => {
       const hasSignedStatus = apt.status === 'signed'
-      const associatedSale = salesByAppointmentId.get(apt.id)
+      const associatedSale = salesMetadataByAppointmentId.get(apt.id)
 
       if (!hasSignedStatus && !associatedSale) {
         return
