@@ -1456,11 +1456,17 @@ export async function GET(request: NextRequest) {
                 : null
           }))
 
-          // For detail query, fetch all sales in the date range, not just those linked to countableAppointments
+          // For detail query, use the same filteredSales logic as the metric calculation
+          // This ensures consistency between the metric count and detail records
+          // Only include sales that are linked to appointments in countableAppointments
+          const appointmentIds = countableAppointments.map(a => a.id)
           const allSalesInRange = await withPrisma(async (prisma) => {
+            if (appointmentIds.length === 0) return []
+            
             const saleWhere: any = {
               companyId: effectiveCompanyId,
-              status: 'paid'
+              status: 'paid',
+              appointmentId: { in: appointmentIds } // Only sales linked to countableAppointments
             }
             
             // Filter by paid date if date range is provided
@@ -1476,15 +1482,11 @@ export async function GET(request: NextRequest) {
             
             // If user can't view all data, filter by their closer ID via appointment relation
             if (!canViewAllData(user)) {
-              // First, get all appointment IDs for this user
-              const userAppointments = await prisma.appointment.findMany({
-                where: {
-                  companyId: effectiveCompanyId,
-                  closerId: user.id
-                },
-                select: { id: true }
+              // First, get all appointment IDs for this user that are in countableAppointments
+              const userAppointmentIds = appointmentIds.filter(id => {
+                const apt = countableAppointments.find(a => a.id === id)
+                return apt?.closerId === user.id
               })
-              const userAppointmentIds = userAppointments.map(a => a.id)
               if (userAppointmentIds.length === 0) return []
               saleWhere.appointmentId = { in: userAppointmentIds }
             }
