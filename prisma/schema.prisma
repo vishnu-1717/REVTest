@@ -419,14 +419,33 @@ model SlackMessage {
   id             String    @id @default(cuid())
   appointmentId  String    @unique
   companyId      String
-  slackChannelId String
-  slackMessageTs String    // Slack message timestamp (thread ID)
+  slackChannelId String?
+  slackMessageTs String?   // Slack message timestamp (thread ID)
   slackThreadTs  String?   // Thread timestamp if in thread
+  
+  // Audit and logging fields
+  status         String    @default("pending") // "pending", "sent", "failed"
+  messageContent String?   @db.Text // The actual message text sent
+  closerId       String?   // Which closer was tagged
+  closerName     String?   // Closer name for reference
+  contactName    String?   // Contact name for reference
+  contactEmail   String?   // Contact email for reference
+  scheduledAt    DateTime? // Appointment scheduled time
+  channelType    String?   // "channel", "dm", "default_channel"
+  errorMessage   String?   @db.Text // Error details if failed
+  retryCount     Int       @default(0) // Number of retry attempts
+  sentAt         DateTime? // When notification was successfully sent
+  failedAt       DateTime? // When notification failed
+  
   createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([appointmentId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([status, createdAt])
 }

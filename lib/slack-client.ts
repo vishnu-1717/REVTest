@@ -103,6 +103,8 @@ export async function sendPCNNotification(
     const response = await client.chat.postMessage({
       channel: targetChannelId,
       text: messageText,
+      unfurl_links: false, // Disable link unfurling to prevent 404 preview errors
+      unfurl_media: false, // Also disable media unfurling
       blocks: [
         {
           type: 'section',
