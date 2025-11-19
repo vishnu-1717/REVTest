@@ -39,8 +39,8 @@ export interface PCNSubmission {
   
   // Follow-up scheduling
   followUpScheduled?: boolean
-  followUpDate?: string
-  nurtureType?: NurtureType
+  followUpDate?: string // Deprecated - no longer required
+  nurtureType?: string // Now accepts any string value (redzone, short_term, long_term, etc.)
   
   // Qualification
   qualificationStatus?: QualificationStatus

@@ -36,11 +36,8 @@ export function validatePCNSubmission(
       if (strict && submission.wasOfferMade && !submission.whyDidntMoveForward) {
         return 'Please provide a reason why the prospect didn\'t move forward'
       }
-      // Only require follow-up date if follow-up is scheduled AND we're in strict mode
-      if (strict && submission.followUpScheduled && !submission.followUpDate) {
-        return 'Please provide follow-up date'
-      }
       // Only require nurture type if follow-up is scheduled AND we're in strict mode
+      // Note: follow-up date is no longer required
       if (strict && submission.followUpScheduled && !submission.nurtureType) {
         return 'Please select nurture type for follow-up'
       }
@@ -148,7 +145,7 @@ export async function submitPCN({
         objectionType: submission.objectionType || null,
         objectionNotes: submission.objectionNotes || null,
         followUpScheduled: submission.followUpScheduled ?? false,
-        followUpDate: submission.followUpDate ? new Date(submission.followUpDate) : null,
+        followUpDate: null, // No longer required - removed from form
         nurtureType: submission.nurtureType || null,
         qualificationStatus: submission.qualificationStatus || null,
         disqualificationReason: submission.disqualificationReason || null
