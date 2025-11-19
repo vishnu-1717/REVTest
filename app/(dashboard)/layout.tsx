@@ -47,11 +47,11 @@ export default async function DashboardLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
-              {/* Logo */}
+              {/* Logo - Icon only */}
               <div className="flex-shrink-0 flex items-center">
                 <Link href="/dashboard" className="flex items-center">
                   <img 
-                    src="/revphlo-logo.webp" 
+                    src="/revphlo-icon.png" 
                     alt="revphlo" 
                     className="h-12 w-auto"
                   />
