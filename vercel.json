@@ -1,4 +1,10 @@
 {
   "buildCommand": "prisma generate && next build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/cron/slack-pcn-notifications",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }

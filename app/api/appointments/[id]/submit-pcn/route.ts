@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getEffectiveUser } from '@/lib/auth'
 import { PCNSubmission } from '@/types/pcn'
 import { submitPCN, validatePCNSubmission } from '@/lib/pcn-submission'
+import { notifyPCNCompleted } from '@/lib/slack-pcn-notifier'
 
 export async function POST(
   request: NextRequest,
@@ -28,6 +29,12 @@ export async function POST(
       submission: body,
       actorUserId: user.id,
       actorName: user.name || null
+    })
+
+    // Notify Slack that PCN is completed (fire and forget)
+    notifyPCNCompleted(id).catch((error) => {
+      console.error('[PCN Submission] Error notifying Slack:', error)
+      // Don't fail the request if Slack notification fails
     })
 
     return NextResponse.json({ success: true, ...result })

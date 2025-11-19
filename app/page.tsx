@@ -16,7 +16,7 @@ export default async function HomePage() {
             <img 
               src="/revphlo-logo.webp" 
               alt="revphlo" 
-              className="h-24 w-auto"
+              className="h-96 w-auto"
             />
           </div>
           <p className="mt-2 text-gray-600">

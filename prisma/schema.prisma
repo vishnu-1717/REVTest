@@ -60,6 +60,17 @@ model Company {
   useCalendarsForAttribution Boolean @default(false)
   // For "calendars" strategy: enable calendar categorization
 
+  // Slack Integration
+  slackWorkspaceId   String?
+  slackWorkspaceName String?
+  slackBotToken      String? // Bot token (xapp) for API calls
+  slackAppId         String?
+  slackClientId      String?
+  slackClientSecret  String? // Note: Should be encrypted, stored in env for security
+  slackSigningSecret String? // Note: Should be encrypted, stored in env for security
+  slackConnectedAt   DateTime?
+  slackChannelId     String? // Default channel for PCN notifications (optional)
+
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   Commission       Commission[]
@@ -73,6 +84,7 @@ model Company {
   PaymentLink      PaymentLink[]
   UnmatchedPayment UnmatchedPayment[]
   calendars        Calendar[]
+  slackMessages    SlackMessage[]
 
   @@index([email])
 }
@@ -176,6 +188,10 @@ model User {
 
   // Map to GHL user for auto-assignment
   ghlUserId String? @unique
+
+  // Slack Integration
+  slackUserId   String? // Slack user ID for tagging in messages
+  slackUserName String? // Slack display name (for reference)
 
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
@@ -328,6 +344,7 @@ model Appointment {
   sale          Sale?          @relation("AppointmentSale", fields: [saleId], references: [id])
   matchedSales  Sale[]         @relation("AppointmentMatches")
   paymentLinks  PaymentLink[]
+  slackMessage  SlackMessage?
 
   @@index([companyId])
   @@index([closerId])
@@ -396,4 +413,20 @@ model UnmatchedPayment {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, status])
+}
+
+model SlackMessage {
+  id             String    @id @default(cuid())
+  appointmentId  String    @unique
+  companyId      String
+  slackChannelId String
+  slackMessageTs String    // Slack message timestamp (thread ID)
+  slackThreadTs  String?   // Thread timestamp if in thread
+  createdAt      DateTime  @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([appointmentId])
 }
