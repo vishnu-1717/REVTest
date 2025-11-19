@@ -11,7 +11,7 @@ export default function OnboardChoicePage() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <img 
-              src="/revphlo-logo.svg" 
+              src="/revphlo-logo.webp" 
               alt="revphlo" 
               className="h-10 w-auto"
             />

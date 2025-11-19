@@ -51,7 +51,7 @@ export default async function DashboardLayout({
               <div className="flex-shrink-0 flex items-center">
                 <Link href="/dashboard" className="flex items-center">
                   <img 
-                    src="/revphlo-logo.svg" 
+                    src="/revphlo-logo.webp" 
                     alt="revphlo" 
                     className="h-8 w-auto"
                   />

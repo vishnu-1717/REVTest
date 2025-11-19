@@ -14,7 +14,7 @@ export default async function HomePage() {
         <div>
           <div className="flex justify-center mb-4">
             <img 
-              src="/revphlo-logo.svg" 
+              src="/revphlo-logo.webp" 
               alt="revphlo" 
               className="h-12 w-auto"
             />
