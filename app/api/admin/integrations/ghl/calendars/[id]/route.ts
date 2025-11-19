@@ -32,8 +32,13 @@ export async function PATCH(
       }
     }
     
-    await withPrisma(async (prisma) => {
-      // Validate defaultCloserId is an active user if provided
+    const updatedCalendar = await withPrisma(async (prisma) => {
+      // Handle null defaultCloserId (when unassigned is selected) - do this first
+      if (filteredUpdates.defaultCloserId === null || filteredUpdates.defaultCloserId === 'unassigned' || filteredUpdates.defaultCloserId === '') {
+        filteredUpdates.defaultCloserId = null
+      }
+      
+      // Validate defaultCloserId is an active user if provided (after handling unassigned)
       if (filteredUpdates.defaultCloserId) {
         const closer = await prisma.user.findFirst({
           where: {
@@ -56,7 +61,7 @@ export async function PATCH(
       })
     })
     
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, calendar: updatedCalendar })
     
   } catch (error: any) {
     console.error('Calendar update error:', error)

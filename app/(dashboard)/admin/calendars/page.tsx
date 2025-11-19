@@ -129,9 +129,27 @@ export default function CalendarsPage() {
         body: JSON.stringify(updates)
       })
       
+      // Read response body once
+      let data: any
+      try {
+        const text = await res.text()
+        if (!text) {
+          throw new Error('Empty response from server')
+        }
+        try {
+          data = JSON.parse(text)
+        } catch (parseError) {
+          // Response is not valid JSON - this shouldn't happen but handle it
+          throw new Error(`Invalid response from server: ${text.substring(0, 100)}`)
+        }
+      } catch (error: any) {
+        // If we can't read the response at all
+        throw new Error(error.message || 'Failed to update calendar: Could not read server response')
+      }
+      
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to update calendar')
+        // API returned an error response
+        throw new Error(data.error || 'Failed to update calendar')
       }
       
       // Update local state
@@ -156,7 +174,7 @@ export default function CalendarsPage() {
             trafficSource: cal.trafficSource || null,
             calendarType: cal.calendarType || null,
             isCloserCalendar: cal.isCloserCalendar,
-            defaultCloserId: cal.defaultCloserId || null
+            defaultCloserId: cal.defaultCloserId === 'unassigned' ? null : (cal.defaultCloserId || null)
           }
           return handleUpdateCalendar(cal.id, updates)
         })
