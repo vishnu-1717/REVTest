@@ -497,10 +497,6 @@ export async function GET(request: NextRequest) {
     const overduePCNAppointments = filteredAppointments.filter(isPCNOverdue)
     const missingPCNs = overduePCNAppointments.length
     
-    // Calculate revenue from appointments and matched sales
-    const revenueFromAppointments = countableAppointments
-      .reduce((sum, apt) => sum + (apt.cashCollected || 0), 0)
-    
     // Get matched sales for appointments in this date range
     const appointmentIds = countableAppointments.map(a => a.id)
     const matchedSales = await withPrisma(async (prisma) => {
@@ -532,12 +528,41 @@ export async function GET(request: NextRequest) {
       })
     }
     
-    const revenueFromSales = filteredSales.reduce((sum, sale) => {
-      return sum + Number(sale.amount)
+    // Create a map of sales by appointment ID for deduplication
+    const salesByAppointmentId = new Map<string, number>()
+    filteredSales.forEach((sale) => {
+      if (sale.appointmentId) {
+        // If multiple sales for same appointment, sum them (shouldn't happen but handle it)
+        const existing = salesByAppointmentId.get(sale.appointmentId) || 0
+        salesByAppointmentId.set(sale.appointmentId, existing + Number(sale.amount))
+      }
+    })
+    
+    // Calculate Cash Collected with deduplication:
+    // - If appointment has a linked sale, use sale amount (prefer sales as they represent actual payments)
+    // - If appointment has no linked sale but has cashCollected, use cashCollected
+    // - This prevents double-counting when both exist
+    const cashCollected = countableAppointments.reduce((sum, apt) => {
+      const saleAmount = apt.id ? salesByAppointmentId.get(apt.id) : null
+      
+      if (saleAmount !== undefined && saleAmount !== null) {
+        // Appointment has a linked sale - use sale amount (preferred)
+        return sum + saleAmount
+      } else if (apt.cashCollected && apt.cashCollected > 0) {
+        // Appointment has no linked sale but has cashCollected - use cashCollected
+        return sum + apt.cashCollected
+      }
+      
+      return sum
     }, 0)
     
-    // Cash Collected: Total cash collected in the time frame
-    const cashCollected = revenueFromAppointments + revenueFromSales
+    // Also include sales that aren't linked to any appointment in countableAppointments
+    const unlinkedSalesTotal = filteredSales
+      .filter(sale => !sale.appointmentId || !appointmentIds.includes(sale.appointmentId))
+      .reduce((sum, sale) => sum + Number(sale.amount), 0)
+    
+    // Add unlinked sales to the total
+    const finalCashCollected = cashCollected + unlinkedSalesTotal
     
     // Total Units Closed: Number of closed deals with a confirmed payment in the time frame
     const totalUnitsClosed = new Set([
@@ -693,18 +718,18 @@ export async function GET(request: NextRequest) {
     
     // Dollars per Scheduled Call: Cash Collected ÷ Scheduled Calls to Date
     const dollarsOverScheduledCallsToDate = scheduledCallsToDate > 0
-      ? (cashCollected / scheduledCallsToDate).toFixed(2)
+      ? (finalCashCollected / scheduledCallsToDate).toFixed(2)
       : '0'
     
     // Dollars per Showed Call: Cash Collected ÷ Calls Shown
     const dollarsOverShow = callsShown > 0
-      ? (cashCollected / callsShown).toFixed(2)
+      ? (finalCashCollected / callsShown).toFixed(2)
       : '0'
     
     // Legacy metrics (for backward compatibility)
-    const totalRevenue = cashCollected
+    const totalRevenue = finalCashCollected
     const avgDealSize = signed > 0 
-      ? (cashCollected / signed).toFixed(0)
+      ? (finalCashCollected / signed).toFixed(0)
       : '0'
     
     // Calculate scheduled call/close % (legacy)
@@ -714,12 +739,12 @@ export async function GET(request: NextRequest) {
     
     // Revenue per scheduled call (legacy)
     const revenuePerScheduledCall = scheduledCallsToDate > 0
-      ? (cashCollected / scheduledCallsToDate).toFixed(2)
+      ? (finalCashCollected / scheduledCallsToDate).toFixed(2)
       : '0'
     
     // Revenue per showed call (legacy)
     const revenuePerShowedCall = callsShown > 0
-      ? (cashCollected / callsShown).toFixed(2)
+      ? (finalCashCollected / callsShown).toFixed(2)
       : '0'
     
     
@@ -1686,7 +1711,7 @@ export async function GET(request: NextRequest) {
       scheduledCallsToClosed: parseFloat(scheduledCallsToClosed),
       dollarsOverScheduledCallsToDate: parseFloat(dollarsOverScheduledCallsToDate),
       dollarsOverShow: parseFloat(dollarsOverShow),
-      cashCollected,
+      cashCollected: finalCashCollected,
       missingPCNs,
       timezone: companyTimezone,
       averageSalesCycleDays,
