@@ -22,7 +22,7 @@ async function createSuperAdmin() {
       },
       create: {
         clerkId: clerkUserId,
-        email: 'superadmin@paymaestro.com',
+        email: 'superadmin@revphlo.com',
         name: 'Super Admin',
         role: 'admin',
         superAdmin: true,

@@ -1,4 +1,4 @@
-# PayMaestro - Complete System Architecture Documentation
+# revphlo - Complete System Architecture Documentation
 
 ## Table of Contents
 1. [Executive Summary](#executive-summary)
@@ -18,7 +18,7 @@
 
 ## Executive Summary
 
-**PayMaestro** is a comprehensive sales operations and commission management SaaS platform designed for appointment-based businesses (particularly sales teams using Calendar Booking Systems like GoHighLevel). The system automates commission calculations, tracks appointments, matches payments to sales, and provides role-based dashboards for all stakeholders.
+**revphlo** is a comprehensive sales operations and commission management SaaS platform designed for appointment-based businesses (particularly sales teams using Calendar Booking Systems like GoHighLevel). The system automates commission calculations, tracks appointments, matches payments to sales, and provides role-based dashboards for all stakeholders.
 
 ### Key Capabilities
 - **Multi-tenant SaaS**: Supports multiple companies with complete data isolation
@@ -692,7 +692,7 @@ Required:
 
 ## Summary
 
-PayMaestro is a **multi-tenant appointment-to-commission tracking system** that:
+revphlo is a **multi-tenant appointment-to-commission tracking system** that:
 
 1. **Tracks** appointments from booking to close with PCN management
 2. **Matches** payments to appointments intelligently (even for off-call closes)

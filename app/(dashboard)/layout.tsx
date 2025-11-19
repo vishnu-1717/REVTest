@@ -49,8 +49,12 @@ export default async function DashboardLayout({
             <div className="flex">
               {/* Logo */}
               <div className="flex-shrink-0 flex items-center">
-                <Link href="/dashboard" className="text-xl font-bold">
-                  PayMaestro
+                <Link href="/dashboard" className="flex items-center">
+                  <img 
+                    src="/revphlo-logo.svg" 
+                    alt="revphlo" 
+                    className="h-8 w-auto"
+                  />
                 </Link>
               </div>
               

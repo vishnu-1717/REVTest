@@ -12,7 +12,13 @@ export default async function HomePage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-md w-full space-y-8 text-center">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">PayMaestro</h1>
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/revphlo-logo.svg" 
+              alt="revphlo" 
+              className="h-12 w-auto"
+            />
+          </div>
           <p className="mt-2 text-gray-600">
             Sales and commission management platform
           </p>

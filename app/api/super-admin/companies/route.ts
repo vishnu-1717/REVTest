@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     const webhookSecret = crypto.randomBytes(32).toString('hex')
     const inviteCode = crypto.randomBytes(8).toString('hex').toUpperCase()
-    const generatedEmail = email || `company-${crypto.randomBytes(8).toString('hex')}@paymaestro.com`
+    const generatedEmail = email || `company-${crypto.randomBytes(8).toString('hex')}@revphlo.com`
 
     const createdCompany = await withPrisma(async (prisma) => {
       const existing = await prisma.company.findUnique({

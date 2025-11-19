@@ -9,9 +9,16 @@ export default function OnboardChoicePage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="max-w-2xl w-full px-4">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Get Started with PayMaestro</h1>
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/revphlo-logo.svg" 
+              alt="revphlo" 
+              className="h-10 w-auto"
+            />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">Get Started with revphlo</h1>
           <p className="mt-2 text-gray-600">
-            Choose how you'd like to use PayMaestro
+            Choose how you'd like to use revphlo
           </p>
         </div>
 
@@ -21,7 +28,7 @@ export default function OnboardChoicePage() {
                onClick={() => router.push('/onboard/company')}>
             <h2 className="text-xl font-semibold mb-2">Set Up My Company</h2>
             <p className="text-gray-600 mb-4">
-              I'm the owner or admin setting up PayMaestro for my business
+              I'm the owner or admin setting up revphlo for my business
             </p>
             <ul className="text-sm text-gray-500 space-y-2">
               <li className="flex items-center">

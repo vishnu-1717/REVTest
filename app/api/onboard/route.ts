@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       const company = await prisma.company.create({
         data: {
           name: companyName,
-          email: `company-${crypto.randomBytes(8).toString('hex')}@paymaestro.com`, // Temporary
+          email: `company-${crypto.randomBytes(8).toString('hex')}@revphlo.com`, // Temporary
           processor: processor,
           processorAccountId: webhookSecret,
           inviteCode,

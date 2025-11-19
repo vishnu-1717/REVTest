@@ -10,7 +10,7 @@
 ### 2. **Dashboard Layout Created**
 - **Issue**: Missing navigation and role-based access control
 - **Fix**: Created `app/(dashboard)/layout.tsx` with:
-  - Navigation bar with PayMaestro branding
+  - Navigation bar with revphlo branding
   - Role-based menu items (admin-only links)
   - User info display with role
   - Clerk UserButton integration
