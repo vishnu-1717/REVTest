@@ -1597,9 +1597,29 @@ export async function GET(request: NextRequest) {
             }
           })
 
+          // Combine and deduplicate by appointment ID (prefer sale over appointment if both exist)
+          const itemsByAppointmentId = new Map<string, any>()
+          
+          // Add appointment items first
+          appointmentItems.forEach((item) => {
+            if (item.id) {
+              itemsByAppointmentId.set(item.id, item)
+            }
+          })
+          
+          // Add/override with sale items (sales take precedence as they represent actual payments)
+          saleItems.forEach((item) => {
+            if (item.appointmentId) {
+              itemsByAppointmentId.set(item.appointmentId, item)
+            } else {
+              // Sale without appointment ID - add it with a unique key
+              itemsByAppointmentId.set(`sale-${item.saleId}`, item)
+            }
+          })
+
           detail = {
             metric: 'cashCollected',
-            items: [...appointmentItems, ...saleItems]
+            items: Array.from(itemsByAppointmentId.values())
           }
           break
         }
