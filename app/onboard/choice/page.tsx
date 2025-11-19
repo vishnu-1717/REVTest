@@ -13,7 +13,7 @@ export default function OnboardChoicePage() {
             <img 
               src="/revphlo-logo.webp" 
               alt="revphlo" 
-              className="h-10 w-auto"
+              className="h-16 w-auto"
             />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Get Started with revphlo</h1>

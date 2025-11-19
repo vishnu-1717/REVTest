@@ -53,7 +53,7 @@ export default async function DashboardLayout({
                   <img 
                     src="/revphlo-logo.webp" 
                     alt="revphlo" 
-                    className="h-8 w-auto"
+                    className="h-12 w-auto"
                   />
                 </Link>
               </div>
