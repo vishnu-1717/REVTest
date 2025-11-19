@@ -1543,6 +1543,8 @@ export async function GET(request: NextRequest) {
           break
         }
         case 'totalunitsclosed': {
+          // Use EXACT same data sources as main metric calculation for 100% consistency
+          // Reuse filteredSales and filteredUnlinkedSales that are already calculated above
           const signedAppointments = countableAppointments.filter(
             (apt) => apt.status === 'signed'
           )
@@ -1556,57 +1558,35 @@ export async function GET(request: NextRequest) {
                 : null
           }))
 
-          // For detail query, use the same filteredSales logic as the metric calculation
-          // This ensures consistency between the metric count and detail records
-          // Only include sales that are linked to appointments in countableAppointments
-          const appointmentIds = countableAppointments.map(a => a.id)
-          const allSalesInRange = await withPrisma(async (prisma) => {
-            if (appointmentIds.length === 0) return []
+          // Use the EXACT same sales arrays as the main calculation
+          // This ensures the detail count matches the metric count perfectly
+          // Apply user permission filtering if needed (same as main calculation)
+          let salesForDetail = [...filteredSales, ...filteredUnlinkedSales]
+          
+          // If user can't view all data, filter sales to only their appointments
+          if (!canViewAllData(user)) {
+            const userAppointmentIds = countableAppointments
+              .filter(apt => apt.closerId === user.id)
+              .map(apt => apt.id)
             
-            const saleWhere: any = {
-              companyId: effectiveCompanyId,
-              status: 'paid',
-              appointmentId: { in: appointmentIds } // Only sales linked to countableAppointments
-            }
-            
-            // Filter by paid date if date range is provided
-            if (scheduledFrom || scheduledTo) {
-              saleWhere.paidAt = {}
-              if (scheduledFrom) {
-                saleWhere.paidAt.gte = scheduledFrom
+            salesForDetail = salesForDetail.filter(sale => {
+              // Include sales linked to user's appointments
+              if (sale.appointmentId && userAppointmentIds.includes(sale.appointmentId)) {
+                return true
               }
-              if (scheduledTo) {
-                saleWhere.paidAt.lte = scheduledTo
-              }
-            }
-            
-            // If user can't view all data, filter by their closer ID via appointment relation
-            if (!canViewAllData(user)) {
-              // First, get all appointment IDs for this user that are in countableAppointments
-              const userAppointmentIds = appointmentIds.filter(id => {
-                const apt = countableAppointments.find(a => a.id === id)
-                return apt?.closerId === user.id
-              })
-              if (userAppointmentIds.length === 0) return []
-              saleWhere.appointmentId = { in: userAppointmentIds }
-            }
-            
-            const sales = await prisma.sale.findMany({
-              where: saleWhere,
-              select: {
-                id: true,
-                amount: true,
-                appointmentId: true,
-                paidAt: true,
-                customerEmail: true
-              },
-              take: detailLimit
+              // For unlinked sales, we can't filter by closer, so exclude them for non-admin users
+              // This matches the main calculation behavior (unlinked sales are only counted for admins)
+              return false
             })
-            
-            // Fetch appointments for these sales to get contact/closer info
-            const saleAppointmentIds = sales.map(s => s.appointmentId).filter(Boolean) as string[]
-            if (saleAppointmentIds.length > 0) {
-              const saleAppointments = await prisma.appointment.findMany({
+          }
+          
+          const allSalesInRange = salesForDetail
+          
+          // Fetch appointments for matched sales to get contact/closer info
+          const saleAppointmentIds = filteredSales.map(s => s.appointmentId).filter(Boolean) as string[]
+          if (saleAppointmentIds.length > 0) {
+            const saleAppointments = await withPrisma(async (prisma) => {
+              return await prisma.appointment.findMany({
                 where: {
                   id: { in: saleAppointmentIds },
                   companyId: effectiveCompanyId
@@ -1616,17 +1596,15 @@ export async function GET(request: NextRequest) {
                   closer: true
                 }
               })
-              
-              // Add these appointments to the detail map if not already there
-              saleAppointments.forEach((apt) => {
-                if (!appointmentDetailMap.has(apt.id)) {
-                  appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt as AppointmentWithRelations))
-                }
-              })
-            }
+            })
             
-            return sales
-          })
+            // Add these appointments to the detail map if not already there
+            saleAppointments.forEach((apt) => {
+              if (!appointmentDetailMap.has(apt.id)) {
+                appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt as AppointmentWithRelations))
+              }
+            })
+          }
 
           const saleItems = allSalesInRange.map((sale) => {
             const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
@@ -1647,10 +1625,12 @@ export async function GET(request: NextRequest) {
           })
 
           // Group by customer email to handle payment plans (multiple payments = 1 unit)
-          // Use customerEmail from sale, fallback to contactEmail from appointment
+          // IMPORTANT: Only count items with emails (matching main calculation logic exactly)
+          // The main calculation only adds to the Set if email exists, so detail should match
           const itemsByCustomerEmail = new Map<string, any>()
           
           // Add signed appointment items first (group by contact email)
+          // Only include items with emails (matching main calculation: if (contactEmail))
           appointmentItems.forEach((item) => {
             const email = item.contactEmail?.toLowerCase()
             if (email) {
@@ -1658,13 +1638,12 @@ export async function GET(request: NextRequest) {
               if (!itemsByCustomerEmail.has(email)) {
                 itemsByCustomerEmail.set(email, item)
               }
-            } else if (item.id) {
-              // Fallback: if no email, use appointment ID as key
-              itemsByCustomerEmail.set(`apt-${item.id}`, item)
             }
+            // Skip items without emails (matching main calculation behavior)
           })
           
           // Add/override with sale items (sales take precedence, group by customer email)
+          // Only include items with emails (matching main calculation: if (customerEmail))
           saleItems.forEach((item) => {
             const email = item.customerEmail?.toLowerCase() || item.contactEmail?.toLowerCase()
             if (email) {
@@ -1673,13 +1652,8 @@ export async function GET(request: NextRequest) {
               if (!existing || (item.amount && (!existing.amount || item.amount > existing.amount))) {
                 itemsByCustomerEmail.set(email, item)
               }
-            } else if (item.appointmentId) {
-              // Fallback: if no email, use appointment ID
-              itemsByCustomerEmail.set(`apt-${item.appointmentId}`, item)
-            } else {
-              // Sale without appointment ID or email - add it with a unique key
-              itemsByCustomerEmail.set(`sale-${item.saleId}`, item)
             }
+            // Skip items without emails (matching main calculation behavior)
           })
 
           detail = {
