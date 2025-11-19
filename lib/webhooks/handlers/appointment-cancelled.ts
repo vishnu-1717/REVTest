@@ -30,7 +30,9 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
         where: { id: appointment.id },
         data: {
           status: 'cancelled',
-          outcome: 'Cancelled' // Set outcome for consistency with PCN data
+          outcome: 'Cancelled', // Set outcome for consistency with PCN data
+          pcnSubmitted: true, // Cancelled appointments don't need PCNs
+          pcnSubmittedAt: new Date() // Mark as submitted now
         }
       })
 
@@ -112,7 +114,8 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
           calendarId: calendar?.id,
           status: 'cancelled',
           outcome: 'Cancelled',
-          pcnSubmitted: false,
+          pcnSubmitted: true, // Cancelled appointments don't need PCNs
+          pcnSubmittedAt: new Date(), // Mark as submitted now
           notes: webhook.notes || webhook.title,
           customFields: JSON.parse(JSON.stringify(webhook.customFields || {}))
         }
