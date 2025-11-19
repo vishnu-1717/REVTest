@@ -238,3 +238,47 @@ export async function getSlackUserByEmail(
   }
 }
 
+/**
+ * Get all Slack channels in workspace
+ */
+export async function getSlackChannels(companyId: string): Promise<
+  Array<{
+    id: string
+    name: string
+    is_private: boolean
+    is_archived: boolean
+  }>
+> {
+  const client = await getSlackClient(companyId)
+  if (!client) {
+    return []
+  }
+
+  try {
+    const response = await client.conversations.list({
+      types: 'public_channel,private_channel',
+      exclude_archived: true,
+    })
+
+    if (!response.ok || !response.channels) {
+      const errorMsg = response.error ? String(response.error) : 'Unknown error'
+      console.error('[Slack] Error fetching channels:', errorMsg)
+      return []
+    }
+
+    // Filter out archived channels and return formatted list
+    return response.channels
+      .filter((channel) => !channel.is_archived)
+      .map((channel) => ({
+        id: channel.id || '',
+        name: channel.name || '',
+        is_private: channel.is_private || false,
+        is_archived: channel.is_archived || false,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  } catch (error: any) {
+    console.error('[Slack] Error fetching channels:', error)
+    return []
+  }
+}
+

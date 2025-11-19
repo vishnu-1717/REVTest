@@ -40,6 +40,13 @@ interface SlackUser {
   email?: string
 }
 
+interface SlackChannel {
+  id: string
+  name: string
+  is_private: boolean
+  is_archived: boolean
+}
+
 export default function SlackSettingsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -47,10 +54,18 @@ export default function SlackSettingsPage() {
   const [slackUsers, setSlackUsers] = useState<SlackUser[]>([])
   const [loadingSlackUsers, setLoadingSlackUsers] = useState(false)
   const [updating, setUpdating] = useState<string | null>(null)
+  
+  // Channel selection state
+  const [channels, setChannels] = useState<SlackChannel[]>([])
+  const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
+  const [loadingChannels, setLoadingChannels] = useState(false)
+  const [updatingChannel, setUpdatingChannel] = useState(false)
 
   useEffect(() => {
     fetchClosers()
     fetchSlackUsers()
+    fetchChannels()
+    fetchCurrentChannel()
   }, [])
 
   const fetchClosers = async () => {
@@ -80,6 +95,60 @@ export default function SlackSettingsPage() {
       alert('Failed to fetch Slack users')
     } finally {
       setLoadingSlackUsers(false)
+    }
+  }
+
+  const fetchChannels = async () => {
+    setLoadingChannels(true)
+    try {
+      const res = await fetch(withViewAs('/api/admin/integrations/slack/channels'))
+      const data = await res.json()
+      if (res.ok) {
+        setChannels(data.channels || [])
+      } else {
+        alert(data.error || 'Failed to fetch channels')
+      }
+    } catch (error) {
+      console.error('Error fetching channels:', error)
+      alert('Failed to fetch channels')
+    } finally {
+      setLoadingChannels(false)
+    }
+  }
+
+  const fetchCurrentChannel = async () => {
+    try {
+      const res = await fetch(withViewAs('/api/admin/integrations/slack/channel'))
+      const data = await res.json()
+      if (res.ok) {
+        setSelectedChannelId(data.channelId || null)
+      }
+    } catch (error) {
+      console.error('Error fetching current channel:', error)
+    }
+  }
+
+  const handleUpdateChannel = async (channelId: string | null) => {
+    setUpdatingChannel(true)
+    try {
+      const res = await fetch(withViewAs('/api/admin/integrations/slack/channel'), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to update channel')
+      }
+
+      setSelectedChannelId(channelId)
+      alert('Default channel updated successfully')
+    } catch (error: any) {
+      console.error('Error updating channel:', error)
+      alert(error.message || 'Failed to update channel')
+    } finally {
+      setUpdatingChannel(false)
     }
   }
 
@@ -117,7 +186,70 @@ export default function SlackSettingsPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 max-w-4xl">
+    <div className="container mx-auto py-10 max-w-4xl space-y-6">
+      {/* Default Channel Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Default Channel</CardTitle>
+          <CardDescription>
+            Choose which Slack channel receives PCN notifications. If no channel is selected, notifications will be sent via DM to each closer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Select
+                value={selectedChannelId || 'none'}
+                onValueChange={(value) => {
+                  if (value === 'none') {
+                    handleUpdateChannel(null)
+                  } else {
+                    handleUpdateChannel(value)
+                  }
+                }}
+                disabled={updatingChannel || loadingChannels}
+              >
+                <SelectTrigger className="w-full max-w-md">
+                  <SelectValue placeholder="Select a channel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No channel (use DMs)</SelectItem>
+                  {channels.map((channel) => (
+                    <SelectItem key={channel.id} value={channel.id}>
+                      #{channel.name}
+                      {channel.is_private && ' (private)'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedChannelId && (
+                <p className="text-sm text-gray-500 mt-2">
+                  Current: #{channels.find((c) => c.id === selectedChannelId)?.name || 'Unknown'}
+                </p>
+              )}
+              {!selectedChannelId && (
+                <p className="text-sm text-gray-500 mt-2">
+                  No default channel set. Notifications will be sent via DM to closers.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={fetchChannels}
+                disabled={loadingChannels}
+                variant="outline"
+              >
+                {loadingChannels ? 'Loading...' : 'Refresh Channels'}
+              </Button>
+              {updatingChannel && (
+                <span className="text-sm text-gray-500 flex items-center">Updating...</span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* User Mappings */}
       <Card>
         <CardHeader>
           <CardTitle>Slack User Mappings</CardTitle>
