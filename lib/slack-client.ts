@@ -240,6 +240,7 @@ export async function getSlackUserByEmail(
 
 /**
  * Get all Slack channels in workspace
+ * Handles pagination to fetch all channels across multiple pages
  */
 export async function getSlackChannels(companyId: string): Promise<
   Array<{
@@ -255,27 +256,58 @@ export async function getSlackChannels(companyId: string): Promise<
   }
 
   try {
-    const response = await client.conversations.list({
-      types: 'public_channel,private_channel',
-      exclude_archived: true,
-    })
+    const allChannels: Array<{
+      id: string
+      name: string
+      is_private: boolean
+      is_archived: boolean
+    }> = []
+    
+    let cursor: string | undefined = undefined
+    let hasMore = true
 
-    if (!response.ok || !response.channels) {
-      const errorMsg = response.error ? String(response.error) : 'Unknown error'
-      console.error('[Slack] Error fetching channels:', errorMsg)
-      return []
+    // Fetch all pages of channels
+    while (hasMore) {
+      const response = await client.conversations.list({
+        types: 'public_channel,private_channel',
+        exclude_archived: true,
+        cursor: cursor,
+        limit: 200, // Maximum allowed by Slack API
+      })
+
+      if (!response.ok) {
+        const errorMsg = response.error ? String(response.error) : 'Unknown error'
+        console.error('[Slack] Error fetching channels:', errorMsg)
+        // Return what we have so far rather than failing completely
+        break
+      }
+
+      if (response.channels) {
+        // Filter out archived channels and add to our list
+        const channels = response.channels
+          .filter((channel) => !channel.is_archived)
+          .map((channel) => ({
+            id: channel.id || '',
+            name: channel.name || '',
+            is_private: channel.is_private || false,
+            is_archived: channel.is_archived || false,
+          }))
+        
+        allChannels.push(...channels)
+      }
+
+      // Check if there are more pages
+      const responseMetadata = response.response_metadata
+      if (responseMetadata?.next_cursor) {
+        cursor = responseMetadata.next_cursor
+        hasMore = cursor.length > 0
+      } else {
+        hasMore = false
+      }
     }
 
-    // Filter out archived channels and return formatted list
-    return response.channels
-      .filter((channel) => !channel.is_archived)
-      .map((channel) => ({
-        id: channel.id || '',
-        name: channel.name || '',
-        is_private: channel.is_private || false,
-        is_archived: channel.is_archived || false,
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name))
+    // Sort all channels alphabetically by name
+    return allChannels.sort((a, b) => a.name.localeCompare(b.name))
   } catch (error: any) {
     console.error('[Slack] Error fetching channels:', error)
     return []
