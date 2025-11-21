@@ -10,7 +10,7 @@ interface Commission {
   percentage: number
   releaseStatus: string
   status: string
-  createdAt: string
+  calculatedAt: string
   Sale: {
     amount: number
     customerName: string | null
