@@ -128,16 +128,37 @@ export async function POST(request: NextRequest) {
       calendarId = getStringValue(body.calendarId) || getStringValue(body.calendar_id)
       calendarName = getStringValue(body.calendarName)
 
+      // Enhanced logging for calendar extraction debugging
+      console.log('[GHL Webhook] Calendar extraction - Root level:')
+      console.log('  - body.calendarId:', body.calendarId)
+      console.log('  - body.calendar_id:', body.calendar_id)
+      console.log('  - body.calendarName:', body.calendarName)
+      console.log('  - Extracted calendarId so far:', calendarId)
+
       // Safely access calendar object properties
       // IMPORTANT: GHL often sends the actual appointment startTime/endTime in calendar.startTime/calendar.endTime
       // This should be checked BEFORE falling back to custom fields like "Appointment Date"
       if (body.calendar && typeof body.calendar === 'object' && !Array.isArray(body.calendar)) {
         const calendar = body.calendar as Record<string, unknown>
+        
+        console.log('[GHL Webhook] Calendar extraction - Calendar object:')
+        console.log('  - calendar.id:', calendar.id)
+        console.log('  - calendar.calendarName:', calendar.calendarName)
+        console.log('  - calendar.name:', calendar.name)
+        
+        const previousCalendarId = calendarId
         calendarId = calendarId || getStringValue(calendar.id)
         calendarName = calendarName || getStringValue(calendar.calendarName) || getStringValue(calendar.name)
+        
+        console.log('  - Previous calendarId:', previousCalendarId)
+        console.log('  - Updated calendarId:', calendarId)
+        console.log('  - Final calendarName:', calendarName)
+        
         // PRIORITY: Check calendar.startTime/endTime for the actual appointment times
         startTime = startTime || getStringValue(calendar.startTime) || getStringValue(calendar.start_time)
         endTime = endTime || getStringValue(calendar.endTime) || getStringValue(calendar.end_time)
+      } else {
+        console.log('[GHL Webhook] Calendar extraction - No calendar object found')
       }
 
       assignedUserId = getStringValue(body.assignedUserId) || getStringValue(body.assigned_user_id) || getStringValue(body.assignedUser)
@@ -197,6 +218,25 @@ export async function POST(request: NextRequest) {
         appointmentId = getStringValue(calendar.appointmentId) || getStringValue(calendar.id)
       }
       
+      // Final calendar extraction summary and validation
+      console.log('[GHL Webhook] ===== FINAL CALENDAR EXTRACTION SUMMARY =====')
+      console.log('  - Final calendarId:', calendarId)
+      console.log('  - Final calendarName:', calendarName)
+      console.log('  - Calendar ID format valid:', calendarId ? /^[a-zA-Z0-9_-]+$/.test(calendarId) : false)
+      console.log('  - Calendar ID length:', calendarId ? calendarId.length : 0)
+      
+      // Validate calendar ID format
+      if (calendarId && !/^[a-zA-Z0-9_-]+$/.test(calendarId)) {
+        console.warn('[GHL Webhook] ⚠️ Calendar ID has invalid format:', calendarId)
+        console.warn('[GHL Webhook] Expected format: alphanumeric, underscore, and dash characters only')
+      }
+      
+      if (!calendarId) {
+        console.warn('[GHL Webhook] ⚠️ No calendar ID extracted from webhook payload')
+      }
+      
+      console.log('[GHL Webhook] ===============================================')
+
       return {
         appointmentId,
         startTime,

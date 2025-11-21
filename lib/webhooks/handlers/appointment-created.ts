@@ -353,6 +353,13 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
 
   // Find calendar
   console.log('[GHL Webhook] Looking for calendar with ghlCalendarId:', webhook.calendarId || 'NONE')
+  
+  // Validate calendar ID format if provided
+  if (webhook.calendarId && !/^[a-zA-Z0-9_-]+$/.test(webhook.calendarId)) {
+    console.warn('[GHL Webhook] ⚠️ Calendar ID has invalid format:', webhook.calendarId)
+    console.warn('[GHL Webhook] Expected format: alphanumeric, underscore, and dash characters only')
+    console.warn('[GHL Webhook] This may cause lookup failures')
+  }
 
   let calendar: CalendarWithCloser | null = null
   if (webhook.calendarId) {
@@ -365,40 +372,160 @@ export async function handleAppointmentCreated(webhook: GHLWebhookExtended, comp
     })
 
     if (calendar) {
-      console.log('[GHL Webhook] ✅ Found calendar:', calendar.name)
+      console.log('[GHL Webhook] ✅ Found calendar by ID:', calendar.name)
+      console.log('[GHL Webhook]   - ghlCalendarId:', calendar.ghlCalendarId)
       console.log('[GHL Webhook]   - isCloserCalendar:', calendar.isCloserCalendar)
     } else {
-      console.warn('[GHL Webhook] ⚠️ Calendar not found in database. ghlCalendarId:', webhook.calendarId)
-      console.warn('[GHL Webhook] Calendar must be synced and approved before appointments can be created.')
-      console.warn('[GHL Webhook] Go to Admin > Calendars to sync and approve calendars.')
-      console.warn('[GHL Webhook] Available calendars:')
-      const allCalendars = await prisma.calendar.findMany({
-        where: { companyId: company.id },
-        select: { name: true, ghlCalendarId: true, isCloserCalendar: true }
-      })
-      if (allCalendars.length === 0) {
-        console.warn('[GHL Webhook]   No calendars synced yet. Go to Admin > Calendars to sync calendars.')
-      } else {
-        allCalendars.forEach(c => 
-          console.warn(`  - ${c.name} (${c.ghlCalendarId}) - Approved: ${c.isCloserCalendar ? 'Yes' : 'No'}`)
-        )
+      console.warn('[GHL Webhook] ⚠️ Calendar not found by ID. ghlCalendarId:', webhook.calendarId)
+      
+      // FALLBACK: Try to find calendar by name if calendarName is available
+      if (webhook.calendarName) {
+        console.log('[GHL Webhook] 🔄 Attempting fallback: searching by calendar name')
+        console.log('[GHL Webhook]   - Searching for calendar name:', webhook.calendarName)
+        
+        // Try exact name match first
+        calendar = await prisma.calendar.findFirst({
+          where: {
+            companyId: company.id,
+            name: webhook.calendarName,
+            isCloserCalendar: true // Only approved calendars
+          },
+          include: { defaultCloser: true }
+        })
+        
+        if (calendar) {
+          console.log('[GHL Webhook] ✅ Found calendar by exact name match:', calendar.name)
+          console.log('[GHL Webhook]   - ghlCalendarId:', calendar.ghlCalendarId)
+          console.log('[GHL Webhook]   - isCloserCalendar:', calendar.isCloserCalendar)
+          console.log('[GHL Webhook] ⚠️ WARNING: Calendar ID mismatch detected!')
+          console.log('[GHL Webhook]   - Webhook calendarId:', webhook.calendarId)
+          console.log('[GHL Webhook]   - Database calendarId:', calendar.ghlCalendarId)
+          console.log('[GHL Webhook]   - This suggests the calendar ID may have changed in GHL')
+        } else {
+          // Try fuzzy name match (contains)
+          console.log('[GHL Webhook] 🔄 Exact name match failed, trying fuzzy match')
+          calendar = await prisma.calendar.findFirst({
+            where: {
+              companyId: company.id,
+              name: {
+                contains: webhook.calendarName,
+                mode: 'insensitive'
+              },
+              isCloserCalendar: true // Only approved calendars
+            },
+            include: { defaultCloser: true }
+          })
+          
+          if (calendar) {
+            console.log('[GHL Webhook] ✅ Found calendar by fuzzy name match:', calendar.name)
+            console.log('[GHL Webhook]   - ghlCalendarId:', calendar.ghlCalendarId)
+            console.log('[GHL Webhook]   - isCloserCalendar:', calendar.isCloserCalendar)
+            console.log('[GHL Webhook] ⚠️ WARNING: Calendar ID and name mismatch detected!')
+            console.log('[GHL Webhook]   - Webhook calendarId:', webhook.calendarId)
+            console.log('[GHL Webhook]   - Webhook calendarName:', webhook.calendarName)
+            console.log('[GHL Webhook]   - Database calendarId:', calendar.ghlCalendarId)
+            console.log('[GHL Webhook]   - Database calendarName:', calendar.name)
+          }
+        }
       }
       
-      // DO NOT auto-create calendars - require manual sync and approval
-      console.log('[GHL Webhook] ❌ Rejecting appointment: Calendar not found and must be manually synced')
-      return
+      // If still no calendar found, show detailed error information
+      if (!calendar) {
+        console.warn('[GHL Webhook] Calendar must be synced and approved before appointments can be created.')
+        console.warn('[GHL Webhook] Go to Admin > Calendars to sync and approve calendars.')
+        console.warn('[GHL Webhook] Available calendars:')
+        const allCalendars = await prisma.calendar.findMany({
+          where: { companyId: company.id },
+          select: { name: true, ghlCalendarId: true, isCloserCalendar: true }
+        })
+        if (allCalendars.length === 0) {
+          console.warn('[GHL Webhook]   No calendars synced yet. Go to Admin > Calendars to sync calendars.')
+        } else {
+          allCalendars.forEach(c => 
+            console.warn(`  - ${c.name} (${c.ghlCalendarId}) - Approved: ${c.isCloserCalendar ? 'Yes' : 'No'}`)
+          )
+        }
+        
+        // DO NOT auto-create calendars - require manual sync and approval
+        console.log('[GHL Webhook] ❌ Rejecting appointment: Calendar not found and must be manually synced')
+        return
+      }
     }
   } else {
     console.log('[GHL Webhook] ⚠️ No calendarId in webhook payload')
-    console.log('[GHL Webhook] ❌ Rejecting appointment: No calendar information provided')
-    return
+    console.log('[GHL Webhook] Webhook payload analysis:')
+    console.log('  - calendarId:', webhook.calendarId)
+    console.log('  - calendarName:', webhook.calendarName)
+    
+    // Try to find calendar by name only if available
+    if (webhook.calendarName) {
+      console.log('[GHL Webhook] 🔄 Attempting to find calendar by name only')
+      calendar = await prisma.calendar.findFirst({
+        where: {
+          companyId: company.id,
+          name: {
+            contains: webhook.calendarName,
+            mode: 'insensitive'
+          },
+          isCloserCalendar: true // Only approved calendars
+        },
+        include: { defaultCloser: true }
+      })
+      
+      if (calendar) {
+        console.log('[GHL Webhook] ✅ Found calendar by name only:', calendar.name)
+        console.log('[GHL Webhook]   - ghlCalendarId:', calendar.ghlCalendarId)
+        console.log('[GHL Webhook] ⚠️ WARNING: Webhook missing calendarId but found by name')
+      } else {
+        console.log('[GHL Webhook] ❌ No calendar found by name either')
+      }
+    }
+    
+    if (!calendar) {
+      console.log('[GHL Webhook] ❌ Rejecting appointment: No calendar information provided')
+      console.log('[GHL Webhook] Available approved calendars:')
+      const approvedCalendars = await prisma.calendar.findMany({
+        where: { 
+          companyId: company.id,
+          isCloserCalendar: true 
+        },
+        select: { name: true, ghlCalendarId: true }
+      })
+      approvedCalendars.forEach(c => 
+        console.log(`  - ${c.name} (${c.ghlCalendarId})`)
+      )
+      return
+    }
   }
 
   // Check if calendar is approved for closer appointments
   if (!calendar.isCloserCalendar) {
     console.log('[GHL Webhook] ❌ Rejecting appointment: Calendar is not approved for closer appointments')
-    console.log('[GHL Webhook]   Calendar:', calendar.name)
-    console.log('[GHL Webhook]   Go to Admin > Calendars to approve this calendar')
+    console.log('[GHL Webhook]   Calendar details:')
+    console.log('     - Name:', calendar.name)
+    console.log('     - GHL Calendar ID:', calendar.ghlCalendarId)
+    console.log('     - Is Closer Calendar:', calendar.isCloserCalendar)
+    console.log('     - Traffic Source:', calendar.trafficSource)
+    console.log('     - Calendar Type:', calendar.calendarType)
+    console.log('     - Default Closer:', calendar.defaultCloser?.name || 'None')
+    console.log('[GHL Webhook]   Action required: Go to Admin > Calendars to approve this calendar')
+    console.log('[GHL Webhook]   Currently approved calendars:')
+    
+    const approvedCalendars = await prisma.calendar.findMany({
+      where: { 
+        companyId: company.id,
+        isCloserCalendar: true 
+      },
+      select: { name: true, ghlCalendarId: true }
+    })
+    
+    if (approvedCalendars.length === 0) {
+      console.log('     - No calendars are currently approved')
+    } else {
+      approvedCalendars.forEach(c => 
+        console.log(`     - ${c.name} (${c.ghlCalendarId})`)
+      )
+    }
     return
   }
 
