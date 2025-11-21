@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SaaS App",
-  description: "Sales and commission management",
+  title: "revphlo",
+  description: "Sales and commission management platform",
 };
 
 export default function RootLayout({
