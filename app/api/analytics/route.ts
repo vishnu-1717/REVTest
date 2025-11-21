@@ -540,7 +540,35 @@ export async function GET(request: NextRequest) {
           amount: true,
           paidAt: true,
           customerEmail: true,
-          appointmentId: true
+          appointmentId: true,
+          repId: true, // Direct closer reference
+          // Include appointment with closer info
+          Appointment: {
+            select: {
+              id: true,
+              closerId: true,
+              scheduledAt: true,
+              contact: {
+                select: {
+                  name: true,
+                  email: true
+                }
+              },
+              closer: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
+          },
+          // Include direct rep info (fallback)
+          User: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       })
     })
@@ -1442,17 +1470,21 @@ export async function GET(request: NextRequest) {
         case 'totalunitsclosed': {
           // Use the same allSalesInRange data as the main calculation for consistency
           const saleItems = allSalesInRange.map((sale) => {
+            // Determine closer info with priority: Appointment.closer > Sale.User
+            const closerInfo = sale.Appointment?.closer || sale.User
+            const contactInfo = sale.Appointment?.contact
+            
             return {
               type: 'sale',
               source: 'sale',
               saleId: sale.id,
               appointmentId: sale.appointmentId,
-              contactName: sale.customerEmail || 'Unknown contact',
-              contactEmail: sale.customerEmail || null,
-              customerEmail: sale.customerEmail || null,
-              closerId: null, // We don't have closer info from sales directly
-              closerName: 'Unknown',
-              scheduledAt: null, // We don't have appointment info from sales directly
+              contactName: contactInfo?.name || sale.customerEmail || 'Unknown contact',
+              contactEmail: contactInfo?.email || sale.customerEmail || null,
+              customerEmail: sale.customerEmail || contactInfo?.email || null,
+              closerId: closerInfo?.id || null,
+              closerName: closerInfo?.name || 'Unknown',
+              scheduledAt: sale.Appointment?.scheduledAt ? sale.Appointment.scheduledAt.toISOString() : null,
               paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
               amount: Number(sale.amount)
             }
@@ -1483,17 +1515,21 @@ export async function GET(request: NextRequest) {
         case 'cashcollected': {
           // Use the same allSalesInRange data as the main calculation for consistency
           const saleItems = allSalesInRange.map((sale) => {
+            // Determine closer info with priority: Appointment.closer > Sale.User
+            const closerInfo = sale.Appointment?.closer || sale.User
+            const contactInfo = sale.Appointment?.contact
+            
             return {
               type: 'sale',
               source: 'sale',
               saleId: sale.id,
               appointmentId: sale.appointmentId,
-              contactName: sale.customerEmail || 'Unknown contact',
-              contactEmail: sale.customerEmail || null,
-              customerEmail: sale.customerEmail || null,
-              closerId: null, // We don't have closer info from sales directly
-              closerName: 'Unknown',
-              scheduledAt: null, // We don't have appointment info from sales directly
+              contactName: contactInfo?.name || sale.customerEmail || 'Unknown contact',
+              contactEmail: contactInfo?.email || sale.customerEmail || null,
+              customerEmail: sale.customerEmail || contactInfo?.email || null,
+              closerId: closerInfo?.id || null,
+              closerName: closerInfo?.name || 'Unknown',
+              scheduledAt: sale.Appointment?.scheduledAt ? sale.Appointment.scheduledAt.toISOString() : null,
               paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
               amount: Number(sale.amount)
             }
