@@ -497,146 +497,61 @@ export async function GET(request: NextRequest) {
     const overduePCNAppointments = filteredAppointments.filter(isPCNOverdue)
     const missingPCNs = overduePCNAppointments.length
     
-    // Get matched sales for appointments in this date range
-    const appointmentIds = countableAppointments.map(a => a.id)
-    const matchedSales = await withPrisma(async (prisma) => {
-      if (appointmentIds.length === 0) return []
-      return await prisma.sale.findMany({
-        where: {
-          appointmentId: { in: appointmentIds },
-          companyId: effectiveCompanyId,
-          status: 'paid'
-        },
-        select: {
-          id: true,
-          amount: true,
-          appointmentId: true,
-          paidAt: true,
-          customerEmail: true
-        }
-      })
-    })
-    
-    // Also get unlinked sales (sales without appointmentId or not linked to countable appointments)
-    // These should still count as closed units if they have a customer email
-    const unlinkedSales = await withPrisma(async (prisma) => {
-      const unlinkedWhere: any = {
+    // Get all sales within the date range (simplified approach)
+    const allSalesInRange = await withPrisma(async (prisma) => {
+      const salesWhere: any = {
         companyId: effectiveCompanyId,
-        status: 'paid',
-        customerEmail: { not: null } // Only include sales with customer email
+        status: 'paid' // Keep filtering by paid status
       }
       
-      // Exclude sales already linked to appointments in countableAppointments
-      if (appointmentIds.length > 0) {
-        unlinkedWhere.OR = [
-          { appointmentId: null },
-          { appointmentId: { notIn: appointmentIds } }
-        ]
-      } else {
-        unlinkedWhere.appointmentId = null
+      // If not admin, only show sales for their appointments
+      if (!canViewAllData(user)) {
+        // Get appointment IDs for this user's appointments
+        const userAppointmentIds = await prisma.appointment.findMany({
+          where: {
+            companyId: effectiveCompanyId,
+            closerId: user.id
+          },
+          select: { id: true }
+        }).then(appointments => appointments.map(apt => apt.id))
+        
+        if (userAppointmentIds.length > 0) {
+          salesWhere.OR = [
+            { appointmentId: { in: userAppointmentIds } },
+            { appointmentId: null } // Include unlinked sales for now
+          ]
+        } else {
+          // If user has no appointments, only show unlinked sales
+          salesWhere.appointmentId = null
+        }
       }
       
-      // Filter by paid date if date range is provided
+      // Filter by paidAt date range
       if (scheduledFrom || scheduledTo) {
-        unlinkedWhere.paidAt = {}
-        if (scheduledFrom) {
-          unlinkedWhere.paidAt.gte = scheduledFrom
-        }
-        if (scheduledTo) {
-          unlinkedWhere.paidAt.lte = scheduledTo
-        }
+        salesWhere.paidAt = {}
+        if (scheduledFrom) salesWhere.paidAt.gte = scheduledFrom
+        if (scheduledTo) salesWhere.paidAt.lte = scheduledTo
       }
       
       return await prisma.sale.findMany({
-        where: unlinkedWhere,
+        where: salesWhere,
         select: {
           id: true,
           amount: true,
-          appointmentId: true,
           paidAt: true,
-          customerEmail: true
+          customerEmail: true,
+          appointmentId: true
         }
       })
     })
+
+    // Calculate Cash Collected: Simple sum of all sales in range
+    const finalCashCollected = allSalesInRange.reduce((sum, sale) => sum + Number(sale.amount), 0)
     
-    // Filter unlinked sales by date range if provided (same logic as filteredSales)
-    let filteredUnlinkedSales = unlinkedSales
-    if (scheduledFrom || scheduledTo) {
-      filteredUnlinkedSales = unlinkedSales.filter(sale => {
-        if (!sale.paidAt) return false
-        const paidDate = new Date(sale.paidAt)
-        if (scheduledFrom && paidDate < scheduledFrom) return false
-        if (scheduledTo && paidDate > scheduledTo) return false
-        return true
-      })
-    }
-    
-    // Filter sales by date range if provided
-    let filteredSales = matchedSales
-    if (scheduledFrom || scheduledTo) {
-      filteredSales = matchedSales.filter(sale => {
-        if (!sale.paidAt) return false
-        const paidDate = new Date(sale.paidAt)
-        if (scheduledFrom && paidDate < scheduledFrom) return false
-        if (scheduledTo && paidDate > scheduledTo) return false
-        return true
-      })
-    }
-    
-    // Create a map of sales by appointment ID for deduplication
-    const salesByAppointmentId = new Map<string, number>()
-    filteredSales.forEach((sale) => {
-      if (sale.appointmentId) {
-        // If multiple sales for same appointment, sum them (shouldn't happen but handle it)
-        const existing = salesByAppointmentId.get(sale.appointmentId) || 0
-        salesByAppointmentId.set(sale.appointmentId, existing + Number(sale.amount))
-      }
-    })
-    
-    // Calculate Cash Collected with deduplication:
-    // - If appointment has a linked sale, use sale amount (prefer sales as they represent actual payments)
-    // - If appointment has no linked sale but has cashCollected, use cashCollected
-    // - This prevents double-counting when both exist
-    const cashCollected = countableAppointments.reduce((sum, apt) => {
-      const saleAmount = apt.id ? salesByAppointmentId.get(apt.id) : null
-      
-      if (saleAmount !== undefined && saleAmount !== null) {
-        // Appointment has a linked sale - use sale amount (preferred)
-        return sum + saleAmount
-      } else if (apt.cashCollected && apt.cashCollected > 0) {
-        // Appointment has no linked sale but has cashCollected - use cashCollected
-        return sum + apt.cashCollected
-      }
-      
-      return sum
-    }, 0)
-    
-    // Also include sales that aren't linked to any appointment in countableAppointments
-    const unlinkedSalesTotal = filteredSales
-      .filter(sale => !sale.appointmentId || !appointmentIds.includes(sale.appointmentId))
-      .reduce((sum, sale) => sum + Number(sale.amount), 0)
-    
-    // Add unlinked sales to the total
-    const finalCashCollected = cashCollected + unlinkedSalesTotal
-    
-    // Total Units Closed: Number of closed deals with a confirmed payment in the time frame
-    // Group by customer email to handle payment plans (multiple installments = 1 unit closed)
+    // Total Units Closed: Count unique customer emails from sales
     const closedCustomerEmails = new Set<string>()
     
-    // Add signed appointments by contact email
-    countableAppointments
-      .filter(a => a.status === 'signed')
-      .forEach(apt => {
-        const contactEmail = apt.contact?.email?.toLowerCase()
-        if (contactEmail) {
-          closedCustomerEmails.add(contactEmail)
-        }
-      })
-    
-    // Add sales by customer email (payment plans: multiple payments from same email = 1 unit)
-    // Include both matched sales and unlinked sales
-    const allSalesForUnits = [...filteredSales, ...filteredUnlinkedSales]
-    allSalesForUnits.forEach(sale => {
+    allSalesInRange.forEach(sale => {
       const customerEmail = sale.customerEmail?.toLowerCase()
       if (customerEmail) {
         closedCustomerEmails.add(customerEmail)
@@ -681,25 +596,6 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const salesMetadataByAppointmentId = new Map<
-      string,
-      { paidAt: Date | null; amount: number }
-    >()
-    filteredSales.forEach((sale) => {
-      if (!sale.appointmentId) return
-      const paidAtDate = sale.paidAt ? new Date(sale.paidAt) : null
-      const existing = salesMetadataByAppointmentId.get(sale.appointmentId)
-      if (
-        !existing ||
-        (paidAtDate &&
-          (!existing.paidAt || paidAtDate.getTime() < existing.paidAt.getTime()))
-      ) {
-        salesMetadataByAppointmentId.set(sale.appointmentId, {
-          paidAt: paidAtDate,
-          amount: Number(sale.amount)
-        })
-      }
-    })
 
     interface SalesCycleMeta {
       days: number
@@ -723,7 +619,8 @@ export async function GET(request: NextRequest) {
 
     countableAppointments.forEach((apt) => {
       const hasSignedStatus = apt.status === 'signed'
-      const associatedSale = salesMetadataByAppointmentId.get(apt.id)
+      // Find associated sale from allSalesInRange
+      const associatedSale = allSalesInRange.find(sale => sale.appointmentId === apt.id)
 
       if (!hasSignedStatus && !associatedSale) {
         return
@@ -735,7 +632,7 @@ export async function GET(request: NextRequest) {
       if (!firstCallAt) return
 
       const closedAt =
-        associatedSale?.paidAt ||
+        (associatedSale?.paidAt ? new Date(associatedSale.paidAt) : null) ||
         (apt.pcnSubmittedAt ? new Date(apt.pcnSubmittedAt) : null) ||
         (apt.updatedAt ? new Date(apt.updatedAt) : null) ||
         new Date(apt.scheduledAt)
@@ -1543,117 +1440,38 @@ export async function GET(request: NextRequest) {
           break
         }
         case 'totalunitsclosed': {
-          // Use EXACT same data sources as main metric calculation for 100% consistency
-          // Reuse filteredSales and filteredUnlinkedSales that are already calculated above
-          const signedAppointments = countableAppointments.filter(
-            (apt) => apt.status === 'signed'
-          )
-          const appointmentItems = signedAppointments.map((apt) => ({
-            ...mapAppointmentDetail(apt),
-            type: 'appointment',
-            source: 'appointment',
-            amount:
-              apt.cashCollected !== null && apt.cashCollected !== undefined
-                ? Number(apt.cashCollected)
-                : null
-          }))
-
-          // Use the EXACT same sales arrays as the main calculation
-          // This ensures the detail count matches the metric count perfectly
-          // Apply user permission filtering if needed (same as main calculation)
-          let salesForDetail = [...filteredSales, ...filteredUnlinkedSales]
-          
-          // If user can't view all data, filter sales to only their appointments
-          if (!canViewAllData(user)) {
-            const userAppointmentIds = countableAppointments
-              .filter(apt => apt.closerId === user.id)
-              .map(apt => apt.id)
-            
-            salesForDetail = salesForDetail.filter(sale => {
-              // Include sales linked to user's appointments
-              if (sale.appointmentId && userAppointmentIds.includes(sale.appointmentId)) {
-                return true
-              }
-              // For unlinked sales, we can't filter by closer, so exclude them for non-admin users
-              // This matches the main calculation behavior (unlinked sales are only counted for admins)
-              return false
-            })
-          }
-          
-          const allSalesInRange = salesForDetail
-          
-          // Fetch appointments for matched sales to get contact/closer info
-          const saleAppointmentIds = filteredSales.map(s => s.appointmentId).filter(Boolean) as string[]
-          if (saleAppointmentIds.length > 0) {
-            const saleAppointments = await withPrisma(async (prisma) => {
-              return await prisma.appointment.findMany({
-                where: {
-                  id: { in: saleAppointmentIds },
-                  companyId: effectiveCompanyId
-                },
-                include: {
-                  contact: true,
-                  closer: true
-                }
-              })
-            })
-            
-            // Add these appointments to the detail map if not already there
-            saleAppointments.forEach((apt) => {
-              if (!appointmentDetailMap.has(apt.id)) {
-                appointmentDetailMap.set(apt.id, mapAppointmentDetail(apt as AppointmentWithRelations))
-              }
-            })
-          }
-
+          // Use the same allSalesInRange data as the main calculation for consistency
           const saleItems = allSalesInRange.map((sale) => {
-            const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
             return {
               type: 'sale',
               source: 'sale',
               saleId: sale.id,
               appointmentId: sale.appointmentId,
-              contactName: related?.contactName || 'Unknown contact',
-              contactEmail: related?.contactEmail || sale.customerEmail || null,
-              customerEmail: sale.customerEmail || related?.contactEmail || null,
-              closerId: related?.closerId || null,
-              closerName: related?.closerName || 'Unassigned',
-              scheduledAt: related?.scheduledAt || null,
+              contactName: sale.customerEmail || 'Unknown contact',
+              contactEmail: sale.customerEmail || null,
+              customerEmail: sale.customerEmail || null,
+              closerId: null, // We don't have closer info from sales directly
+              closerName: 'Unknown',
+              scheduledAt: null, // We don't have appointment info from sales directly
               paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
               amount: Number(sale.amount)
             }
           })
 
           // Group by customer email to handle payment plans (multiple payments = 1 unit)
-          // IMPORTANT: Only count items with emails (matching main calculation logic exactly)
-          // The main calculation only adds to the Set if email exists, so detail should match
+          // Only count items with emails (matching main calculation logic)
           const itemsByCustomerEmail = new Map<string, any>()
           
-          // Add signed appointment items first (group by contact email)
-          // Only include items with emails (matching main calculation: if (contactEmail))
-          appointmentItems.forEach((item) => {
-            const email = item.contactEmail?.toLowerCase()
-            if (email) {
-              // If we already have a sale for this email, prefer the sale (it has more payment details)
-              if (!itemsByCustomerEmail.has(email)) {
-                itemsByCustomerEmail.set(email, item)
-              }
-            }
-            // Skip items without emails (matching main calculation behavior)
-          })
-          
-          // Add/override with sale items (sales take precedence, group by customer email)
-          // Only include items with emails (matching main calculation: if (customerEmail))
+          // Add sale items grouped by customer email
           saleItems.forEach((item) => {
-            const email = item.customerEmail?.toLowerCase() || item.contactEmail?.toLowerCase()
+            const email = item.customerEmail?.toLowerCase()
             if (email) {
-              // If multiple sales for same email, keep the one with highest amount or most recent
+              // If multiple sales for same email, keep the one with highest amount
               const existing = itemsByCustomerEmail.get(email)
               if (!existing || (item.amount && (!existing.amount || item.amount > existing.amount))) {
                 itemsByCustomerEmail.set(email, item)
               }
             }
-            // Skip items without emails (matching main calculation behavior)
           })
 
           detail = {
@@ -1663,55 +1481,27 @@ export async function GET(request: NextRequest) {
           break
         }
         case 'cashcollected': {
-          const appointmentItems = countableAppointments
-            .filter((apt) => apt.cashCollected && apt.cashCollected > 0)
-            .map((apt) => ({
-              ...mapAppointmentDetail(apt),
-              type: 'appointment',
-              source: 'appointment',
-              amount: Number(apt.cashCollected)
-            }))
-
-          const saleItems = filteredSales.map((sale) => {
-            const related = sale.appointmentId ? appointmentDetailMap.get(sale.appointmentId) : null
+          // Use the same allSalesInRange data as the main calculation for consistency
+          const saleItems = allSalesInRange.map((sale) => {
             return {
               type: 'sale',
               source: 'sale',
               saleId: sale.id,
               appointmentId: sale.appointmentId,
-              contactName: related?.contactName || 'Unknown contact',
-              contactEmail: related?.contactEmail || null,
-              closerId: related?.closerId || null,
-              closerName: related?.closerName || 'Unassigned',
-              scheduledAt: related?.scheduledAt || null,
+              contactName: sale.customerEmail || 'Unknown contact',
+              contactEmail: sale.customerEmail || null,
+              customerEmail: sale.customerEmail || null,
+              closerId: null, // We don't have closer info from sales directly
+              closerName: 'Unknown',
+              scheduledAt: null, // We don't have appointment info from sales directly
               paidAt: sale.paidAt ? sale.paidAt.toISOString() : null,
               amount: Number(sale.amount)
             }
           })
 
-          // Combine and deduplicate by appointment ID (prefer sale over appointment if both exist)
-          const itemsByAppointmentId = new Map<string, any>()
-          
-          // Add appointment items first
-          appointmentItems.forEach((item) => {
-            if (item.id) {
-              itemsByAppointmentId.set(item.id, item)
-            }
-          })
-          
-          // Add/override with sale items (sales take precedence as they represent actual payments)
-          saleItems.forEach((item) => {
-            if (item.appointmentId) {
-              itemsByAppointmentId.set(item.appointmentId, item)
-            } else {
-              // Sale without appointment ID - add it with a unique key
-              itemsByAppointmentId.set(`sale-${item.saleId}`, item)
-            }
-          })
-
           detail = {
             metric: 'cashCollected',
-            items: Array.from(itemsByAppointmentId.values())
+            items: saleItems
           }
           break
         }
