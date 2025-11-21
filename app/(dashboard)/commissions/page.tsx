@@ -208,7 +208,7 @@ export default function CommissionsPage() {
                   {filteredCommissions.map((commission) => (
                     <tr key={commission.id}>
                       <td className="px-4 py-4 text-sm">
-                        {new Date(commission.createdAt).toLocaleDateString()}
+                        {new Date(commission.calculatedAt).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-4 text-sm">
                         {commission.Sale.customerName || 'Unknown'}
