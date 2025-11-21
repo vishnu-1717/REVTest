@@ -497,32 +497,59 @@ export async function GET(request: NextRequest) {
     const overduePCNAppointments = filteredAppointments.filter(isPCNOverdue)
     const missingPCNs = overduePCNAppointments.length
     
-    // Get all sales within the date range (simplified approach)
+    // Get sales that respect all analytics filters (closer, calendar, objection, etc.)
     const allSalesInRange = await withPrisma(async (prisma) => {
       const salesWhere: any = {
         companyId: effectiveCompanyId,
-        status: 'paid' // Keep filtering by paid status
+        status: 'paid'
       }
       
-      // If not admin, only show sales for their appointments
-      if (!canViewAllData(user)) {
-        // Get appointment IDs for this user's appointments
-        const userAppointmentIds = await prisma.appointment.findMany({
-          where: {
-            companyId: effectiveCompanyId,
-            closerId: user.id
-          },
-          select: { id: true }
-        }).then(appointments => appointments.map(apt => apt.id))
+      // Apply the same filters as appointments by filtering through linked appointments
+      // This ensures sales respect all the analytics filters (closer, calendar, objection, etc.)
+      
+      // Get filtered appointment IDs that match all the current filters
+      const filteredAppointmentIds = countableAppointments.map(apt => apt.id)
+      
+      if (filteredAppointmentIds.length > 0) {
+        // Include sales linked to filtered appointments OR sales with direct rep assignment that matches filters
+        const salesFilters: any[] = [
+          { appointmentId: { in: filteredAppointmentIds } }
+        ]
         
-        if (userAppointmentIds.length > 0) {
-          salesWhere.OR = [
-            { appointmentId: { in: userAppointmentIds } },
-            { appointmentId: null } // Include unlinked sales for now
-          ]
-        } else {
-          // If user has no appointments, only show unlinked sales
-          salesWhere.appointmentId = null
+        // For unlinked sales, apply direct filters where possible
+        const unlinkedSalesFilter: any = { appointmentId: null }
+        
+        // Apply closer filter to unlinked sales via repId
+        if (closerParam) {
+          unlinkedSalesFilter.repId = closerParam
+        } else if (!canViewAllData(user)) {
+          unlinkedSalesFilter.repId = user.id
+        }
+        
+        // Apply deal size filter to unlinked sales
+        if (minDealSize || maxDealSize) {
+          unlinkedSalesFilter.amount = {}
+          if (minDealSize) unlinkedSalesFilter.amount.gte = parseFloat(minDealSize)
+          if (maxDealSize) unlinkedSalesFilter.amount.lte = parseFloat(maxDealSize)
+        }
+        
+        salesFilters.push(unlinkedSalesFilter)
+        salesWhere.OR = salesFilters
+      } else {
+        // If no appointments match filters, only show unlinked sales that match direct filters
+        salesWhere.appointmentId = null
+        
+        if (closerParam) {
+          salesWhere.repId = closerParam
+        } else if (!canViewAllData(user)) {
+          salesWhere.repId = user.id
+        }
+        
+        // Apply deal size filter
+        if (minDealSize || maxDealSize) {
+          salesWhere.amount = {}
+          if (minDealSize) salesWhere.amount.gte = parseFloat(minDealSize)
+          if (maxDealSize) salesWhere.amount.lte = parseFloat(maxDealSize)
         }
       }
       
