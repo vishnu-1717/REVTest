@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { withPrisma } from '@/lib/db'
-import { GHLClient } from '@/lib/ghl-api'
+import { createGHLClient } from '@/lib/ghl-api'
 import { GHLWebhookExtended, GHLWebhookPayload } from '@/types'
 import { parseGHLDate } from '@/lib/webhooks/utils'
 import { getCompanyTimezone } from '@/lib/timezone'
@@ -527,55 +527,59 @@ export async function POST(request: NextRequest) {
       console.warn('[GHL Webhook] Appointment webhook received but appointmentId is missing.')
       console.log('[GHL Webhook] Attempting to fetch appointment data from GHL API using contactId...')
       
-      if (company && company.ghlApiKey) {
+      if (company) {
         // Try to fetch appointment data from GHL API
         // Note: Appointment may not be fully committed yet, so we retry with delay
         try {
-          const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
+          const ghl = await createGHLClient(company.id)
           
-          // First attempt - immediate
-          let appointments = await ghl.getContactAppointments(webhook.contactId)
-          
-          // If no appointments found, wait a moment and retry (appointment might be committing)
-          if (!appointments || appointments.length === 0) {
-            console.log('[GHL Webhook] No appointments found immediately, waiting 2 seconds for appointment to commit...')
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            appointments = await ghl.getContactAppointments(webhook.contactId)
-          }
-          
-          // Second retry if still empty
-          if (!appointments || appointments.length === 0) {
-            console.log('[GHL Webhook] Still no appointments, waiting 3 more seconds...')
-            await new Promise(resolve => setTimeout(resolve, 3000))
-            appointments = await ghl.getContactAppointments(webhook.contactId)
-          }
-          
-          if (appointments && appointments.length > 0) {
-            console.log(`[GHL Webhook] Found ${appointments.length} appointments after retries`)
-            // Get the most recent appointment (usually the one that triggered this webhook)
-            // Sort by startTime or dateCreated descending
-            const sortedAppointments = appointments.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
-              const dateA = new Date((a.startTime || a.scheduledAt || a.createdAt || 0) as string | number).getTime()
-              const dateB = new Date((b.startTime || b.scheduledAt || b.createdAt || 0) as string | number).getTime()
-              return dateB - dateA
-            })
-
-            const latestAppointment = sortedAppointments[0]
-            console.log('[GHL Webhook] Found appointment via API:', latestAppointment.id)
-
-            // Populate webhook data from API response
-            webhook.appointmentId = (latestAppointment.id || latestAppointment.appointmentId) as string
-            webhook.startTime = (latestAppointment.startTime || latestAppointment.scheduledAt || latestAppointment.start_time) as string
-            webhook.endTime = (latestAppointment.endTime || latestAppointment.end_time) as string
-            webhook.appointmentStatus = (latestAppointment.status || latestAppointment.appointmentStatus || 'scheduled') as string
-            webhook.calendarId = (latestAppointment.calendarId || latestAppointment.calendar_id || '') as string
-            webhook.assignedUserId = (latestAppointment.assignedUserId || latestAppointment.assigned_user_id || '') as string
-            webhook.title = (latestAppointment.title || latestAppointment.name || '') as string
-            webhook.notes = (latestAppointment.notes || latestAppointment.description || '') as string
-
-            console.log('[GHL Webhook] Successfully populated appointment data from GHL API')
+          if (!ghl) {
+            console.warn('[GHL Webhook] GHL not configured (no OAuth or API key), skipping appointment fetch')
           } else {
-            console.warn('[GHL Webhook] No appointments found for contact via API. Proceeding with contact sync only.')
+            // First attempt - immediate
+            let appointments = await ghl.getContactAppointments(webhook.contactId)
+            
+            // If no appointments found, wait a moment and retry (appointment might be committing)
+            if (!appointments || appointments.length === 0) {
+              console.log('[GHL Webhook] No appointments found immediately, waiting 2 seconds for appointment to commit...')
+              await new Promise(resolve => setTimeout(resolve, 2000))
+              appointments = await ghl.getContactAppointments(webhook.contactId)
+            }
+            
+            // Second retry if still empty
+            if (!appointments || appointments.length === 0) {
+              console.log('[GHL Webhook] Still no appointments, waiting 3 more seconds...')
+              await new Promise(resolve => setTimeout(resolve, 3000))
+              appointments = await ghl.getContactAppointments(webhook.contactId)
+            }
+            
+            if (appointments && appointments.length > 0) {
+              console.log(`[GHL Webhook] Found ${appointments.length} appointments after retries`)
+              // Get the most recent appointment (usually the one that triggered this webhook)
+              // Sort by startTime or dateCreated descending
+              const sortedAppointments = appointments.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
+                const dateA = new Date((a.startTime || a.scheduledAt || a.createdAt || 0) as string | number).getTime()
+                const dateB = new Date((b.startTime || b.scheduledAt || b.createdAt || 0) as string | number).getTime()
+                return dateB - dateA
+              })
+
+              const latestAppointment = sortedAppointments[0]
+              console.log('[GHL Webhook] Found appointment via API:', latestAppointment.id)
+
+              // Populate webhook data from API response
+              webhook.appointmentId = (latestAppointment.id || latestAppointment.appointmentId) as string
+              webhook.startTime = (latestAppointment.startTime || latestAppointment.scheduledAt || latestAppointment.start_time) as string
+              webhook.endTime = (latestAppointment.endTime || latestAppointment.end_time) as string
+              webhook.appointmentStatus = (latestAppointment.status || latestAppointment.appointmentStatus || 'scheduled') as string
+              webhook.calendarId = (latestAppointment.calendarId || latestAppointment.calendar_id || '') as string
+              webhook.assignedUserId = (latestAppointment.assignedUserId || latestAppointment.assigned_user_id || '') as string
+              webhook.title = (latestAppointment.title || latestAppointment.name || '') as string
+              webhook.notes = (latestAppointment.notes || latestAppointment.description || '') as string
+
+              console.log('[GHL Webhook] Successfully populated appointment data from GHL API')
+            } else {
+              console.warn('[GHL Webhook] No appointments found for contact via API. Proceeding with contact sync only.')
+            }
           }
         } catch (apiError) {
           const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown error'

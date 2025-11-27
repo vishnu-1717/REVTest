@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
 import { withPrisma } from '@/lib/db'
-import { GHLClient } from '@/lib/ghl-api'
+import { createGHLClient } from '@/lib/ghl-api'
 import { getEffectiveCompanyId } from '@/lib/company-context'
 
 // Sync calendars from GHL
@@ -17,21 +17,17 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const company = await withPrisma(async (prisma) => {
-      return await prisma.company.findUnique({
-        where: { id: companyId }
-      })
-    })
+    // Create GHL client (supports both OAuth and API key)
+    const ghl = await createGHLClient(companyId)
     
-    if (!company?.ghlApiKey) {
+    if (!ghl) {
       return NextResponse.json(
-        { error: 'GHL not configured. Please set up your API key first.' },
+        { error: 'GHL not configured. Please connect GHL via OAuth or set up your API key first.' },
         { status: 400 }
       )
     }
     
     // Fetch calendars from GHL
-    const ghl = new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
     const calendars = await ghl.getCalendars()
     
     console.log(`Syncing ${calendars.length} calendars for company ${companyId}`)
