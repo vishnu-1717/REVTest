@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface LeaderboardEntry {
   id: string
@@ -56,66 +55,68 @@ export default function Leaderboard() {
   
   if (error) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-gray-500">
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+        <div className="py-8 text-center text-slate-300">
           {error}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
   
   if (loading) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-gray-500">
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+        <div className="py-8 text-center text-slate-300">
           Loading leaderboard...
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     )
   }
   
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <CardTitle>🏆 Team Leaderboard</CardTitle>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="border rounded-md px-3 py-2 text-sm"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
+    <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-base font-semibold text-slate-100">🏆 Team Leaderboard</h2>
         </div>
-      </CardHeader>
-      <CardContent>
+        <select
+          value={dateRange}
+          onChange={(e) => setDateRange(e.target.value)}
+          className="bg-slate-900/60 border border-slate-700/50 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+        >
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+      </div>
+      <div>
         {leaderboard.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center py-4">
+          <p className="text-slate-300 text-sm text-center py-4">
             No data available for this period
           </p>
         ) : (
           <div className="space-y-2">
-            {leaderboard.map((entry) => (
+            {leaderboard.map((entry, index) => (
               <div
                 key={entry.id}
-                className={`flex items-center p-4 rounded-lg ${
+                className={`flex items-center p-4 rounded-lg border ${
                   entry.isCurrentUser
-                    ? 'bg-blue-50 border-2 border-blue-200'
-                    : 'bg-gray-50'
+                    ? 'bg-blue-500/10 border-blue-500/30'
+                    : index % 2 === 0 
+                    ? 'bg-slate-900/30 border-slate-700/30'
+                    : 'bg-transparent border-slate-700/30'
                 }`}
               >
                 {/* Rank */}
                 <div className="w-12 text-center">
                   <span className={`text-2xl font-bold ${
                     entry.rank === 1 
-                      ? 'text-yellow-500'
+                      ? 'text-amber-300'
                       : entry.rank === 2
-                      ? 'text-gray-400'
+                      ? 'text-slate-300'
                       : entry.rank === 3
-                      ? 'text-orange-600'
-                      : 'text-gray-600'
+                      ? 'text-orange-300'
+                      : 'text-slate-400'
                   }`}>
                     {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : entry.rank}
                   </span>
@@ -123,15 +124,15 @@ export default function Leaderboard() {
                 
                 {/* Name */}
                 <div className="flex-1 ml-4">
-                  <p className="font-semibold">
+                  <p className="font-semibold text-slate-100">
                     {entry.name}
                     {entry.isCurrentUser && (
-                      <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-1 rounded">
+                      <span className="ml-2 text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-md border border-blue-500/30">
                         You
                       </span>
                     )}
                   </p>
-                  <p className="text-sm text-gray-500">{entry.email}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{entry.email}</p>
                 </div>
                 
                 {/* Stats */}
@@ -139,27 +140,31 @@ export default function Leaderboard() {
                   {entry.showDetails ? (
                     <>
                       <div>
-                        <p className="text-sm text-gray-500">Appointments</p>
-                        <p className="text-lg font-bold">{entry.appointments}</p>
+                        <p className="text-xs text-slate-400 mb-1">Appointments</p>
+                        <p className="text-lg font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {entry.appointments}
+                        </p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">Closed</p>
-                        <p className="text-lg font-bold text-green-600">{entry.signed}</p>
+                        <p className="text-xs text-slate-400 mb-1">Closed</p>
+                        <p className="text-lg font-bold text-emerald-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {entry.signed}
+                        </p>
                       </div>
                     </>
                   ) : null}
                   
                   <div>
-                    <p className="text-sm text-gray-500">Revenue</p>
-                    <p className="text-lg font-bold">
+                    <p className="text-xs text-slate-400 mb-1">Revenue</p>
+                    <p className="text-lg font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                       ${entry.revenue.toLocaleString()}
                     </p>
                   </div>
                   
                   {entry.showDetails && (
                     <div>
-                      <p className="text-sm text-gray-500">Commissions</p>
-                      <p className="text-lg font-bold text-blue-600">
+                      <p className="text-xs text-slate-400 mb-1">Commissions</p>
+                      <p className="text-lg font-bold text-blue-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         ${entry.commissions.toLocaleString()}
                       </p>
                     </div>
@@ -169,7 +174,7 @@ export default function Leaderboard() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

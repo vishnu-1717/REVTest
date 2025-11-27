@@ -32,7 +32,7 @@ export default async function DashboardLayout({
   }
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-900">
       {/* Impersonation Banner */}
       {impersonating && impersonatedUser && (
         <ImpersonationBanner 
@@ -43,7 +43,7 @@ export default async function DashboardLayout({
       )}
       
       {/* Top Navigation */}
-      <nav className="bg-white border-b">
+      <nav className="border-b border-slate-700/50 bg-slate-800/80 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
@@ -59,88 +59,88 @@ export default async function DashboardLayout({
               </div>
               
               {/* Navigation Links */}
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <div className="hidden sm:ml-6 sm:flex sm:space-x-2">
                 <Link
                   href="/dashboard"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                  className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100 transition font-medium"
                 >
                   Dashboard
                 </Link>
                 
                 <Link
                   href="/analytics"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                  className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100 transition font-medium"
                 >
                   Analytics
                 </Link>
                 
                 <Link
                   href="/commissions"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                  className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100 transition font-medium"
                 >
                   Commissions
                 </Link>
                 
                 <Link
                   href="/leaderboard"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                  className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100 transition font-medium"
                 >
                   Leaderboard
                 </Link>
                 
                 <Link
                   href="/ai-chat"
-                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                  className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-300 hover:border-slate-600 hover:text-slate-100 transition font-medium"
                 >
                   AI Chat
                 </Link>
                 
                 {isAdmin && (
                   <div className="relative group flex items-center">
-                    <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
+                    <button className="text-xs px-3 py-1.5 rounded-full border border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-100 transition">
                       Admin
-                      <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="ml-1 h-3 w-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     
                     {/* Dropdown Menu */}
-                    <div className="absolute left-0 top-full pt-1 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
+                    <div className="absolute left-0 top-full pt-1 w-56 bg-slate-900 rounded-lg shadow-lg border border-slate-800 z-10 hidden group-hover:block">
                       <div className="py-1">
                         <Link
                           href="/admin/users"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           Users
                         </Link>
                         <Link
                           href="/admin/roles"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           Commission Roles
                         </Link>
                         <Link
                           href="/admin/payments"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           Payments
                         </Link>
                         <Link
                           href="/admin/calendars"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           Calendars
                         </Link>
-                        <div className="border-t my-1" />
+                        <div className="border-t border-slate-700/50 my-1" />
                         <Link
                           href="/admin/integrations"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           Integrations
                         </Link>
                         <Link
                           href="/admin/pcn-qa"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           PCN QA
                         </Link>
@@ -151,42 +151,42 @@ export default async function DashboardLayout({
                 
                 {isSuperAdmin && (
                   <div className="relative group flex items-center">
-                    <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
-                      <span className="text-purple-600">Super Admin</span>
-                      <svg className="ml-1 h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button className="text-xs px-3 py-1.5 rounded-full border border-transparent text-indigo-400 hover:border-indigo-500 hover:text-indigo-200 transition">
+                      <span>Super Admin</span>
+                      <svg className="ml-1 h-3 w-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
                     
                     {/* Dropdown Menu */}
-                    <div className="absolute left-0 top-full pt-1 w-56 bg-white rounded-md shadow-lg border z-10 hidden group-hover:block">
+                    <div className="absolute left-0 top-full pt-1 w-56 bg-slate-800 rounded-lg shadow-lg border border-slate-700/50 z-10 hidden group-hover:block">
                       <div className="py-1">
                         <Link
                           href="/super-admin/overview"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           System Overview
                         </Link>
                         <Link
                           href="/super-admin/companies"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           All Companies
                         </Link>
                         <Link
                           href="/super-admin/monitoring"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           System Monitoring
                         </Link>
                         <Link
                           href="/super-admin/users"
-                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-purple-50"
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-slate-700/50"
                         >
                           All Users
                         </Link>
-                        <div className="border-t my-1" />
-                        <div className="px-4 py-2 text-xs text-gray-500">
+                        <div className="border-t border-slate-700/50 my-1" />
+                        <div className="px-4 py-2 text-xs text-slate-500">
                           Super Admin Tools
                         </div>
                       </div>
@@ -207,7 +207,7 @@ export default async function DashboardLayout({
               )}
               
               <div className="flex-shrink-0">
-                <span className="text-sm text-gray-700 mr-4">
+                <span className="text-xs text-slate-300 mr-4">
                   {effectiveUser?.name || 'User'} ({effectiveUser?.superAdmin ? 'super admin' : effectiveUser?.role || 'user'})
                 </span>
               </div>
@@ -218,7 +218,7 @@ export default async function DashboardLayout({
       </nav>
       
       {/* Main Content */}
-      <main className="py-10">
+      <main className="py-6">
         {children}
       </main>
     </div>

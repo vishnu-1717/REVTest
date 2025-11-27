@@ -89,18 +89,18 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
   }, [fetchStats])
   
   if (loading || !stats) {
-    return <div className="container mx-auto py-10">Loading...</div>
+    return <div className="mx-auto max-w-6xl px-4 py-6"><div className="text-slate-300">Loading...</div></div>
   }
   
   return (
-    <div className="container mx-auto py-10 max-w-7xl">
+    <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-100">
             {isCompanyAdmin ? 'Company Dashboard' : 'My Dashboard'}
           </h1>
-          <p className="text-gray-500">
+          <p className="text-sm text-slate-300 mt-1">
             {isCompanyAdmin ? 'Your team\'s performance overview' : 'Your personal performance overview'}
           </p>
         </div>
@@ -109,7 +109,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="border rounded-md px-3 py-2"
+            className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
           >
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
@@ -121,244 +121,218 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       
       {/* Action Items */}
       {stats.followUpsNeeded && stats.followUpsNeeded > 0 && (
-        <Card className="mb-8 border-yellow-200 bg-yellow-50">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-yellow-900">
-                  ⚡ You have {stats.followUpsNeeded} follow-ups needed
-                </p>
-                <p className="text-sm text-yellow-700">
-                  {stats.redzoneFollowUps} in the redzone (within 7 days)
-                </p>
-              </div>
-              <Button className="bg-yellow-600 hover:bg-yellow-700">
-                View Follow-ups
-              </Button>
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-6 py-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-amber-300">
+                ⚡ You have {stats.followUpsNeeded} follow-ups needed
+              </p>
+              <p className="text-sm text-amber-200/70 mt-1">
+                {stats.redzoneFollowUps} in the redzone (within 7 days)
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Button className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30">
+              View Follow-ups
+            </Button>
+          </div>
+        </div>
       )}
       
       {/* Performance Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-600">
-              {isCompanyAdmin ? 'Team Appointments' : 'My Appointments'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalAppointments}</div>
-            <div className="text-sm text-gray-500 mt-1">
-              <span className="text-green-600">{stats.signed} closed</span>
-              {' · '}
-              <span className="text-red-600">{stats.noShows} no-shows</span>
-            </div>
-          </CardContent>
-        </Card>
+      <section className="grid gap-4 md:grid-cols-4 mb-8">
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+          <p className="text-sm font-medium text-slate-300 mb-2">
+            {isCompanyAdmin ? 'Team Appointments' : 'My Appointments'}
+          </p>
+          <p className="text-3xl font-bold text-slate-100 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {stats.totalAppointments.toLocaleString()}
+          </p>
+          <p className="text-xs text-slate-400">
+            <span className="text-emerald-300">{stats.signed} closed</span>
+            {' · '}
+            <span className="text-red-300">{stats.noShows} no-shows</span>
+          </p>
+        </div>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-600">
-              {isCompanyAdmin ? 'Team Show Rate' : 'My Show Rate'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.showRate}%</div>
-            <p className="text-sm text-gray-500 mt-1">
-              {stats.showed} / {stats.scheduled} showed
-            </p>
-          </CardContent>
-        </Card>
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+          <p className="text-sm font-medium text-slate-300 mb-2">
+            {isCompanyAdmin ? 'Team Show Rate' : 'My Show Rate'}
+          </p>
+          <p className="text-3xl font-bold text-slate-100 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {stats.showRate}%
+          </p>
+          <p className="text-xs text-slate-400">
+            {stats.showed} / {stats.scheduled} showed
+          </p>
+        </div>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-600">
-              {isCompanyAdmin ? 'Team Close Rate' : 'My Close Rate'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.closeRate}%</div>
-            <p className="text-sm text-gray-500 mt-1">
-              {stats.signed} / {stats.showed} closed
-            </p>
-          </CardContent>
-        </Card>
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+          <p className="text-sm font-medium text-slate-300 mb-2">
+            {isCompanyAdmin ? 'Team Close Rate' : 'My Close Rate'}
+          </p>
+          <p className="text-3xl font-bold text-slate-100 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {stats.closeRate}%
+          </p>
+          <p className="text-xs text-slate-400">
+            {stats.signed} / {stats.showed} closed
+          </p>
+        </div>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-gray-600">
-              {isCompanyAdmin ? 'Company Revenue' : 'My Revenue'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">
-              ${stats.totalRevenue.toLocaleString()}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+          <p className="text-sm font-medium text-slate-300 mb-2">
+            {isCompanyAdmin ? 'Company Revenue' : 'My Revenue'}
+          </p>
+          <p className="text-3xl font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            ${stats.totalRevenue.toLocaleString()}
+          </p>
+        </div>
+      </section>
       
       {/* Pending PCNs Widget */}
-      <div className="mb-8">
+      <div className="mb-6">
         <PendingPCNsWidget />
       </div>
       
       {/* Commission Tracker - Only for Sales Reps */}
       {!isCompanyAdmin && stats.totalCommissions !== undefined && (
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>💰 Commission Tracker</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Total Earned</p>
-                <p className="text-2xl font-bold">
-                  ${stats.totalCommissions.toLocaleString()}
-                </p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  ${stats.pendingCommissions?.toLocaleString() || 0}
-                </p>
-                <p className="text-xs text-gray-500">Waiting on payments</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Released</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  ${stats.releasedCommissions?.toLocaleString() || 0}
-                </p>
-                <p className="text-xs text-gray-500">Ready for payout</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Paid</p>
-                <p className="text-2xl font-bold text-green-600">
-                  ${stats.paidCommissions?.toLocaleString() || 0}
-                </p>
-                <p className="text-xs text-gray-500">In your account</p>
-              </div>
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">💰 Commission Tracker</h2>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-2">Total Earned</p>
+              <p className="text-2xl font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                ${stats.totalCommissions.toLocaleString()}
+              </p>
             </div>
             
-            <div className="mt-6">
-              <Link
-                href="/commissions"
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-              >
-                View detailed commission breakdown →
-              </Link>
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-2">Pending</p>
+              <p className="text-2xl font-bold text-amber-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                ${stats.pendingCommissions?.toLocaleString() || 0}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">Waiting on payments</p>
             </div>
-          </CardContent>
-        </Card>
+            
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-2">Released</p>
+              <p className="text-2xl font-bold text-blue-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                ${stats.releasedCommissions?.toLocaleString() || 0}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">Ready for payout</p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-2">Paid</p>
+              <p className="text-2xl font-bold text-emerald-300" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                ${stats.paidCommissions?.toLocaleString() || 0}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">In your account</p>
+            </div>
+          </div>
+          
+          <div className="mt-6">
+            <Link
+              href="/commissions"
+              className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+            >
+              View detailed commission breakdown →
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* Company Admin: Team Stats */}
       {isCompanyAdmin && stats.activeRepsCount !== undefined && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium text-gray-600">
-                Active Reps
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{stats.activeRepsCount}</div>
-            </CardContent>
-          </Card>
+        <section className="grid gap-4 md:grid-cols-3 mb-8">
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+            <p className="text-sm font-medium text-slate-300 mb-2">Active Reps</p>
+            <p className="text-3xl font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {stats.activeRepsCount}
+            </p>
+          </div>
           
           {stats.averageDealSize !== undefined && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Average Deal Size
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  ${stats.averageDealSize.toLocaleString()}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+              <p className="text-sm font-medium text-slate-300 mb-2">Average Deal Size</p>
+              <p className="text-3xl font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                ${stats.averageDealSize.toLocaleString()}
+              </p>
+            </div>
           )}
           
           {stats.topPerformer && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-gray-600">
-                  Top Performer This Month
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.topPerformer.name}</div>
-                <p className="text-sm text-gray-500 mt-1">
-                  ${stats.topPerformer.revenue.toLocaleString()} in {stats.topPerformer.appointments} appointments
-                </p>
-              </CardContent>
-            </Card>
+            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg hover:shadow-black/20">
+              <p className="text-sm font-medium text-slate-300 mb-2">Top Performer This Month</p>
+              <p className="text-xl font-bold text-slate-100 mb-1">{stats.topPerformer.name}</p>
+              <p className="text-xs text-slate-400">
+                ${stats.topPerformer.revenue.toLocaleString()} in {stats.topPerformer.appointments} appointments
+              </p>
+            </div>
           )}
-        </div>
+        </section>
       )}
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section className="grid gap-6 md:grid-cols-2 mb-8">
         {/* Recent Appointments */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Appointments</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">Recent Appointments</h2>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
             {stats.recentAppointments.length === 0 ? (
-              <p className="text-gray-500 text-sm">No appointments yet</p>
+              <p className="text-slate-400 text-sm">No appointments yet</p>
             ) : (
               <div className="space-y-3">
-                {stats.recentAppointments.map((apt: any) => (
-                  <div key={apt.id} className="flex justify-between items-start py-2 border-b last:border-0">
+                {stats.recentAppointments.map((apt: any, index: number) => (
+                  <div key={apt.id} className={`flex justify-between items-start py-3 px-2 rounded-lg ${index % 2 === 0 ? 'bg-slate-900/30' : ''} border-b border-slate-700/30 last:border-0`}>
                     <div className="flex-1">
-                      <p className="font-medium">{apt.contact?.name || 'Unknown'}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-semibold text-slate-100 mb-1">{apt.contact?.name || 'Unknown'}</p>
+                      <p className="text-xs text-slate-400 mb-2">
                         {new Date(apt.scheduledAt).toLocaleDateString()}
                       </p>
-                      <div className="flex flex-wrap gap-2 mt-1">
+                      <div className="flex flex-wrap gap-2">
                         {apt.setter && (
-                          <span className="text-xs text-blue-600">
+                          <span className="text-xs text-blue-300">
                             Setter: {apt.setter.name}
                           </span>
                         )}
                         {apt.closer && (
-                          <span className="text-xs text-green-600">
+                          <span className="text-xs text-emerald-300">
                             Closer: {apt.closer.name}
                           </span>
                         )}
                         {apt.calendarRelation && (
-                          <span className="text-xs text-purple-600">
+                          <span className="text-xs text-purple-300">
                             {apt.calendarRelation.name}
                           </span>
                         )}
                         {apt.attributionSource && (
-                          <span className="text-xs text-orange-600">
+                          <span className="text-xs text-amber-300">
                             📊 {apt.attributionSource}
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="text-right space-y-2">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
+                    <div className="text-right space-y-2 ml-4">
+                      <span className={`px-2.5 py-1 text-xs rounded-md font-medium ${
                         apt.status === 'signed' 
-                          ? 'bg-green-100 text-green-800'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           : apt.status === 'showed'
-                          ? 'bg-blue-100 text-blue-800'
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                           : apt.status === 'no_show'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-gray-100 text-gray-800'
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                          : 'bg-slate-700/50 text-slate-300 border border-slate-600'
                       }`}>
                         {apt.status.replace('_', ' ')}
                       </span>
                       {apt.cashCollected && (
-                        <p className="text-sm font-semibold">
+                        <p className="text-sm font-bold text-slate-100" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           ${apt.cashCollected.toLocaleString()}
                         </p>
                       )}
@@ -377,43 +351,45 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         
         {/* Recent Commissions - Only for Sales Reps */}
         {!isCompanyAdmin && stats.recentCommissions && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Commissions</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100">Recent Commissions</h2>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
               {stats.recentCommissions.length === 0 ? (
-                <p className="text-gray-500 text-sm">No commissions yet</p>
+                <p className="text-slate-400 text-sm">No commissions yet</p>
               ) : (
                 <div className="space-y-3">
-                  {stats.recentCommissions.map((com: any) => (
-                    <div key={com.id} className="flex justify-between items-center py-2 border-b last:border-0">
+                  {stats.recentCommissions.map((com: any, index: number) => (
+                    <div key={com.id} className={`flex justify-between items-center py-3 px-2 rounded-lg ${index % 2 === 0 ? 'bg-slate-900/30' : ''} border-b border-slate-700/30 last:border-0`}>
                       <div className="flex-1">
-                        <p className="font-medium">
+                        <p className="font-semibold text-slate-100 mb-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           ${com.totalAmount.toLocaleString()}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-xs text-slate-400">
                           {new Date(com.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
+                      <div className="text-right ml-4">
+                        <span className={`px-2.5 py-1 text-xs rounded-md font-medium ${
                           com.releaseStatus === 'paid'
-                            ? 'bg-green-100 text-green-800'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                             : com.releaseStatus === 'released'
-                            ? 'bg-blue-100 text-blue-800'
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                             : com.releaseStatus === 'partial'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            : 'bg-slate-700/50 text-slate-300 border border-slate-600'
                         }`}>
                           {com.releaseStatus}
                         </span>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-400 mt-1">
                           {(com.percentage * 100).toFixed(1)}%
                         </p>
                       </div>
@@ -421,13 +397,13 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
-      </div>
+      </section>
       
       {/* Leaderboard */}
-      <div className="mt-8">
+      <div className="mt-6">
         <Leaderboard />
       </div>
     </div>
