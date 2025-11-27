@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       await withPrisma(async (prisma) => {
         if (webhookEventId) {
           await prisma.webhookEvent.update({
-            where: { id: webhookEventId },
+            where: { id: webhookEventId as string },
             data: {
               processed: true,
               processedAt: new Date(),
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       await withPrisma(async (prisma) => {
         if (webhookEventId) {
           await prisma.webhookEvent.update({
-            where: { id: webhookEventId },
+            where: { id: webhookEventId as string },
             data: {
               processed: true,
               processedAt: new Date(),
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
     await withPrisma(async (prisma) => {
       if (webhookEventId) {
         await prisma.webhookEvent.update({
-          where: { id: webhookEventId },
+          where: { id: webhookEventId as string },
           data: {
             processed: true,
             processedAt: new Date(),
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
     if (webhookEventId) {
       await withPrisma(async (prisma) => {
         await prisma.webhookEvent.update({
-          where: { id: webhookEventId },
+          where: { id: webhookEventId as string },
           data: {
             processed: true,
             processedAt: new Date(),
