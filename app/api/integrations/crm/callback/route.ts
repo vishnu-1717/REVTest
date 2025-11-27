@@ -5,7 +5,9 @@ import { storeGHLOAuthTokens } from '@/lib/ghl-oauth'
 
 /**
  * GHL OAuth callback handler
- * GET /api/integrations/ghl/oauth/callback
+ * Note: Using /api/integrations/crm/callback instead of /api/integrations/ghl/oauth/callback
+ * because GHL does not allow "ghl" in redirect URLs
+ * GET /api/integrations/crm/callback
  */
 export async function GET(request: NextRequest) {
   try {
@@ -76,7 +78,7 @@ export async function GET(request: NextRequest) {
     const clientId = process.env.GHL_MARKETPLACE_CLIENT_ID
     const clientSecret = process.env.GHL_MARKETPLACE_CLIENT_SECRET
     const redirectUri = process.env.GHL_OAUTH_REDIRECT_URI || 
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/ghl/oauth/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/crm/callback`
 
     if (!clientId || !clientSecret) {
       console.error('[GHL OAuth] Missing client credentials')
@@ -136,4 +138,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

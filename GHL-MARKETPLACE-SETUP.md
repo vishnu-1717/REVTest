@@ -36,8 +36,9 @@ Based on your screenshot and description, you have:
 #### Redirect URI
 - **Location**: App Settings → OAuth Configuration
 - **Action**: Add your OAuth callback URL
-  - Format: `https://yourdomain.com/api/integrations/ghl/oauth/callback`
-  - Or for local dev: `http://localhost:3000/api/integrations/ghl/oauth/callback`
+  - Format: `https://yourdomain.com/api/integrations/crm/callback`
+  - Or for local dev: `http://localhost:3000/api/integrations/crm/callback`
+- **Note**: GHL does not allow "ghl" in redirect URLs, so we use `/api/integrations/crm/callback` instead of `/api/integrations/ghl/oauth/callback`
 - **Note**: GHL may require HTTPS in production
 
 #### OAuth Scopes Verification

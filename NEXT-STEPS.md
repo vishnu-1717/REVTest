@@ -53,7 +53,7 @@ ENCRYPTION_KEY=your-32-byte-hex-string-here
 # GHL Marketplace OAuth
 GHL_MARKETPLACE_CLIENT_ID=your-client-id
 GHL_MARKETPLACE_CLIENT_SECRET=your-client-secret
-GHL_OAUTH_REDIRECT_URI=https://yourdomain.com/api/integrations/ghl/oauth/callback
+GHL_OAUTH_REDIRECT_URI=https://yourdomain.com/api/integrations/crm/callback
 GHL_MARKETPLACE_WEBHOOK_SECRET=your-webhook-secret
 
 # Zoom (Optional - for webhook signature verification)
@@ -130,7 +130,7 @@ Or configure in Vercel dashboard:
 ## 7. GHL Marketplace App Configuration
 
 1. **OAuth Redirect URI**: Add to GHL Marketplace app settings
-   - `https://yourdomain.com/api/integrations/ghl/oauth/callback`
+   - `https://yourdomain.com/api/integrations/crm/callback` (Note: GHL does not allow "ghl" in redirect URLs)
 
 2. **Webhook URL**: Add to GHL Marketplace app settings
    - `https://yourdomain.com/api/webhooks/ghl/marketplace`
@@ -186,7 +186,7 @@ await backfillEmbeddings(companyId)
 - `lib/slack-weekly-report.ts` - Weekly report generator
 - `lib/ai-context.ts` - Company context builder
 - `app/api/integrations/ghl/oauth/initiate/route.ts` - OAuth initiation
-- `app/api/integrations/ghl/oauth/callback/route.ts` - OAuth callback
+- `app/api/integrations/crm/callback/route.ts` - OAuth callback (Note: Using /crm/callback because GHL does not allow "ghl" in redirect URLs)
 - `app/api/webhooks/ghl/marketplace/route.ts` - Marketplace webhook
 - `app/api/webhooks/zoom/route.ts` - Zoom webhook
 - `app/api/admin/integrations/zoom/route.ts` - Zoom admin API

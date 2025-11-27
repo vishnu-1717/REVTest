@@ -46,7 +46,7 @@
 
 ### 2. **GHL OAuth Callback**
 - **Blocked until**: App is deployed to production
-- **Callback URL**: `https://yourdomain.com/api/integrations/ghl/oauth/callback`
+- **Callback URL**: `https://yourdomain.com/api/integrations/crm/callback` (Note: GHL does not allow "ghl" in redirect URLs)
 - **Note**: GHL Marketplace app must have this URL configured
 
 ### 3. **Zoom Webhooks**

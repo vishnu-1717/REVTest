@@ -63,9 +63,11 @@ export async function GET(request: NextRequest) {
     // For now, we'll include it in the redirect URL and verify in callback
     
     // GHL OAuth configuration
+    // Note: Using /api/integrations/crm/callback instead of /api/integrations/ghl/oauth/callback
+    // because GHL does not allow "ghl" in redirect URLs
     const clientId = process.env.GHL_MARKETPLACE_CLIENT_ID
     const redirectUri = process.env.GHL_OAUTH_REDIRECT_URI || 
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/ghl/oauth/callback`
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/crm/callback`
     
     if (!clientId) {
       return NextResponse.json(
