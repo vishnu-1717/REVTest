@@ -32,43 +32,102 @@ interface GHLLocation {
 }
 
 export class GHLClient {
-  private apiKey: string
+  private apiKey?: string
+  private accessToken?: string
+  private companyId?: string
   private locationId?: string
   private baseUrl = 'https://rest.gohighlevel.com/v1'
+  private useOAuth: boolean
   
-  constructor(apiKey: string, locationId?: string) {
-    this.apiKey = apiKey
-    this.locationId = locationId
+  /**
+   * Create GHLClient with API key (legacy method)
+   */
+  constructor(apiKey: string, locationId?: string)
+  /**
+   * Create GHLClient with OAuth (new method)
+   */
+  constructor(companyId: string, locationId: string | undefined, useOAuth: true)
+  constructor(apiKeyOrCompanyId: string, locationId?: string, useOAuth?: boolean) {
+    if (useOAuth) {
+      // OAuth mode
+      this.companyId = apiKeyOrCompanyId
+      this.locationId = locationId
+      this.useOAuth = true
+    } else {
+      // API key mode (backward compatibility)
+      this.apiKey = apiKeyOrCompanyId
+      this.locationId = locationId
+      this.useOAuth = false
+    }
+  }
+
+  /**
+   * Get authorization token (API key or OAuth token)
+   * Automatically refreshes OAuth token if needed
+   */
+  private async getAuthToken(): Promise<string> {
+    if (!this.useOAuth) {
+      if (!this.apiKey) {
+        throw new Error('GHL API key not provided')
+      }
+      return this.apiKey
+    }
+
+    if (!this.companyId) {
+      throw new Error('Company ID not provided for OAuth')
+    }
+
+    // Import dynamically to avoid circular dependencies
+    const { getGHLAccessToken } = await import('./ghl-oauth')
+    const token = await getGHLAccessToken(this.companyId)
+    
+    if (!token) {
+      throw new Error('GHL OAuth token not available. Please reconnect GHL.')
+    }
+
+    return token
+  }
+
+  /**
+   * Make authenticated API request
+   */
+  private async makeRequest(url: string, options: RequestInit = {}): Promise<Response> {
+    const token = await this.getAuthToken()
+    
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Version': '2021-07-28',
+      'Content-Type': 'application/json',
+      ...options.headers
+    }
+
+    return fetch(url, {
+      ...options,
+      headers
+    })
   }
   
-  // Validate API key by making a simple request (try contacts endpoint as it's more likely to exist)
+  // Validate API key or OAuth token by making a simple request
   async validateApiKey(): Promise<boolean> {
     try {
-      // Try to fetch contacts list - this is a simpler endpoint that validates the API key
+      // Try to fetch contacts list - this is a simpler endpoint that validates the credentials
       const url = `${this.baseUrl}/contacts`
-      console.log(`[GHL API] Validating API key with: ${url}`)
+      console.log(`[GHL API] Validating ${this.useOAuth ? 'OAuth token' : 'API key'} with: ${url}`)
       
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Version': '2021-07-28',
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await this.makeRequest(url, { method: 'GET' })
       
-      // If we get 200 or even 401/403, the endpoint exists and API key format is valid
-      // 404 means endpoint doesn't exist, 401/403 means invalid API key
+      // If we get 200 or even 401/403, the endpoint exists and credentials format is valid
+      // 404 means endpoint doesn't exist, 401/403 means invalid credentials
       if (response.status === 401 || response.status === 403) {
-        console.error(`[GHL API] API key validation failed: ${response.status}`)
+        console.error(`[GHL API] ${this.useOAuth ? 'OAuth token' : 'API key'} validation failed: ${response.status}`)
         return false
       }
       
       // Even if we get 404, it might mean the endpoint structure is different
-      // But if we get here without an exception, the API key format is valid
+      // But if we get here without an exception, the credentials format is valid
       return response.status === 200 || response.status === 404
     } catch (error: any) {
-      console.error(`[GHL API] API key validation error:`, error.message)
+      console.error(`[GHL API] ${this.useOAuth ? 'OAuth token' : 'API key'} validation error:`, error.message)
       return false
     }
   }
@@ -95,13 +154,7 @@ export class GHLClient {
       try {
         console.log(`[GHL API] Trying calendars endpoint: ${url}`)
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Version': '2021-07-28',
-            'Content-Type': 'application/json'
-          }
-        })
+        const response = await this.makeRequest(url, { method: 'GET' })
         
         if (response.ok) {
           const data = await response.json()
@@ -159,13 +212,7 @@ export class GHLClient {
       try {
         console.log(`[GHL API] Trying users endpoint: ${url}`)
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Version': '2021-07-28',
-            'Content-Type': 'application/json'
-          }
-        })
+        const response = await this.makeRequest(url, { method: 'GET' })
         
         if (response.ok) {
           const data = await response.json()
@@ -198,13 +245,7 @@ export class GHLClient {
 
     const url = `${this.baseUrl}/locations/${idToUse}`
     try {
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Version': '2021-07-28',
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await this.makeRequest(url, { method: 'GET' })
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -225,12 +266,7 @@ export class GHLClient {
   
   // Fetch single contact
   async getContact(contactId: string): Promise<GHLContact | null> {
-    const response = await fetch(`${this.baseUrl}/contacts/${contactId}`, {
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Version': '2021-07-28'
-      }
-    })
+    const response = await this.makeRequest(`${this.baseUrl}/contacts/${contactId}`, { method: 'GET' })
     
     if (!response.ok) {
       if (response.status === 404) return null
@@ -243,14 +279,9 @@ export class GHLClient {
   
   // Search contacts by email
   async searchContactByEmail(email: string): Promise<GHLContact | null> {
-    const response = await fetch(
+    const response = await this.makeRequest(
       `${this.baseUrl}/contacts/?email=${encodeURIComponent(email)}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Version': '2021-07-28'
-        }
-      }
+      { method: 'GET' }
     )
     
     if (!response.ok) {
@@ -270,13 +301,7 @@ export class GHLClient {
       const url = `${this.baseUrl}/contacts/${contactId}/appointments`
       console.log(`[GHL API] Fetching appointments for contact: ${url}`)
       
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Version': '2021-07-28',
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await this.makeRequest(url, { method: 'GET' })
       
       if (!response.ok) {
         // If 404, try general appointments endpoint with contact filter
@@ -317,13 +342,7 @@ export class GHLClient {
       try {
         console.log(`[GHL API] Trying appointments endpoint: ${url}`)
         
-        const response = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Version': '2021-07-28',
-            'Content-Type': 'application/json'
-          }
-        })
+        const response = await this.makeRequest(url, { method: 'GET' })
         
         if (response.ok) {
           const data = await response.json()
@@ -364,13 +383,7 @@ export class GHLClient {
         try {
           console.log(`[GHL API] Trying to fetch recent appointments: ${url}`)
           
-          const response = await fetch(url, {
-            headers: {
-              'Authorization': `Bearer ${this.apiKey}`,
-              'Version': '2021-07-28',
-              'Content-Type': 'application/json'
-            }
-          })
+      const response = await this.makeRequest(url, { method: 'GET' })
           
           if (response.ok) {
             const data = await response.json()
@@ -405,13 +418,7 @@ export class GHLClient {
       const url = `${this.baseUrl}/appointments/${appointmentId}`
       console.log(`[GHL API] Fetching appointment: ${url}`)
       
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Version': '2021-07-28',
-          'Content-Type': 'application/json'
-        }
-      })
+      const response = await this.makeRequest(url, { method: 'GET' })
       
       if (!response.ok) {
         if (response.status === 404) return null
@@ -425,4 +432,36 @@ export class GHLClient {
       return null
     }
   }
+}
+
+/**
+ * Factory function to create GHLClient
+ * Supports both OAuth and API key methods
+ */
+export async function createGHLClient(companyId: string): Promise<GHLClient | null> {
+  const { withPrisma } = await import('./db')
+  const { isGHLOAuthConnected, getGHLLocationId } = await import('./ghl-oauth')
+  
+  return await withPrisma(async (prisma) => {
+    // Check if OAuth is connected
+    const oauthConnected = await isGHLOAuthConnected(companyId)
+    
+    if (oauthConnected) {
+      // Use OAuth
+      const locationId = await getGHLLocationId(companyId)
+      return new GHLClient(companyId, locationId || undefined, true)
+    }
+    
+    // Fall back to API key (backward compatibility)
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { ghlApiKey: true, ghlLocationId: true }
+    })
+    
+    if (company?.ghlApiKey) {
+      return new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
+    }
+    
+    return null
+  })
 }

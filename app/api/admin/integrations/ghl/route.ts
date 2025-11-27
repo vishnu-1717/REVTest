@@ -131,6 +131,11 @@ export async function GET(request: NextRequest) {
         select: {
           ghlApiKey: true,
           ghlLocationId: true,
+          ghlOAuthAccessToken: true,
+          ghlOAuthRefreshToken: true,
+          ghlOAuthExpiresAt: true,
+          ghlAppInstalledAt: true,
+          ghlAppUninstalledAt: true,
           timezone: true,
           attributionStrategy: true,
           attributionSourceField: true,
@@ -139,13 +144,22 @@ export async function GET(request: NextRequest) {
       })
     })
     
+    // Check OAuth connection status
+    const oauthConnected = !!(
+      company?.ghlOAuthAccessToken &&
+      company?.ghlOAuthRefreshToken &&
+      !company.ghlAppUninstalledAt
+    )
+    
     return NextResponse.json({
-      configured: !!company?.ghlApiKey,
+      configured: !!(company?.ghlApiKey || oauthConnected),
+      oauthConnected,
       locationId: company?.ghlLocationId,
       timezone: company?.timezone || 'UTC',
       attributionStrategy: company?.attributionStrategy,
       attributionSourceField: company?.attributionSourceField,
-      useCalendarsForAttribution: company?.useCalendarsForAttribution
+      useCalendarsForAttribution: company?.useCalendarsForAttribution,
+      appInstalledAt: company?.ghlAppInstalledAt?.toISOString() || null
     })
     
   } catch (error: any) {

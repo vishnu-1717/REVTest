@@ -24,6 +24,88 @@ export async function getSlackClient(companyId: string): Promise<WebClient | nul
 }
 
 /**
+ * Format PCN data for Slack display
+ */
+export function formatPCNForSlack(pcnData: any): string {
+  let formatted = ''
+  
+  if (pcnData.callOutcome) {
+    formatted += `*Outcome:* ${pcnData.callOutcome}\n`
+  }
+  
+  if (pcnData.callOutcome === 'signed') {
+    if (pcnData.cashCollected) {
+      formatted += `*Cash Collected:* $${pcnData.cashCollected.toFixed(2)}\n`
+    }
+    if (pcnData.paymentPlanOrPIF) {
+      formatted += `*Payment Type:* ${pcnData.paymentPlanOrPIF === 'pif' ? 'Paid in Full' : 'Payment Plan'}\n`
+    }
+    if (pcnData.paymentPlanOrPIF === 'payment_plan') {
+      if (pcnData.totalPrice) {
+        formatted += `*Total Price:* $${pcnData.totalPrice.toFixed(2)}\n`
+      }
+      if (pcnData.numberOfPayments) {
+        formatted += `*Number of Payments:* ${pcnData.numberOfPayments}\n`
+      }
+    }
+    if (pcnData.signedNotes) {
+      formatted += `*Notes:* ${pcnData.signedNotes}\n`
+    }
+  }
+  
+  if (pcnData.callOutcome === 'showed') {
+    if (pcnData.qualificationStatus) {
+      formatted += `*Qualification:* ${pcnData.qualificationStatus}\n`
+    }
+    if (pcnData.wasOfferMade !== undefined) {
+      formatted += `*Offer Made:* ${pcnData.wasOfferMade ? 'Yes' : 'No'}\n`
+    }
+    if (pcnData.whyDidntMoveForward) {
+      formatted += `*Why Didn't Move Forward:* ${pcnData.whyDidntMoveForward}\n`
+    }
+    if (pcnData.whyNoOffer) {
+      formatted += `*Why No Offer:* ${pcnData.whyNoOffer}\n`
+    }
+    if (pcnData.downsellOpportunity) {
+      formatted += `*Downsell Opportunity:* ${pcnData.downsellOpportunity}\n`
+    }
+    if (pcnData.disqualificationReason) {
+      formatted += `*Disqualification Reason:* ${pcnData.disqualificationReason}\n`
+    }
+    if (pcnData.followUpScheduled) {
+      formatted += `*Follow-up Scheduled:* Yes\n`
+      if (pcnData.nurtureType) {
+        formatted += `*Nurture Type:* ${pcnData.nurtureType}\n`
+      }
+    }
+  }
+  
+  if (pcnData.callOutcome === 'no_show') {
+    if (pcnData.noShowCommunicative) {
+      formatted += `*Communicative:* ${pcnData.noShowCommunicative}\n`
+    }
+    if (pcnData.noShowCommunicativeNotes) {
+      formatted += `*Notes:* ${pcnData.noShowCommunicativeNotes}\n`
+    }
+  }
+  
+  if (pcnData.callOutcome === 'cancelled') {
+    if (pcnData.cancellationReason) {
+      formatted += `*Cancellation Reason:* ${pcnData.cancellationReason}\n`
+    }
+    if (pcnData.cancellationNotes) {
+      formatted += `*Notes:* ${pcnData.cancellationNotes}\n`
+    }
+  }
+  
+  if (pcnData.notes) {
+    formatted += `*General Notes:* ${pcnData.notes}\n`
+  }
+  
+  return formatted || 'No PCN data available'
+}
+
+/**
  * Send PCN notification message to Slack
  */
 export async function sendPCNNotification(
@@ -34,7 +116,11 @@ export async function sendPCNNotification(
     closer: { id: string; name: string; slackUserId: string | null } | null
     scheduledAt: Date
   },
-  channelId?: string
+  channelId?: string,
+  options?: {
+    aiGenerated?: boolean
+    pcnData?: any
+  }
 ): Promise<{ channelId: string; messageTs: string } | null> {
   const client = await getSlackClient(companyId)
   if (!client) {
@@ -86,18 +172,107 @@ export async function sendPCNNotification(
     timeZoneName: 'short',
   })
 
-  let messageText = `📋 *PCN Required*\n\n`
+  const isAIGenerated = options?.aiGenerated || false
+  const pcnData = options?.pcnData
+
+  let messageText = isAIGenerated 
+    ? `🤖 *AI-Generated PCN - Review Required*\n\n`
+    : `📋 *PCN Required*\n\n`
+  
   messageText += `*Prospect:* ${appointment.contact.name}\n`
   if (appointment.contact.email) {
     messageText += `*Email:* ${appointment.contact.email}\n`
   }
   messageText += `*Scheduled:* ${scheduledTime}\n\n`
-  messageText += `<${pcnUrl}|Fill out PCN →>`
+
+  // If AI-generated, show PCN data
+  if (isAIGenerated && pcnData) {
+    messageText += `*AI-Generated PCN Data:*\n${formatPCNForSlack(pcnData)}\n\n`
+    messageText += `Please review and edit if needed before submitting.`
+  } else {
+    messageText += `<${pcnUrl}|Fill out PCN →>`
+  }
 
   // Tag closer if they have Slack ID
   if (appointment.closer?.slackUserId) {
     messageText = `<@${appointment.closer.slackUserId}> ${messageText}`
   }
+
+  // Build blocks
+  const blocks: any[] = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: messageText,
+      },
+    },
+  ]
+
+  // Add action buttons
+  const actionElements: any[] = []
+  
+  if (isAIGenerated) {
+    // AI-generated PCN: Review & Edit, Approve & Submit buttons
+    actionElements.push(
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: 'Review & Edit',
+          emoji: true,
+        },
+        style: 'primary',
+        action_id: 'pcn_review_edit',
+        value: appointment.id,
+      },
+      {
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: 'Approve & Submit',
+          emoji: true,
+        },
+        style: 'danger',
+        action_id: 'pcn_approve_submit',
+        value: appointment.id,
+        confirm: {
+          title: {
+            type: 'plain_text',
+            text: 'Approve & Submit PCN',
+          },
+          text: {
+            type: 'mrkdwn',
+            text: 'Are you sure you want to approve and submit this AI-generated PCN?',
+          },
+          confirm: {
+            type: 'plain_text',
+            text: 'Yes, Submit',
+          },
+          deny: {
+            type: 'plain_text',
+            text: 'Cancel',
+          },
+        },
+      }
+    )
+  } else {
+    // Regular PCN: Just fill out button
+    actionElements.push({
+      type: 'button',
+      text: {
+        type: 'plain_text',
+        text: 'Fill out PCN',
+      },
+      url: pcnUrl,
+      style: 'primary',
+    })
+  }
+
+  blocks.push({
+    type: 'actions',
+    elements: actionElements,
+  })
 
   try {
     const response = await client.chat.postMessage({
@@ -105,29 +280,7 @@ export async function sendPCNNotification(
       text: messageText,
       unfurl_links: false, // Disable link unfurling to prevent 404 preview errors
       unfurl_media: false, // Also disable media unfurling
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: messageText,
-          },
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: 'Fill out PCN',
-              },
-              url: pcnUrl,
-              style: 'primary',
-            },
-          ],
-        },
-      ],
+      blocks,
     })
 
     if (!response.ok) {

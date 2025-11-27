@@ -88,6 +88,13 @@ export default async function DashboardLayout({
                   Leaderboard
                 </Link>
                 
+                <Link
+                  href="/ai-chat"
+                  className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300"
+                >
+                  AI Chat
+                </Link>
+                
                 {isAdmin && (
                   <div className="relative group flex items-center">
                     <button className="inline-flex items-center px-1 pt-1 text-sm font-medium text-gray-900 border-b-2 border-transparent hover:border-gray-300">
@@ -130,6 +137,12 @@ export default async function DashboardLayout({
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                         >
                           Integrations
+                        </Link>
+                        <Link
+                          href="/admin/pcn-qa"
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          PCN QA
                         </Link>
                       </div>
                     </div>

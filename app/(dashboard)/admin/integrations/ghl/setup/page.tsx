@@ -32,10 +32,83 @@ const withViewAs = (url: string) => {
   const [apiKey, setApiKey] = useState('')
   const [locationId, setLocationId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [oauthConnected, setOauthConnected] = useState(false)
+  const [connectionMethod, setConnectionMethod] = useState<'oauth' | 'api_key'>('oauth')
+  const [loadingStatus, setLoadingStatus] = useState(true)
   
   // Step 2: Attribution Strategy
   const [attributionStrategy, setAttributionStrategy] = useState('ghl_fields')
   const [attributionField, setAttributionField] = useState('contact.source')
+
+  // Check connection status on mount and handle OAuth callback
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        // Check for OAuth callback success/error
+        const params = new URLSearchParams(window.location.search)
+        const success = params.get('success')
+        const error = params.get('error')
+        
+        if (success === 'true') {
+          alert('✅ GHL connected successfully!')
+          // Clean URL
+          window.history.replaceState({}, '', window.location.pathname)
+        } else if (error) {
+          alert(`❌ GHL connection failed: ${decodeURIComponent(error)}`)
+          // Clean URL
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+
+        const res = await fetch(withViewAs('/api/admin/integrations/ghl'))
+        if (res.ok) {
+          const data = await res.json()
+          setOauthConnected(data.oauthConnected || false)
+          if (data.configured && !data.oauthConnected) {
+            setConnectionMethod('api_key')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check GHL status:', error)
+      } finally {
+        setLoadingStatus(false)
+      }
+    }
+    checkStatus()
+  }, [])
+
+  // Handle OAuth connection
+  const handleOAuthConnect = () => {
+    const url = withViewAs('/api/integrations/ghl/oauth/initiate')
+    window.location.href = url
+  }
+
+  // Handle OAuth disconnect
+  const handleOAuthDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect GHL? This will stop syncing appointments.')) {
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const res = await fetch(withViewAs('/api/admin/integrations/ghl/disconnect'), {
+        method: 'POST'
+      })
+      
+      if (!res.ok) {
+        const error = await res.json()
+        alert(error.error || 'Failed to disconnect')
+        return
+      }
+      
+      setOauthConnected(false)
+      alert('GHL disconnected successfully')
+    } catch (error) {
+      console.error(error)
+      alert('Failed to disconnect')
+    } finally {
+      setSaving(false)
+    }
+  }
   
   const handleSaveCredentials = async () => {
     setSaving(true)
@@ -167,8 +240,160 @@ const withViewAs = (url: string) => {
       {/* Step 1: GHL Credentials */}
       {step === 1 && (
         <>
+          {/* OAuth Connection Status */}
+          {oauthConnected && (
+            <Card className="mb-6 border-green-500 bg-green-50">
+              <CardHeader>
+                <CardTitle className="text-green-900">✅ GHL Connected via OAuth</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-green-800 mb-4">
+                  Your GHL account is connected via OAuth. Appointments will sync automatically.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleOAuthDisconnect}
+                    variant="outline"
+                    className="border-red-500 text-red-600 hover:bg-red-50"
+                  >
+                    Disconnect GHL
+                  </Button>
+                  <Button
+                    onClick={() => setStep(2)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Continue to Attribution Setup →
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {!oauthConnected && (
+            <>
+              {/* Connection Method Selection */}
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>Step 1: Connect GoHighLevel</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-3">Choose Connection Method:</h3>
+                      <div className="space-y-3">
+                        <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
+                          connectionMethod === 'oauth' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="connectionMethod"
+                            value="oauth"
+                            checked={connectionMethod === 'oauth'}
+                            onChange={(e) => setConnectionMethod(e.target.value as 'oauth' | 'api_key')}
+                            className="mr-3"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">OAuth (Recommended)</span>
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                                Recommended
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              One-click connection via GHL Marketplace. More secure and easier to set up.
+                            </p>
+                          </div>
+                        </label>
+
+                        <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
+                          connectionMethod === 'api_key' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                          <input
+                            type="radio"
+                            name="connectionMethod"
+                            value="api_key"
+                            checked={connectionMethod === 'api_key'}
+                            onChange={(e) => setConnectionMethod(e.target.value as 'oauth' | 'api_key')}
+                            className="mr-3"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">API Key (Legacy)</span>
+                              <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
+                                Legacy
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Use API key for direct integration. Requires manual setup.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* OAuth Connection */}
+                    {connectionMethod === 'oauth' && (
+                      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                        <h3 className="font-semibold mb-2 text-blue-900">Connect via OAuth</h3>
+                        <p className="text-sm text-blue-800 mb-4">
+                          Click the button below to securely connect your GHL account. You'll be redirected to GHL to authorize the connection.
+                        </p>
+                        <Button
+                          onClick={handleOAuthConnect}
+                          className="w-full bg-blue-600 hover:bg-blue-700"
+                        >
+                          Connect GHL Account
+                        </Button>
+                        <p className="text-xs text-blue-600 mt-3">
+                          💡 This will open a new window to authorize the connection. After authorization, you'll be redirected back.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* API Key Connection */}
+                    {connectionMethod === 'api_key' && (
+                      <div className="mt-6 space-y-4">
+                        <div>
+                          <h3 className="font-semibold mb-2">Get Your API Key:</h3>
+                          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 mb-4">
+                            <li>Log into your GHL account</li>
+                            <li>Go to Settings → Integrations → API Keys</li>
+                            <li>Create a new API key with "Read/Write" permissions</li>
+                            <li>Copy the API key below</li>
+                          </ol>
+                          
+                          <label className="block text-sm font-medium mb-2">API Key</label>
+                          <Input
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder="ghl_live_xxxxxxxxxxxxx"
+                          />
+                        </div>
+                        
+                        <div>
+                          <h3 className="font-semibold mb-2">Get Your Location ID:</h3>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Found in your GHL account URL or in Settings → Business Profile
+                          </p>
+                          
+                          <label className="block text-sm font-medium mb-2">Location ID</label>
+                          <Input
+                            value={locationId}
+                            onChange={(e) => setLocationId(e.target.value)}
+                            placeholder="abc123def456"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
           {/* Environment Variable Warning */}
-          {isUsingVercelUrl && (
+          {isUsingVercelUrl && !oauthConnected && (
             <Card className="mb-6 border-yellow-500 bg-yellow-50">
               <CardHeader>
                 <CardTitle className="text-yellow-900">⚠️ Setup Required: Production Domain</CardTitle>
@@ -191,44 +416,9 @@ const withViewAs = (url: string) => {
             </Card>
           )}
           
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Step 1: Connect GoHighLevel</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">Get Your API Key:</h3>
-                <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 mb-4">
-                  <li>Log into your GHL account</li>
-                  <li>Go to Settings → Integrations → API Keys</li>
-                  <li>Create a new API key with "Read/Write" permissions</li>
-                  <li>Copy the API key below</li>
-                </ol>
-                
-                <label className="block text-sm font-medium mb-2">API Key</label>
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="ghl_live_xxxxxxxxxxxxx"
-                />
-              </div>
-              
-              <div>
-                <h3 className="font-semibold mb-2">Get Your Location ID:</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Found in your GHL account URL or in Settings → Business Profile
-                </p>
-                
-                <label className="block text-sm font-medium mb-2">Location ID</label>
-                <Input
-                  value={locationId}
-                  onChange={(e) => setLocationId(e.target.value)}
-                  placeholder="abc123def456"
-                />
-              </div>
-              
-              <div className="bg-blue-50 p-4 rounded-lg">
+          {/* Webhook Setup Instructions (for API key method) */}
+          {connectionMethod === 'api_key' && (
+            <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook Workflow (Optional but Recommended):</h3>
                 <p className="text-sm text-blue-800 mb-3">
                   Create a workflow in GHL to send appointment data in real-time. This is optional - you can also sync appointments manually.
@@ -424,13 +614,15 @@ const withViewAs = (url: string) => {
             </CardContent>
           </Card>
           
-          <Button 
-            onClick={handleSaveCredentials} 
-            disabled={saving || !apiKey || !locationId}
-            className="w-full"
-          >
-            {saving ? 'Connecting...' : 'Connect & Continue →'}
-          </Button>
+          {!oauthConnected && connectionMethod === 'api_key' && (
+            <Button 
+              onClick={handleSaveCredentials} 
+              disabled={saving || !apiKey || !locationId}
+              className="w-full"
+            >
+              {saving ? 'Connecting...' : 'Connect & Continue →'}
+            </Button>
+          )}
         </>
       )}
       

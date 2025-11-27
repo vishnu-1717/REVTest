@@ -28,16 +28,34 @@ export function validatePCNSubmission(
       if (strict && !submission.firstCallOrFollowUp) {
         return 'Please indicate if this was a first call or follow-up'
       }
-      // In strict mode, require wasOfferMade
-      if (strict && (submission.wasOfferMade === undefined || submission.wasOfferMade === null)) {
+      // In strict mode, require qualificationStatus
+      if (strict && !submission.qualificationStatus) {
+        return 'Please select the prospect\'s qualification status'
+      }
+      // If qualified to purchase, require wasOfferMade
+      if (strict && submission.qualificationStatus === 'qualified_to_purchase' && 
+          (submission.wasOfferMade === undefined || submission.wasOfferMade === null)) {
         return 'Please indicate if an offer was made'
       }
-      // Only require whyDidntMoveForward if offer was made AND we're in strict mode
-      if (strict && submission.wasOfferMade && !submission.whyDidntMoveForward) {
+      // If offer was made, require whyDidntMoveForward
+      if (strict && submission.qualificationStatus === 'qualified_to_purchase' && 
+          submission.wasOfferMade && !submission.whyDidntMoveForward) {
         return 'Please provide a reason why the prospect didn\'t move forward'
       }
+      // If offer was NOT made, require whyNoOffer
+      if (strict && submission.qualificationStatus === 'qualified_to_purchase' && 
+          submission.wasOfferMade === false && !submission.whyNoOffer) {
+        return 'Please provide a reason why no offer was made'
+      }
+      // If downsell opportunity, require downsellOpportunity
+      if (strict && submission.qualificationStatus === 'downsell_opportunity' && !submission.downsellOpportunity) {
+        return 'Please select a downsell opportunity'
+      }
+      // If disqualified, require disqualificationReason
+      if (strict && submission.qualificationStatus === 'disqualified' && !submission.disqualificationReason) {
+        return 'Please provide a disqualification reason'
+      }
       // Only require nurture type if follow-up is scheduled AND we're in strict mode
-      // Note: follow-up date is no longer required
       if (strict && submission.followUpScheduled && !submission.nurtureType) {
         return 'Please select nurture type for follow-up'
       }
@@ -48,11 +66,24 @@ export function validatePCNSubmission(
       if (strict && (!submission.cashCollected || submission.cashCollected <= 0)) {
         return 'Please enter the cash collected amount'
       }
+      // In strict mode, require paymentPlanOrPIF
+      if (strict && !submission.paymentPlanOrPIF) {
+        return 'Please indicate if this is a payment plan or paid in full'
+      }
+      // If payment plan, require totalPrice and numberOfPayments
+      if (strict && submission.paymentPlanOrPIF === 'payment_plan') {
+        if (!submission.totalPrice || submission.totalPrice <= 0) {
+          return 'Please enter the total price for the payment plan'
+        }
+        if (!submission.numberOfPayments || submission.numberOfPayments <= 0) {
+          return 'Please enter the number of payments'
+        }
+      }
       break
 
     case 'no_show':
-      // In strict mode, require noShowCommunicative
-      if (strict && (submission.noShowCommunicative === undefined || submission.noShowCommunicative === null)) {
+      // In strict mode, require noShowCommunicative (now a string)
+      if (strict && !submission.noShowCommunicative) {
         return 'Please indicate if the no-show was communicative'
       }
       break
@@ -139,15 +170,18 @@ export async function submitPCN({
     if (submission.callOutcome === 'showed') {
       Object.assign(updateData, {
         firstCallOrFollowUp: submission.firstCallOrFollowUp || null,
+        qualificationStatus: submission.qualificationStatus || null,
         wasOfferMade: submission.wasOfferMade ?? null,
         whyDidntMoveForward: submission.whyDidntMoveForward || null,
         notMovingForwardNotes: submission.notMovingForwardNotes || null,
+        whyNoOffer: submission.whyNoOffer || null,
+        whyNoOfferNotes: submission.whyNoOfferNotes || null,
+        downsellOpportunity: submission.downsellOpportunity || null,
         objectionType: submission.objectionType || null,
         objectionNotes: submission.objectionNotes || null,
         followUpScheduled: submission.followUpScheduled ?? false,
         followUpDate: null, // No longer required - removed from form
         nurtureType: submission.nurtureType || null,
-        qualificationStatus: submission.qualificationStatus || null,
         disqualificationReason: submission.disqualificationReason || null
       })
     }
@@ -156,14 +190,18 @@ export async function submitPCN({
       Object.assign(updateData, {
         signedNotes: submission.signedNotes || null,
         cashCollected: submission.cashCollected || null,
-        qualificationStatus: 'qualified'
+        paymentPlanOrPIF: submission.paymentPlanOrPIF || null,
+        totalPrice: submission.totalPrice || null,
+        numberOfPayments: submission.numberOfPayments || null,
+        qualificationStatus: 'qualified_to_purchase' // Signed means qualified
       })
     }
 
     if (submission.callOutcome === 'no_show') {
       Object.assign(updateData, {
-        noShowCommunicative: submission.noShowCommunicative ?? null,
-        noShowCommunicativeNotes: submission.noShowCommunicativeNotes || null
+        noShowCommunicative: submission.noShowCommunicative || null, // Now a string
+        noShowCommunicativeNotes: submission.noShowCommunicativeNotes || null,
+        didCallAndText: submission.didCallAndText ?? null
       })
     }
 
@@ -177,6 +215,36 @@ export async function submitPCN({
     const appointmentDatabaseId = existingAppointment.id
     const externalAppointmentId = existingAppointment.ghlAppointmentId ?? appointmentId
 
+    // Get previous PCN data for changelog
+    const previousData = await prisma.appointment.findUnique({
+      where: { id: appointmentDatabaseId },
+      select: {
+        outcome: true,
+        firstCallOrFollowUp: true,
+        qualificationStatus: true,
+        wasOfferMade: true,
+        whyDidntMoveForward: true,
+        notMovingForwardNotes: true,
+        whyNoOffer: true,
+        whyNoOfferNotes: true,
+        downsellOpportunity: true,
+        disqualificationReason: true,
+        followUpScheduled: true,
+        nurtureType: true,
+        cashCollected: true,
+        paymentPlanOrPIF: true,
+        totalPrice: true,
+        numberOfPayments: true,
+        signedNotes: true,
+        noShowCommunicative: true,
+        noShowCommunicativeNotes: true,
+        didCallAndText: true,
+        cancellationReason: true,
+        cancellationNotes: true,
+        notes: true
+      }
+    })
+
     const updatedAppointment = await prisma.appointment.update({
       where: { id: appointmentDatabaseId },
       data: updateData,
@@ -185,6 +253,34 @@ export async function submitPCN({
         closer: { select: { id: true, name: true, commissionRole: true, customCommissionRate: true } }
       }
     })
+
+    // Log PCN change
+    const { logPCNCreation, logPCNUpdate, extractPCNDataFromAppointment } = await import('./pcn-changelog')
+    const previousPCNData = previousData ? extractPCNDataFromAppointment(previousData) : null
+    const newPCNData = extractPCNDataFromAppointment(updatedAppointment)
+
+    if (previousPCNData && previousPCNData.callOutcome) {
+      // Update
+      await logPCNUpdate(
+        appointmentDatabaseId,
+        companyId,
+        previousPCNData,
+        newPCNData,
+        actorUserId,
+        actorName,
+        actorUserId ? 'manual' : 'system'
+      )
+    } else {
+      // Creation
+      await logPCNCreation(
+        appointmentDatabaseId,
+        companyId,
+        newPCNData,
+        actorUserId,
+        actorName,
+        actorUserId ? 'manual' : 'system'
+      )
+    }
 
     if (submission.callOutcome === 'signed' && updatedAppointment.contact?.email) {
       try {

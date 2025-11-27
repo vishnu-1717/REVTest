@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/slack-pcn-notifications",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/weekly-slack-report",
+      "schedule": "0 9 * * 1"
     }
   ]
 }

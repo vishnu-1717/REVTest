@@ -17,46 +17,72 @@ export type NurtureType =
   | 'budget'
   | 'other'
 
+export type PaymentPlanOrPIF = 'payment_plan' | 'pif'
+
 export type QualificationStatus = 
-  | 'qualified'
+  | 'qualified_to_purchase'
+  | 'downsell_opportunity'
   | 'disqualified'
-  | 'pending'
+
+export type WhyNoOffer = 
+  | 'Not a decision maker'
+  | 'Budget'
+  | 'Timeline'
+
+export type NoShowCommunicative = 
+  | 'communicative_up_to_call'
+  | 'communicative_rescheduled'
+  | 'not_communicative'
 
 // PCN Submission payload
 export interface PCNSubmission {
   // Required for all outcomes
   callOutcome: CallOutcome
   
+  // For "signed" outcome
+  paymentPlanOrPIF?: PaymentPlanOrPIF
+  totalPrice?: number // Total revenue for payment plans
+  numberOfPayments?: number // How many payments
+  signedNotes?: string
+  cashCollected?: number
+  
   // For "showed" outcome
   firstCallOrFollowUp?: FirstCallOrFollowUp
   wasOfferMade?: boolean
   
-  // If didn't move forward
-  whyDidntMoveForward?: string
+  // Qualification status
+  qualificationStatus?: QualificationStatus
+  downsellOpportunity?: string // Company-configurable downsell options
+  
+  // If offer made but didn't move forward
+  whyDidntMoveForward?: string // "Cash On Hand", "Partner Objection", "Fear/Uncertainty"
   notMovingForwardNotes?: string
   objectionType?: string
   objectionNotes?: string
+  
+  // If offer NOT made
+  whyNoOffer?: WhyNoOffer
+  whyNoOfferNotes?: string
+  
+  // Disqualified
+  disqualificationReason?: string
   
   // Follow-up scheduling
   followUpScheduled?: boolean
   followUpDate?: string // Deprecated - no longer required
   nurtureType?: string // Now accepts any string value (redzone, short_term, long_term, etc.)
   
-  // Qualification
-  qualificationStatus?: QualificationStatus
-  disqualificationReason?: string
-  
-  // For "signed" outcome
-  signedNotes?: string
-  cashCollected?: number
-  
   // For "no_show" outcome
-  noShowCommunicative?: boolean
+  noShowCommunicative?: NoShowCommunicative
   noShowCommunicativeNotes?: string
+  didCallAndText?: boolean // Optional tracking
   
   // For "cancelled" outcome
-  cancellationReason?: string
+  cancellationReason?: string // Updated options from decision tree
   cancellationNotes?: string
+  
+  // For "rescheduled" outcome
+  rescheduledTo?: string // ISO date string
   
   // General notes
   notes?: string
@@ -90,10 +116,19 @@ export interface PCNAppointmentData {
   disqualificationReason: string | null
   signedNotes: string | null
   cashCollected: number | null
-  noShowCommunicative: boolean | null
+  paymentPlanOrPIF: string | null
+  totalPrice: number | null
+  numberOfPayments: number | null
+  downsellOpportunity: string | null
+  whyNoOffer: string | null
+  whyNoOfferNotes: string | null
+  noShowCommunicative: string | null
   noShowCommunicativeNotes: string | null
+  didCallAndText: boolean | null
   cancellationReason: string | null
   cancellationNotes: string | null
+  rescheduledTo: string | null
+  rescheduledFrom: string | null
   notes: string | null
 }
 
@@ -177,16 +212,35 @@ export interface CompletedPCNsResponse {
 
 // Option lists for dropdowns
 export const PCN_OPTIONS = {
+  paymentPlanOrPIF: [
+    'payment_plan',
+    'pif'
+  ] as const,
+  
   whyDidntMoveForward: [
-    'Price objection',
-    'Need to think about it',
-    'Timing not right',
-    'Need to discuss with partner/spouse',
-    'Budget concerns',
-    'Comparing options',
-    'Technical concerns',
+    'Cash On Hand',
+    'Partner Objection',
+    'Fear/Uncertainty',
     'Other'
   ],
+  
+  whyNoOffer: [
+    'Not a decision maker',
+    'Budget',
+    'Timeline'
+  ] as const,
+  
+  noShowCommunicative: [
+    'communicative_up_to_call',
+    'communicative_rescheduled',
+    'not_communicative'
+  ] as const,
+  
+  qualificationStatus: [
+    'qualified_to_purchase',
+    'downsell_opportunity',
+    'disqualified'
+  ] as const,
   
   objectionTypes: [
     'Price',
@@ -199,33 +253,27 @@ export const PCN_OPTIONS = {
   ],
   
   nurtureTypes: [
-    'Not qualified yet',
-    'Thinking it over',
-    'Timing issue',
-    'Budget not ready',
-    'Waiting on decision maker',
+    'Red Zone',
+    'Short Term Nurture',
+    'Long Term Nurture',
     'Other'
   ],
   
   cancellationReasons: [
-    'Prospect initiated',
-    'No longer interested',
-    'Found alternative solution',
-    'Budget changed',
-    'Timing changed',
-    'No response to reschedule attempts',
-    'Duplicate booking',
-    'Other'
+    'Scheduling Conflict',
+    'Unresponsive',
+    'Budget/Decision Maker',
+    'Product Not Good Fit',
+    'Other',
+    'Lost Interest',
+    'Self Cancellation'
   ],
   
   disqualificationReasons: [
-    'Not qualified (budget)',
-    'Not qualified (authority)',
-    'Not qualified (need)',
-    'Not qualified (timing)',
-    'Wrong fit for service',
-    'Competitor/existing solution',
-    'Tire kicker',
+    'Budget Constraint',
+    'Authority Constraint',
+    'Poor Fit',
+    'Wrong Timing',
     'Other'
   ]
 }

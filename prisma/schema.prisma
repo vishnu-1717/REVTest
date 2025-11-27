@@ -45,9 +45,20 @@ model Company {
   inviteCode           String?   @unique
 
   // GHL Integration
+  // OLD: Direct API key integration (keep for migration period)
   ghlApiKey        String?
   ghlLocationId    String?
   ghlWebhookSecret String?
+  
+  // NEW: Marketplace OAuth integration
+  ghlOAuthAccessToken   String?  // Encrypted
+  ghlOAuthRefreshToken   String?  // Encrypted
+  ghlOAuthExpiresAt      DateTime?
+  ghlAppInstalledAt      DateTime?
+  ghlAppUninstalledAt    DateTime?
+  ghlMarketplaceClientId String?  // Your marketplace app client ID
+  ghlMarketplaceWebhookSecret String? // Webhook signing secret (per-installation)
+  
   timezone         String  @default("UTC")
 
   // Attribution Strategy
@@ -59,6 +70,20 @@ model Company {
 
   useCalendarsForAttribution Boolean @default(false)
   // For "calendars" strategy: enable calendar categorization
+
+  // PCN Configuration
+  downsellOpportunities Json? // Array of company-specific downsell options
+
+  // Zoom Integration
+  zoomAccountId        String?
+  zoomClientId         String?
+  zoomClientSecret     String?  // Encrypted
+  zoomAccessToken      String?  // Encrypted
+  zoomRefreshToken     String?  // Encrypted
+  zoomTokenExpiresAt   DateTime?
+  zoomConnectedAt      DateTime?
+  zoomWebhookSecret    String?
+  zoomAutoSubmitPCN    Boolean  @default(false) // Auto-submit PCN from AI analysis
 
   // Slack Integration
   slackWorkspaceId   String?
@@ -85,6 +110,8 @@ model Company {
   UnmatchedPayment UnmatchedPayment[]
   calendars        Calendar[]
   slackMessages    SlackMessage[]
+  pcnChangelogs    PCNChangelog[]
+  aiQueries        AIQuery[]
 
   @@index([email])
 }
@@ -203,6 +230,8 @@ model User {
   AppointmentsAsSetter     Appointment[]   @relation("SetterAppointments")
   assignedCalendars        Calendar[]
   pcnSubmittedAppointments Appointment[]   @relation("PCNSubmissions")
+  pcnChangelogs            PCNChangelog[]
+  aiQueries                AIQuery[]
 
   @@index([companyId])
   @@index([email])
@@ -319,7 +348,7 @@ model Appointment {
   notMovingForwardNotes String?  @db.Text
 
   // No-show specific
-  noShowCommunicative      Boolean?
+  noShowCommunicative      String? // "communicative_up_to_call" | "communicative_rescheduled" | "not_communicative"
   noShowCommunicativeNotes String?  @db.Text
 
   // Cancellation specific
@@ -328,6 +357,28 @@ model Appointment {
 
   // Signed specific
   signedNotes String? @db.Text
+  paymentPlanOrPIF String? // "payment_plan" | "pif" (paid in full)
+  totalPrice Float? // Total revenue for payment plans
+  numberOfPayments Int? // How many payments
+
+  // Zoom Integration
+  zoomMeetingId       String?
+  zoomMeetingUuid     String?
+  zoomTranscript      String?  @db.Text
+  zoomTranscriptAnalyzedAt DateTime?
+
+  // SHOWED outcome - Additional fields
+  downsellOpportunity String? // Company-configurable downsell options
+  whyNoOffer String? // "Not a decision maker" | "Budget" | "Timeline"
+  whyNoOfferNotes String? @db.Text
+
+  // NO SHOW fields (updated from boolean to string)
+  // noShowCommunicative changed from Boolean? to String? below
+  didCallAndText Boolean? // Optional tracking
+
+  // RESCHEDULED tracking
+  rescheduledTo DateTime? // New scheduled time
+  rescheduledFrom DateTime? // Original scheduled time
 
   // Appointment inclusion flag for metrics
   // 0 or null = don't count (superseded), 1 = first countable, 2+ = follow-up
@@ -351,6 +402,7 @@ model Appointment {
   @@index([setterId])
   @@index([status])
   @@index([ghlAppointmentId])
+  PCNChangelog PCNChangelog[]
   @@index([calendarId])
   @@index([attributionSource])
   @@index([pcnSubmitted])
@@ -359,6 +411,52 @@ model Appointment {
   @@index([contactId, scheduledAt])
   // Compound index for pending PCN queries - optimizes WHERE companyId + pcnSubmitted + status + scheduledAt
   @@index([companyId, pcnSubmitted, status, scheduledAt])
+}
+
+model PCNChangelog {
+  id            String    @id @default(cuid())
+  appointmentId String
+  companyId     String
+  action        String    // "created" | "updated" | "ai_generated" | "reviewed" | "approved" | "rejected"
+  actorUserId   String?   // User who made the change (null for AI/system)
+  actorName     String?   // Name of actor (for AI/system actions)
+  changes       Json?     // Object with field names and old/new values
+  previousData  Json?     // Full PCN data before change
+  newData       Json?     // Full PCN data after change
+  notes         String?   @db.Text // Optional notes about the change
+  source        String?   // "manual" | "ai" | "slack" | "zoom" | "system"
+  createdAt     DateTime  @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actor       User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([companyId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([companyId, appointmentId, createdAt])
+}
+
+model AIQuery {
+  id            String    @id @default(cuid())
+  companyId     String
+  userId        String?
+  query         String    @db.Text
+  intent        String?   // "metrics" | "semantic_search" | "sql_query" | "insights"
+  answer        String?   @db.Text
+  sql           String?   @db.Text
+  sources       Json?     // Array of appointment IDs and relevance scores
+  data          Json?     // Query results data
+  createdAt     DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([companyId, createdAt])
 }
 
 model CommissionRole {
