@@ -87,6 +87,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Log the redirect URI being used for debugging
+    console.log('[GHL OAuth] Token exchange request:', {
+      redirectUri,
+      clientId: clientId.substring(0, 10) + '...', // Log partial client ID for debugging
+      hasCode: !!code,
+      hasState: !!state
+    })
+
     // Exchange code for tokens
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
@@ -104,9 +112,32 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
-      console.error(`[GHL OAuth] Token exchange failed: ${tokenResponse.status} ${errorText}`)
+      let errorMessage = 'token_exchange_failed'
+      
+      // Try to parse error response for more details
+      try {
+        const errorJson = JSON.parse(errorText)
+        errorMessage = errorJson.error || errorJson.message || errorMessage
+        console.error(`[GHL OAuth] Token exchange failed: ${tokenResponse.status}`, {
+          error: errorMessage,
+          errorDescription: errorJson.error_description,
+          redirectUri,
+          fullError: errorJson
+        })
+      } catch {
+        console.error(`[GHL OAuth] Token exchange failed: ${tokenResponse.status} ${errorText}`, {
+          redirectUri,
+          rawError: errorText
+        })
+      }
+      
+      // Include more specific error in URL if possible
+      const errorParam = errorMessage.includes('redirect_uri') 
+        ? 'redirect_uri_mismatch' 
+        : errorMessage
+      
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/integrations/ghl/setup?error=token_exchange_failed`
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/integrations/ghl/setup?error=${encodeURIComponent(errorParam)}&details=${encodeURIComponent(errorText.substring(0, 200))}`
       )
     }
 

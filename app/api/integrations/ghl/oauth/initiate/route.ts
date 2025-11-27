@@ -69,6 +69,13 @@ export async function GET(request: NextRequest) {
     const redirectUri = process.env.GHL_OAUTH_REDIRECT_URI || 
       `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/crm/callback`
     
+    // Log redirect URI for debugging (critical - must match exactly in GHL app settings)
+    console.log('[GHL OAuth] Initiating OAuth flow:', {
+      redirectUri,
+      clientId: clientId ? clientId.substring(0, 10) + '...' : 'missing',
+      companyId: result.companyId
+    })
+    
     if (!clientId) {
       return NextResponse.json(
         { error: 'GHL Marketplace Client ID not configured' },

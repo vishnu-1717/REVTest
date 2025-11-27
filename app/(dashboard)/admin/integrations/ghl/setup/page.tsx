@@ -48,13 +48,41 @@ const withViewAs = (url: string) => {
         const params = new URLSearchParams(window.location.search)
         const success = params.get('success')
         const error = params.get('error')
+        const details = params.get('details')
         
         if (success === 'true') {
           alert('✅ GHL connected successfully!')
           // Clean URL
           window.history.replaceState({}, '', window.location.pathname)
         } else if (error) {
-          alert(`❌ GHL connection failed: ${decodeURIComponent(error)}`)
+          const decodedError = decodeURIComponent(error)
+          let errorMessage = `❌ GHL connection failed: ${decodedError}`
+          
+          // Provide helpful guidance for common errors
+          if (decodedError === 'redirect_uri_mismatch' || decodedError.includes('redirect_uri')) {
+            const baseUrl = window.location.origin
+            const expectedUri = `${baseUrl}/api/integrations/crm/callback`
+            errorMessage = `❌ Redirect URI Mismatch\n\n` +
+              `The redirect URI in your GHL Marketplace app settings must EXACTLY match:\n\n` +
+              `${expectedUri}\n\n` +
+              `Please check:\n` +
+              `1. Go to your GHL Marketplace app settings\n` +
+              `2. Find "OAuth Configuration" or "Redirect URI"\n` +
+              `3. Make sure it matches EXACTLY (including https/http, no trailing slash)\n` +
+              `4. Save and try again`
+          } else if (decodedError === 'token_exchange_failed') {
+            errorMessage = `❌ Token Exchange Failed\n\n` +
+              `The OAuth token exchange failed. Common causes:\n\n` +
+              `1. Redirect URI mismatch (most common)\n` +
+              `2. Authorization code expired (try again)\n` +
+              `3. Invalid client credentials\n\n` +
+              `Check your server logs for more details.`
+            if (details) {
+              errorMessage += `\n\nError details: ${decodeURIComponent(details).substring(0, 200)}`
+            }
+          }
+          
+          alert(errorMessage)
           // Clean URL
           window.history.replaceState({}, '', window.location.pathname)
         }
