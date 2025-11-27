@@ -17,11 +17,40 @@ export async function GET(request: NextRequest) {
     const locationId = searchParams.get('locationId') // GHL includes locationId in callback
     const error = searchParams.get('error')
 
-    // Handle OAuth errors
+    // Handle OAuth errors from GHL redirect
     if (error) {
-      console.error('[GHL OAuth] OAuth error:', error)
+      const errorDescription = searchParams.get('error_description')
+      const errorUri = searchParams.get('error_uri')
+      
+      console.error('[GHL OAuth] OAuth error from GHL redirect:', {
+        error,
+        errorDescription,
+        errorUri,
+        state,
+        locationId,
+        code: code ? 'present' : 'missing', // Log if code is present even with error
+        allParams: Object.fromEntries(searchParams.entries()),
+        fullUrl: request.url
+      })
+      
+      // Build error message with description if available
+      let errorMessage = error
+      if (errorDescription) {
+        errorMessage = `${error}: ${errorDescription}`
+      }
+      
+      // Provide specific guidance for invalid_request
+      if (error === 'invalid_request') {
+        console.error('[GHL OAuth] Invalid request - possible causes:', {
+          redirectUri: process.env.GHL_OAUTH_REDIRECT_URI || `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/crm/callback`,
+          clientId: process.env.GHL_MARKETPLACE_CLIENT_ID ? 'set' : 'missing',
+          clientSecret: process.env.GHL_MARKETPLACE_CLIENT_SECRET ? 'set' : 'missing',
+          note: 'Check: 1) Redirect URI matches exactly in GHL app settings, 2) Client ID/Secret are correct, 3) Scopes are valid, 4) All required parameters are present'
+        })
+      }
+      
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/integrations/ghl/setup?error=${encodeURIComponent(error)}`
+        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/admin/integrations/ghl/setup?error=${encodeURIComponent(errorMessage)}`
       )
     }
 
@@ -96,18 +125,20 @@ export async function GET(request: NextRequest) {
     })
 
     // Exchange code for tokens
+    // GHL requires application/x-www-form-urlencoded, not JSON
+    const params = new URLSearchParams()
+    params.append('client_id', clientId)
+    params.append('client_secret', clientSecret)
+    params.append('grant_type', 'authorization_code')
+    params.append('code', code)
+    params.append('redirect_uri', redirectUri)
+    
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: redirectUri
-      })
+      body: params.toString()
     })
 
     if (!tokenResponse.ok) {

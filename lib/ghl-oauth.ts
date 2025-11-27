@@ -127,17 +127,19 @@ export async function refreshGHLAccessToken(companyId: string): Promise<string |
       const decryptedRefreshToken = decrypt(company.ghlOAuthRefreshToken)
 
       // GHL OAuth token refresh endpoint
+      // GHL requires application/x-www-form-urlencoded, not JSON
+      const params = new URLSearchParams()
+      params.append('client_id', clientId)
+      params.append('client_secret', clientSecret)
+      params.append('grant_type', 'refresh_token')
+      params.append('refresh_token', decryptedRefreshToken)
+      
       const response = await fetch('https://services.leadconnectorhq.com/oauth/token', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
-        body: JSON.stringify({
-          client_id: clientId,
-          client_secret: clientSecret,
-          grant_type: 'refresh_token',
-          refresh_token: decryptedRefreshToken
-        })
+        body: params.toString()
       })
 
       if (!response.ok) {
