@@ -60,20 +60,28 @@ export default function CategorizeCalendarsPage() {
         method: 'POST'
       })
       
+      const data = await res.json()
+      
       if (!res.ok) {
-        alert('Failed to sync calendars')
+        const errorMsg = data.error || 'Failed to sync calendars'
+        const details = data.details ? `\n\nDetails: ${data.details}` : ''
+        alert(`❌ ${errorMsg}${details}`)
         return
       }
       
-      const data = await res.json()
       console.log(`Synced ${data.count} calendars`)
       
       // Refresh the list
       await fetchCalendars()
-      alert(`✅ Synced ${data.count} calendars successfully!`)
-    } catch (error) {
+      
+      if (data.count === 0) {
+        alert(data.message || '⚠️ No calendars synced. This may indicate an API issue. Check server logs for details.')
+      } else {
+        alert(`✅ Synced ${data.count} calendars successfully!`)
+      }
+    } catch (error: any) {
       console.error('Failed to sync calendars:', error)
-      alert('Failed to sync calendars')
+      alert(`❌ Failed to sync calendars: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
     } finally {
       setSyncing(false)
     }

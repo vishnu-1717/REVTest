@@ -36,7 +36,8 @@ export class GHLClient {
   private accessToken?: string
   private companyId?: string
   private locationId?: string
-  private baseUrl = 'https://rest.gohighlevel.com/v1'
+  // OAuth tokens use v2 API, API keys use v1 API
+  private baseUrl: string
   private useOAuth: boolean
   
   /**
@@ -49,15 +50,17 @@ export class GHLClient {
   constructor(companyId: string, locationId: string | undefined, useOAuth: true)
   constructor(apiKeyOrCompanyId: string, locationId?: string, useOAuth?: boolean) {
     if (useOAuth) {
-      // OAuth mode
+      // OAuth mode - use v2 API base URL
       this.companyId = apiKeyOrCompanyId
       this.locationId = locationId
       this.useOAuth = true
+      this.baseUrl = 'https://services.leadconnectorhq.com'
     } else {
-      // API key mode (backward compatibility)
+      // API key mode (backward compatibility) - use v1 API base URL
       this.apiKey = apiKeyOrCompanyId
       this.locationId = locationId
       this.useOAuth = false
+      this.baseUrl = 'https://rest.gohighlevel.com/v1'
     }
   }
 
@@ -94,17 +97,72 @@ export class GHLClient {
   private async makeRequest(url: string, options: RequestInit = {}): Promise<Response> {
     const token = await this.getAuthToken()
     
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Version': '2021-07-28',
-      'Content-Type': 'application/json',
-      ...options.headers
+    // OAuth tokens may require a different API version than API keys
+    // GHL's newer API versions work better with OAuth tokens
+    // Try multiple versions if we get "new API token" error
+    const apiVersions = this.useOAuth 
+      ? ['2024-06-11', '2023-10-25', '2021-07-28'] // Try newer versions first for OAuth
+      : ['2021-07-28'] // API keys use older version
+    
+    let lastResponse: Response | null = null
+    let lastError: string | null = null
+    
+    for (const apiVersion of apiVersions) {
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${token}`,
+        'Version': apiVersion,
+        'Content-Type': 'application/json',
+        ...(options.headers as Record<string, string> || {})
+      }
+
+      // For OAuth, try with Location-Id header if available
+      if (this.useOAuth && this.locationId) {
+        headers['Location-Id'] = this.locationId
+      }
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers
+        })
+
+        // If successful, return immediately
+        if (response.ok) {
+          if (apiVersion !== apiVersions[0]) {
+            console.log(`[GHL API] Success with API version ${apiVersion}`)
+          }
+          return response
+        }
+
+        // Check error message
+        const errorText = await response.clone().text().catch(() => '')
+        lastResponse = response
+        lastError = errorText
+
+        // If it's "new API token" error, try next version
+        if (response.status === 401 && 
+            (errorText.includes('Switch to the new API token') || 
+             errorText.includes('new API token') ||
+             errorText.includes('Unauthorized'))) {
+          console.log(`[GHL API] Got 401 with version ${apiVersion}, trying next version...`)
+          continue // Try next API version
+        }
+
+        // For other errors, return the response
+        return response
+      } catch (error: any) {
+        console.warn(`[GHL API] Error with version ${apiVersion}:`, error.message)
+        continue
+      }
     }
 
-    return fetch(url, {
-      ...options,
-      headers
-    })
+    // If all versions failed, return the last response or throw
+    if (lastResponse) {
+      console.error(`[GHL API] All API versions failed. Last error: ${lastError}`)
+      return lastResponse
+    }
+
+    throw new Error('Failed to make API request after trying all versions')
   }
   
   // Validate API key or OAuth token by making a simple request
@@ -135,17 +193,35 @@ export class GHLClient {
   // Fetch all calendars
   // Note: GHL V1 API calendars endpoint may not exist - try multiple endpoint structures
   async getCalendars(): Promise<GHLCalendar[]> {
-    const endpoints = [
-      `${this.baseUrl}/calendars`,
-      `${this.baseUrl}/calendars/`,
-    ]
+    const endpoints = []
     
-    // If locationId is provided, also try location-specific endpoints
-    if (this.locationId) {
+    // For OAuth (v2 API), use different endpoint structure
+    if (this.useOAuth) {
+      // OAuth v2 API endpoints
+      if (this.locationId) {
+        endpoints.push(
+          `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
+          `${this.baseUrl}/calendars?locationId=${this.locationId}`
+        )
+      }
       endpoints.push(
-        `${this.baseUrl}/locations/${this.locationId}/calendars`,
-        `${this.baseUrl}/locations/${this.locationId}/calendars/`
+        `${this.baseUrl}/calendars/`,
+        `${this.baseUrl}/calendars`
       )
+    } else {
+      // API key (v1 API) - try multiple endpoint patterns
+      endpoints.push(
+        `${this.baseUrl}/calendars`,
+        `${this.baseUrl}/calendars/`,
+      )
+      
+      // If locationId is provided, also try location-specific endpoints
+      if (this.locationId) {
+        endpoints.push(
+          `${this.baseUrl}/locations/${this.locationId}/calendars`,
+          `${this.baseUrl}/locations/${this.locationId}/calendars/`
+        )
+      }
     }
     
     let lastError: any = null
@@ -194,19 +270,34 @@ export class GHLClient {
   async getUsers(): Promise<GHLUser[]> {
     const endpoints = []
     
-    // Try multiple endpoint patterns for users
-    if (this.locationId) {
+    // For OAuth (v2 API), use different endpoint structure
+    if (this.useOAuth) {
+      // OAuth v2 API endpoints
+      if (this.locationId) {
+        endpoints.push(
+          `${this.baseUrl}/users/?locationId=${this.locationId}`,
+          `${this.baseUrl}/users?locationId=${this.locationId}`
+        )
+      }
       endpoints.push(
-        `${this.baseUrl}/locations/${this.locationId}/users`,
-        `${this.baseUrl}/locations/${this.locationId}/users/`,
-        `${this.baseUrl}/users?locationId=${this.locationId}`
+        `${this.baseUrl}/users/`,
+        `${this.baseUrl}/users`
+      )
+    } else {
+      // API key (v1 API) - try multiple endpoint patterns
+      if (this.locationId) {
+        endpoints.push(
+          `${this.baseUrl}/locations/${this.locationId}/users`,
+          `${this.baseUrl}/locations/${this.locationId}/users/`,
+          `${this.baseUrl}/users?locationId=${this.locationId}`
+        )
+      }
+      
+      endpoints.push(
+        `${this.baseUrl}/users`,
+        `${this.baseUrl}/users/`
       )
     }
-    
-    endpoints.push(
-      `${this.baseUrl}/users`,
-      `${this.baseUrl}/users/`
-    )
     
     for (const url of endpoints) {
       try {

@@ -114,13 +114,21 @@ const withViewAs = (url: string) => {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/users'))
       const data = await res.json()
       if (data.success) {
-        setGhlUsers(data.users || [])
+        if (data.users && data.users.length > 0) {
+          setGhlUsers(data.users || [])
+          alert(`✅ Found ${data.users.length} GHL users`)
+        } else {
+          alert(data.message || '⚠️ No GHL users found. This may indicate an API issue. Check server logs for details.')
+          setGhlUsers([])
+        }
       } else {
-        alert(data.error || 'Failed to fetch GHL users')
+        const errorMsg = data.error || 'Failed to fetch GHL users'
+        const details = data.details ? `\n\nDetails: ${data.details}` : ''
+        alert(`❌ ${errorMsg}${details}`)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch GHL users:', error)
-      alert('Failed to fetch GHL users. Make sure GHL is configured.')
+      alert(`❌ Failed to fetch GHL users: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
     } finally {
       setLoadingGhlUsers(false)
     }
