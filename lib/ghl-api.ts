@@ -103,15 +103,21 @@ export class GHLClient {
       ...(options.headers as Record<string, string> || {})
     }
 
-    // For OAuth (v2 API), don't include Version header - it causes "version header is invalid" error
-    // For API keys (v1 API), include Version header
-    if (!this.useOAuth) {
+    // Determine API version based on endpoint and auth method
+    // OAuth v2 API requires Version header, but different endpoints use different versions
+    if (this.useOAuth) {
+      // OAuth v2 API - determine version from URL
+      if (url.includes('/calendars')) {
+        headers['Version'] = '2021-04-15' // Calendars endpoint uses 2021-04-15
+      } else if (url.includes('/users')) {
+        headers['Version'] = '2021-07-28' // Users endpoint uses 2021-07-28
+      } else {
+        // Default to 2021-07-28 for other endpoints
+        headers['Version'] = '2021-07-28'
+      }
+    } else {
+      // API key (v1 API) - always use 2021-07-28
       headers['Version'] = '2021-07-28'
-    }
-
-    // For OAuth, try with Location-Id header if available
-    if (this.useOAuth && this.locationId) {
-      headers['Location-Id'] = this.locationId
     }
 
     const response = await fetch(url, {
@@ -154,17 +160,20 @@ export class GHLClient {
     
     // For OAuth (v2 API), use different endpoint structure
     if (this.useOAuth) {
-      // OAuth v2 API endpoints
+      // OAuth v2 API endpoints - locationId is required as query parameter
       if (this.locationId) {
+        // Try with trailing slash first (documented format)
         endpoints.push(
           `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
           `${this.baseUrl}/calendars?locationId=${this.locationId}`
         )
+      } else {
+        // Try without locationId (may not work, but worth trying)
+        endpoints.push(
+          `${this.baseUrl}/calendars/`,
+          `${this.baseUrl}/calendars`
+        )
       }
-      endpoints.push(
-        `${this.baseUrl}/calendars/`,
-        `${this.baseUrl}/calendars`
-      )
     } else {
       // API key (v1 API) - try multiple endpoint patterns
       endpoints.push(
@@ -229,17 +238,20 @@ export class GHLClient {
     
     // For OAuth (v2 API), use different endpoint structure
     if (this.useOAuth) {
-      // OAuth v2 API endpoints
+      // OAuth v2 API endpoints - locationId is required as query parameter
       if (this.locationId) {
+        // Try with trailing slash first (documented format)
         endpoints.push(
           `${this.baseUrl}/users/?locationId=${this.locationId}`,
           `${this.baseUrl}/users?locationId=${this.locationId}`
         )
+      } else {
+        // Try without locationId (may not work, but worth trying)
+        endpoints.push(
+          `${this.baseUrl}/users/`,
+          `${this.baseUrl}/users`
+        )
       }
-      endpoints.push(
-        `${this.baseUrl}/users/`,
-        `${this.baseUrl}/users`
-      )
     } else {
       // API key (v1 API) - try multiple endpoint patterns
       if (this.locationId) {
