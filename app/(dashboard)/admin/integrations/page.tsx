@@ -133,7 +133,17 @@ export default function IntegrationsPage() {
 
   return (
     <div className="container mx-auto py-10 px-4">
-      <h1 className="text-3xl font-bold mb-8 text-slate-100">Integrations</h1>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 text-slate-100">Integrations</h1>
+          <p className="text-slate-400 text-sm">Connect and manage your third-party integrations</p>
+        </div>
+        <Link href="/admin/integrations/webhooks">
+          <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+            View Webhook Events
+          </Button>
+        </Link>
+      </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* GoHighLevel */}
