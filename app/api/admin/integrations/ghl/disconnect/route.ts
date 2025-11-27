@@ -23,6 +23,18 @@ export async function POST(request: NextRequest) {
     // Clear OAuth tokens
     await clearGHLOAuthTokens(companyId)
 
+    // Also clear API key credentials if they exist
+    await withPrisma(async (prisma) => {
+      await prisma.company.update({
+        where: { id: companyId },
+        data: {
+          ghlApiKey: null,
+          ghlLocationId: null,
+          ghlWebhookSecret: null
+        }
+      })
+    })
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error('[GHL Disconnect] Error:', error)
