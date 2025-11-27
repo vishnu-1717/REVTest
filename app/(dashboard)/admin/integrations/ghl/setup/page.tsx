@@ -191,7 +191,10 @@ const withViewAs = (url: string) => {
       })
       
       if (!res.ok) {
-        alert('Failed to save attribution settings')
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
+        const errorMessage = errorData.error || 'Failed to save attribution settings'
+        console.error('Attribution save error:', errorData)
+        alert(`Failed to save attribution settings: ${errorMessage}`)
         setSaving(false)
         return
       }

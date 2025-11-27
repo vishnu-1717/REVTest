@@ -15,38 +15,69 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const body = await request.json()
     const { 
       attributionStrategy, 
       attributionSourceField,
       useCalendarsForAttribution 
-    } = await request.json()
+    } = body
+    
+    console.log('[Attribution] Saving attribution settings:', {
+      companyId,
+      attributionStrategy,
+      attributionSourceField,
+      useCalendarsForAttribution
+    })
     
     // Validate strategy
     const validStrategies = ['ghl_fields', 'calendars', 'hyros', 'tags', 'none']
-    if (!validStrategies.includes(attributionStrategy)) {
+    if (!attributionStrategy || !validStrategies.includes(attributionStrategy)) {
+      console.error('[Attribution] Invalid strategy:', attributionStrategy)
       return NextResponse.json(
-        { error: 'Invalid attribution strategy' },
+        { error: `Invalid attribution strategy: ${attributionStrategy}. Must be one of: ${validStrategies.join(', ')}` },
+        { status: 400 }
+      )
+    }
+    
+    // Validate attributionSourceField for ghl_fields strategy
+    if (attributionStrategy === 'ghl_fields' && !attributionSourceField) {
+      console.error('[Attribution] Missing attributionSourceField for ghl_fields strategy')
+      return NextResponse.json(
+        { error: 'attributionSourceField is required when using ghl_fields strategy' },
         { status: 400 }
       )
     }
     
     // Update company
     await withPrisma(async (prisma) => {
+      const updateData: any = {
+        attributionStrategy,
+        useCalendarsForAttribution: attributionStrategy === 'calendars'
+      }
+      
+      // Only set attributionSourceField if using ghl_fields strategy
+      if (attributionStrategy === 'ghl_fields') {
+        updateData.attributionSourceField = attributionSourceField || 'contact.source'
+      } else {
+        updateData.attributionSourceField = null
+      }
+      
+      console.log('[Attribution] Updating company with data:', updateData)
+      
       return await prisma.company.update({
         where: { id: companyId },
-        data: {
-          attributionStrategy,
-          attributionSourceField: attributionStrategy === 'ghl_fields' 
-            ? attributionSourceField 
-            : null,
-          useCalendarsForAttribution: attributionStrategy === 'calendars'
-        }
+        data: updateData
       })
     })
     
+    console.log('[Attribution] Successfully saved attribution settings for company:', companyId)
     return NextResponse.json({ success: true })
     
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[Attribution] Error saving attribution settings:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to save attribution settings' },
+      { status: 500 }
+    )
   }
 }
