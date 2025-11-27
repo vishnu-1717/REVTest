@@ -144,9 +144,9 @@ export async function analyzeZoomRecording(
             // Store AI-generated PCN data in customFields for review
             customFields: {
               ...((appointment.customFields as Record<string, any>) || {}),
-              aiGeneratedPCN: pcnSubmission,
+              aiGeneratedPCN: pcnSubmission as any,
               aiGeneratedPCNAt: new Date().toISOString()
-            }
+            } as any
           }
         })
       })

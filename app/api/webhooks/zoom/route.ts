@@ -65,10 +65,10 @@ export async function POST(request: NextRequest) {
 
       if (!accountId) {
         console.error('[Zoom Webhook] No account_id in payload')
-        await withPrisma(async (prisma) => {
-          if (webhookEventId) {
-            await prisma.webhookEvent.update({
-              where: { id: webhookEventId },
+          await withPrisma(async (prisma) => {
+            if (webhookEventId) {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId as string },
               data: {
                 processed: true,
                 processedAt: new Date(),
@@ -91,10 +91,10 @@ export async function POST(request: NextRequest) {
 
       if (!company) {
         console.warn(`[Zoom Webhook] Company not found for accountId: ${accountId}`)
-        await withPrisma(async (prisma) => {
-          if (webhookEventId) {
-            await prisma.webhookEvent.update({
-              where: { id: webhookEventId },
+          await withPrisma(async (prisma) => {
+            if (webhookEventId) {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId as string },
               data: {
                 processed: true,
                 processedAt: new Date(),
@@ -116,10 +116,10 @@ export async function POST(request: NextRequest) {
 
       if (!meetingId) {
         console.error('[Zoom Webhook] No meeting ID in payload')
-        await withPrisma(async (prisma) => {
-          if (webhookEventId) {
-            await prisma.webhookEvent.update({
-              where: { id: webhookEventId },
+          await withPrisma(async (prisma) => {
+            if (webhookEventId) {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId as string },
               data: {
                 processed: true,
                 processedAt: new Date(),
@@ -168,10 +168,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Mark webhook event as processed
-      await withPrisma(async (prisma) => {
-        if (webhookEventId) {
-          await prisma.webhookEvent.update({
-            where: { id: webhookEventId },
+          await withPrisma(async (prisma) => {
+            if (webhookEventId) {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId as string },
             data: {
               processed: true,
               processedAt: new Date(),
@@ -186,10 +186,10 @@ export async function POST(request: NextRequest) {
       // Other event types - just log and acknowledge
       console.log(`[Zoom Webhook] Unhandled event type: ${body.event}`)
       
-      await withPrisma(async (prisma) => {
-        if (webhookEventId) {
-          await prisma.webhookEvent.update({
-            where: { id: webhookEventId },
+          await withPrisma(async (prisma) => {
+            if (webhookEventId) {
+              await prisma.webhookEvent.update({
+                where: { id: webhookEventId as string },
             data: {
               processed: true,
               processedAt: new Date()
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
     if (webhookEventId) {
       await withPrisma(async (prisma) => {
         await prisma.webhookEvent.update({
-          where: { id: webhookEventId },
+          where: { id: webhookEventId as string },
           data: {
             processed: true,
             processedAt: new Date(),

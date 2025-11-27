@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withPrisma } from '@/lib/db'
 import { submitPCN } from '@/lib/pcn-submission'
-import { PCNSubmission } from '@/types/pcn'
+import { PCNSubmission, NoShowCommunicative } from '@/types/pcn'
 
 const FIELD_MAP = {
   appointmentId: [
@@ -214,6 +214,24 @@ function normalizeQualificationStatus(
   if (lower.includes('qualified')) return 'qualified_to_purchase'
   if (lower.includes('disqual')) return 'disqualified'
   if (lower.includes('downsell')) return 'downsell_opportunity'
+  return undefined
+}
+
+function normalizeNoShowCommunicative(
+  value: unknown
+): NoShowCommunicative | undefined {
+  const text = normalizeString(value)
+  if (!text) return undefined
+  const lower = text.toLowerCase()
+  if (lower.includes('communicative') && lower.includes('rescheduled')) {
+    return 'communicative_rescheduled'
+  }
+  if (lower.includes('communicative') || lower.includes('yes') || lower === 'y') {
+    return 'communicative_up_to_call'
+  }
+  if (lower.includes('not communicative') || lower.includes('no') || lower === 'n') {
+    return 'not_communicative'
+  }
   return undefined
 }
 
@@ -461,30 +479,11 @@ export async function POST(request: NextRequest) {
         FIELD_MAP.noShowCommunicative
       )
 
-      if (rawNoShowCommunicative !== undefined) {
-        if (typeof rawNoShowCommunicative === 'string') {
-          const normalized = rawNoShowCommunicative.trim().toLowerCase()
-          if (!normalized) {
-            submission.noShowCommunicative = false
-          } else if (
-            ['yes', 'communicative', 'y'].includes(normalized) ||
-            normalized.startsWith('communicative')
-          ) {
-            submission.noShowCommunicative = true
-          } else if (
-            ['no', 'not communicative', 'n', 'non-communicative'].includes(normalized) ||
-            normalized.startsWith('not communicative')
-          ) {
-            submission.noShowCommunicative = false
-          } else {
-            submission.noShowCommunicative = parseBoolean(normalized) ?? false
-          }
-        } else {
-          submission.noShowCommunicative =
-            parseBoolean(rawNoShowCommunicative) ?? false
-        }
-      } else {
-        submission.noShowCommunicative = false
+      const noShowCommunicativeNormalized = normalizeNoShowCommunicative(
+        extractField(flattened, FIELD_MAP.noShowCommunicative)
+      )
+      if (noShowCommunicativeNormalized) {
+        submission.noShowCommunicative = noShowCommunicativeNormalized
       }
 
       if (canonicalOutcome === 'showed' && !submission.firstCallOrFollowUp) {
@@ -520,9 +519,7 @@ export async function POST(request: NextRequest) {
         submission.cancellationReason = 'Not specified'
       }
 
-      if (canonicalOutcome === 'no_show' && (submission.noShowCommunicative === undefined || submission.noShowCommunicative === null)) {
-        submission.noShowCommunicative = false
-      }
+      // noShowCommunicative is optional, so we don't set a default
 
       if (canonicalOutcome === 'signed' && (!submission.cashCollected || submission.cashCollected <= 0)) {
         // Try to extract from other fields
