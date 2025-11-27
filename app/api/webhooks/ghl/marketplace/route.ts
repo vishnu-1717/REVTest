@@ -120,9 +120,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`[GHL Marketplace Webhook] Found company: ${company.id} (${company.name})`)
 
-    // Route to appropriate handler based on event type
-    const eventType = body.type || body.event || ''
-    
     // Normalize webhook payload to match existing handler expectations
     const normalizedWebhook = normalizeMarketplaceWebhook(body, company.id)
 
