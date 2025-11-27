@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { getEffectiveCompanyId } from '@/lib/company-context'
 import { withPrisma } from '@/lib/db'
 import { getPCNChangelog } from '@/lib/pcn-changelog'
+import { Prisma } from '@prisma/client'
 
 /**
  * Get AI-generated PCNs pending review
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
           companyId,
           customFields: {
             path: ['aiGeneratedPCN'],
-            not: null
+            not: Prisma.JsonNull
           },
           pcnSubmitted: false
         },
