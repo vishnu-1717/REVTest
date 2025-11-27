@@ -97,72 +97,29 @@ export class GHLClient {
   private async makeRequest(url: string, options: RequestInit = {}): Promise<Response> {
     const token = await this.getAuthToken()
     
-    // OAuth tokens may require a different API version than API keys
-    // GHL's newer API versions work better with OAuth tokens
-    // Try multiple versions if we get "new API token" error
-    const apiVersions = this.useOAuth 
-      ? ['2024-06-11', '2023-10-25', '2021-07-28'] // Try newer versions first for OAuth
-      : ['2021-07-28'] // API keys use older version
-    
-    let lastResponse: Response | null = null
-    let lastError: string | null = null
-    
-    for (const apiVersion of apiVersions) {
-      const headers: Record<string, string> = {
-        'Authorization': `Bearer ${token}`,
-        'Version': apiVersion,
-        'Content-Type': 'application/json',
-        ...(options.headers as Record<string, string> || {})
-      }
-
-      // For OAuth, try with Location-Id header if available
-      if (this.useOAuth && this.locationId) {
-        headers['Location-Id'] = this.locationId
-      }
-
-      try {
-        const response = await fetch(url, {
-          ...options,
-          headers
-        })
-
-        // If successful, return immediately
-        if (response.ok) {
-          if (apiVersion !== apiVersions[0]) {
-            console.log(`[GHL API] Success with API version ${apiVersion}`)
-          }
-          return response
-        }
-
-        // Check error message
-        const errorText = await response.clone().text().catch(() => '')
-        lastResponse = response
-        lastError = errorText
-
-        // If it's "new API token" error, try next version
-        if (response.status === 401 && 
-            (errorText.includes('Switch to the new API token') || 
-             errorText.includes('new API token') ||
-             errorText.includes('Unauthorized'))) {
-          console.log(`[GHL API] Got 401 with version ${apiVersion}, trying next version...`)
-          continue // Try next API version
-        }
-
-        // For other errors, return the response
-        return response
-      } catch (error: any) {
-        console.warn(`[GHL API] Error with version ${apiVersion}:`, error.message)
-        continue
-      }
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string> || {})
     }
 
-    // If all versions failed, return the last response or throw
-    if (lastResponse) {
-      console.error(`[GHL API] All API versions failed. Last error: ${lastError}`)
-      return lastResponse
+    // For OAuth (v2 API), don't include Version header - it causes "version header is invalid" error
+    // For API keys (v1 API), include Version header
+    if (!this.useOAuth) {
+      headers['Version'] = '2021-07-28'
     }
 
-    throw new Error('Failed to make API request after trying all versions')
+    // For OAuth, try with Location-Id header if available
+    if (this.useOAuth && this.locationId) {
+      headers['Location-Id'] = this.locationId
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers
+    })
+
+    return response
   }
   
   // Validate API key or OAuth token by making a simple request
