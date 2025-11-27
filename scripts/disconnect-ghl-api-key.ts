@@ -47,11 +47,13 @@ async function disconnectApiKey(companyName: string) {
     }
 
     // Clear only API key fields, keep OAuth intact
+    // IMPORTANT: Preserve ghlLocationId if OAuth is connected (OAuth needs it for API calls)
     await prisma.company.update({
       where: { id: company.id },
       data: {
         ghlApiKey: null,
-        ghlLocationId: null,
+        // Only clear locationId if OAuth is NOT connected (OAuth needs it)
+        ...(company.ghlOAuthAccessToken ? {} : { ghlLocationId: null }),
         ghlWebhookSecret: null
       }
     })

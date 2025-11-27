@@ -28,23 +28,46 @@ export async function GET(request: NextRequest) {
     }
     
     // Fetch users from GHL
-    const users = await ghl.getUsers()
+    let users: any[] = []
+    try {
+      users = await ghl.getUsers()
+      console.log(`[GHL Users] Fetched ${users.length} users from GHL API for company ${companyId}`)
+    } catch (apiError: any) {
+      console.error('[GHL Users] Error fetching users from GHL API:', apiError)
+      return NextResponse.json({ 
+        error: `Failed to fetch users from GHL: ${apiError.message || 'Unknown error'}`,
+        details: 'Check server logs for more details. This may indicate an OAuth token issue or API endpoint change.'
+      }, { status: 500 })
+    }
     
-    console.log(`Fetched ${users.length} GHL users for company ${companyId}`)
+    if (users.length === 0) {
+      console.warn(`[GHL Users] No users returned from GHL API. This could mean:`)
+      console.warn(`  - GHL API endpoint structure has changed`)
+      console.warn(`  - OAuth token lacks required scopes`)
+      console.warn(`  - No users exist in GHL account`)
+      console.warn(`  - Location ID is incorrect`)
+    }
     
     return NextResponse.json({
       success: true,
       users: users.map((u: any) => ({
         id: u.id,
-        name: u.name || u.firstName + ' ' + u.lastName || 'Unknown',
+        name: u.name || (u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.firstName || u.lastName || 'Unknown'),
         email: u.email || '',
         role: u.role || ''
-      }))
+      })),
+      count: users.length,
+      message: users.length === 0 
+        ? 'No users found. This may indicate an API issue or no users exist in GHL.'
+        : undefined
     })
     
   } catch (error: any) {
-    console.error('GHL users fetch error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('[GHL Users] Unexpected error:', error)
+    return NextResponse.json({ 
+      error: error.message || 'Unexpected error during user fetch',
+      details: 'Check server logs for more details'
+    }, { status: 500 })
   }
 }
 
