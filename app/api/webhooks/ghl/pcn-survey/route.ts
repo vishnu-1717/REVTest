@@ -211,9 +211,9 @@ function normalizeQualificationStatus(
   const text = normalizeString(value)
   if (!text) return undefined
   const lower = text.toLowerCase()
-  if (lower.includes('qualified')) return 'qualified'
+  if (lower.includes('qualified')) return 'qualified_to_purchase'
   if (lower.includes('disqual')) return 'disqualified'
-  if (lower.includes('pending')) return 'pending'
+  if (lower.includes('downsell')) return 'downsell_opportunity'
   return undefined
 }
 
