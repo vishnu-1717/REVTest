@@ -46,14 +46,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
     }
 
-    console.log('[GHL Marketplace Webhook] Received webhook:', body.type || body.event)
+    // Extract event type as string
+    const eventType = typeof body.type === 'string' 
+      ? body.type 
+      : typeof (body as any).event === 'string'
+      ? (body as any).event
+      : 'unknown'
+
+    console.log('[GHL Marketplace Webhook] Received webhook:', eventType)
 
     // Log webhook event
     const eventResult = await withPrisma(async (prisma) => {
       const event = await prisma.webhookEvent.create({
         data: {
           processor: 'ghl_marketplace',
-          eventType: body.type || body.event || 'unknown',
+          eventType: eventType,
           payload: body as any,
           processed: false
         }
