@@ -610,9 +610,8 @@ const withViewAs = (url: string) => {
                     </div>
                   </div>
                 </details>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          )}
           
           {!oauthConnected && connectionMethod === 'api_key' && (
             <Button 

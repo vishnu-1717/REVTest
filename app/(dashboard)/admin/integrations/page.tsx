@@ -12,18 +12,21 @@ export default async function IntegrationsPage() {
   const referer = headersList.get('referer') || ''
   const companyId = await getEffectiveCompanyId(referer)
   
-  // Check Slack connection status
+  // Check integration connection statuses
   const company = await withPrisma(async (prisma) => {
     return await prisma.company.findUnique({
       where: { id: companyId },
       select: {
         slackConnectedAt: true,
         slackWorkspaceName: true,
+        zoomConnectedAt: true,
+        zoomAccountId: true,
       },
     })
   })
   
   const slackConnected = !!company?.slackConnectedAt
+  const zoomConnected = !!(company?.zoomConnectedAt && company?.zoomAccountId)
   
   return (
     <div className="container mx-auto py-10">
@@ -57,6 +60,24 @@ export default async function IntegrationsPage() {
                 </div>
               ) : (
                 <p className="text-gray-600">Connect Slack to send PCN notifications to your team</p>
+              )}
+            </CardContent>
+          </Card>
+        </Link>
+        
+        <Link href="/admin/integrations/zoom/setup">
+          <Card className="hover:shadow-lg transition cursor-pointer">
+            <CardHeader>
+              <CardTitle>Zoom</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {zoomConnected ? (
+                <div>
+                  <p className="text-green-600 font-medium mb-1">Connected</p>
+                  <p className="text-gray-600 mt-2">Automatically track show rates and generate PCNs from call transcripts</p>
+                </div>
+              ) : (
+                <p className="text-gray-600">Connect Zoom to automate show rate tracking and AI-powered PCN generation</p>
               )}
             </CardContent>
           </Card>
