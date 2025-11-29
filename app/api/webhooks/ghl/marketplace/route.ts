@@ -18,23 +18,61 @@ export async function POST(request: NextRequest) {
   let webhookEventId: string | null = null
 
   try {
+    // Log incoming request for debugging
+    console.log('[GHL Marketplace Webhook] ===== INCOMING WEBHOOK =====')
+    console.log('[GHL Marketplace Webhook] URL:', request.url)
+    console.log('[GHL Marketplace Webhook] Method:', request.method)
+    
     // Get webhook signature from headers
     const signature = request.headers.get('x-ghl-signature')
     const timestamp = request.headers.get('x-ghl-timestamp')
     
+    console.log('[GHL Marketplace Webhook] Headers:')
+    console.log('[GHL Marketplace Webhook] - x-ghl-signature:', signature ? 'present' : 'missing')
+    console.log('[GHL Marketplace Webhook] - x-ghl-timestamp:', timestamp ? 'present' : 'missing')
+    console.log('[GHL Marketplace Webhook] - All headers:', Object.fromEntries(request.headers.entries()))
+    
     // Get raw body for signature verification
     const rawBody = await request.text()
+    console.log('[GHL Marketplace Webhook] Raw body length:', rawBody.length)
+    console.log('[GHL Marketplace Webhook] Raw body preview:', rawBody.substring(0, 200))
     
     // Verify webhook signature
     const webhookSecret = process.env.GHL_MARKETPLACE_WEBHOOK_SECRET
+    console.log('[GHL Marketplace Webhook] Webhook secret configured:', !!webhookSecret)
+    
     if (webhookSecret && signature && timestamp) {
       const isValid = verifyWebhookSignature(rawBody, signature, timestamp, webhookSecret)
+      console.log('[GHL Marketplace Webhook] Signature verification result:', isValid)
       if (!isValid) {
-        console.error('[GHL Marketplace Webhook] Invalid signature')
+        console.error('[GHL Marketplace Webhook] Invalid signature - rejecting webhook')
+        console.error('[GHL Marketplace Webhook] Expected signature format: HMAC-SHA256 of timestamp.payload')
+        // Still log the webhook event for debugging
+        await withPrisma(async (prisma) => {
+          await prisma.webhookEvent.create({
+            data: {
+              processor: 'ghl_marketplace',
+              eventType: 'signature_verification_failed',
+              payload: { rawBody: rawBody.substring(0, 1000), signature, timestamp } as any,
+              processed: true,
+              processedAt: new Date(),
+              error: 'Invalid webhook signature'
+            }
+          })
+        })
         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
       }
     } else {
       console.warn('[GHL Marketplace Webhook] Missing signature or secret - skipping verification')
+      if (!webhookSecret) {
+        console.warn('[GHL Marketplace Webhook] GHL_MARKETPLACE_WEBHOOK_SECRET not set in environment variables')
+      }
+      if (!signature) {
+        console.warn('[GHL Marketplace Webhook] x-ghl-signature header missing - webhook may not be from GHL Marketplace')
+      }
+      if (!timestamp) {
+        console.warn('[GHL Marketplace Webhook] x-ghl-timestamp header missing - webhook may not be from GHL Marketplace')
+      }
     }
 
     // Parse JSON payload
@@ -53,7 +91,9 @@ export async function POST(request: NextRequest) {
       ? (body as any).event
       : 'unknown'
 
-    console.log('[GHL Marketplace Webhook] Received webhook:', eventType)
+    console.log('[GHL Marketplace Webhook] Received webhook event type:', eventType)
+    console.log('[GHL Marketplace Webhook] Full payload keys:', Object.keys(body))
+    console.log('[GHL Marketplace Webhook] Payload structure:', JSON.stringify(body, null, 2).substring(0, 500))
 
     // Log webhook event
     const eventResult = await withPrisma(async (prisma) => {
@@ -71,11 +111,20 @@ export async function POST(request: NextRequest) {
 
     // Extract company/location information from webhook
     // Marketplace webhooks may include locationId or companyId in the payload
-    const locationId = (body as any).locationId || (body as any).location?.id
+    const locationId = (body as any).locationId || (body as any).location?.id || (body as any).locationId
     const accountId = (body as any).accountId || (body as any).account?.id
+    
+    console.log('[GHL Marketplace Webhook] Extracted locationId:', locationId)
+    console.log('[GHL Marketplace Webhook] Extracted accountId:', accountId)
+    console.log('[GHL Marketplace Webhook] Searching for locationId in payload paths:')
+    console.log('[GHL Marketplace Webhook] - body.locationId:', (body as any).locationId)
+    console.log('[GHL Marketplace Webhook] - body.location?.id:', (body as any).location?.id)
+    console.log('[GHL Marketplace Webhook] - body.data?.locationId:', (body as any).data?.locationId)
+    console.log('[GHL Marketplace Webhook] - body.triggerData?.locationId:', (body as any).triggerData?.locationId)
 
     if (!locationId && !accountId) {
       console.error('[GHL Marketplace Webhook] No locationId or accountId in payload')
+      console.error('[GHL Marketplace Webhook] Full payload for debugging:', JSON.stringify(body, null, 2))
       await withPrisma(async (prisma) => {
         if (webhookEventId) {
           await prisma.webhookEvent.update({
@@ -88,20 +137,42 @@ export async function POST(request: NextRequest) {
           })
         }
       })
-      return NextResponse.json({ error: 'Missing location information' }, { status: 400 })
+      // Return 200 to prevent GHL from retrying (webhook is logged for debugging)
+      return NextResponse.json({ received: true, message: 'Missing location information' })
     }
 
     // Find company by locationId (GHL location ID)
     const company = await withPrisma(async (prisma) => {
-      return await prisma.company.findFirst({
+      const found = await prisma.company.findFirst({
         where: {
           ghlLocationId: locationId || undefined
         }
       })
+      console.log('[GHL Marketplace Webhook] Company lookup result:', found ? `Found: ${found.id} (${found.name})` : 'Not found')
+      return found
     })
 
     if (!company) {
       console.warn(`[GHL Marketplace Webhook] Company not found for locationId: ${locationId}`)
+      console.warn('[GHL Marketplace Webhook] Checking all companies with ghlLocationId...')
+      // Debug: List all companies with location IDs
+      await withPrisma(async (prisma) => {
+        const allCompanies = await prisma.company.findMany({
+          where: {
+            ghlLocationId: { not: null }
+          },
+          select: {
+            id: true,
+            name: true,
+            ghlLocationId: true
+          }
+        })
+        console.warn('[GHL Marketplace Webhook] Companies with location IDs:', allCompanies.map(c => ({
+          name: c.name,
+          locationId: c.ghlLocationId
+        })))
+      })
+      
       await withPrisma(async (prisma) => {
         if (webhookEventId) {
           await prisma.webhookEvent.update({
@@ -124,30 +195,54 @@ export async function POST(request: NextRequest) {
     const normalizedWebhook = normalizeMarketplaceWebhook(body, company.id)
 
     // Route to existing handlers
-    switch (eventType.toLowerCase()) {
+    const normalizedEventType = eventType.toLowerCase()
+    console.log(`[GHL Marketplace Webhook] Routing event type: ${normalizedEventType}`)
+    
+    switch (normalizedEventType) {
       case 'appointment.created':
       case 'appointmentcreate':
+      case 'appointment_create':
+        console.log('[GHL Marketplace Webhook] Handling appointment.created')
         await handleAppointmentCreated(normalizedWebhook, company as any)
         break
 
       case 'appointment.updated':
       case 'appointmentupdate':
+      case 'appointment_update':
+        console.log('[GHL Marketplace Webhook] Handling appointment.updated')
         await handleAppointmentUpdated(normalizedWebhook, company as any)
         break
 
       case 'appointment.cancelled':
       case 'appointmentcancel':
       case 'appointment.canceled':
+      case 'appointment_cancelled':
+        console.log('[GHL Marketplace Webhook] Handling appointment.cancelled')
         await handleAppointmentCancelled(normalizedWebhook, company as any)
         break
 
       case 'appointment.rescheduled':
       case 'appointmentreschedule':
+      case 'appointment_rescheduled':
+        console.log('[GHL Marketplace Webhook] Handling appointment.rescheduled')
         await handleAppointmentRescheduled(normalizedWebhook, company as any)
+        break
+
+      case 'install':
+      case 'app.installed':
+        console.log('[GHL Marketplace Webhook] Handling app installation event')
+        // Installation events are handled separately - just log for now
+        break
+
+      case 'uninstall':
+      case 'app.uninstalled':
+        console.log('[GHL Marketplace Webhook] Handling app uninstallation event')
+        // Uninstallation events are handled separately - just log for now
         break
 
       default:
         console.log(`[GHL Marketplace Webhook] Unhandled event type: ${eventType}`)
+        console.log('[GHL Marketplace Webhook] Available event types: appointment.created, appointment.updated, appointment.cancelled, appointment.rescheduled, install, uninstall')
         // Still mark as processed
     }
 
