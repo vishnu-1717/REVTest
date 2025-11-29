@@ -9,11 +9,29 @@ import {
   handleAppointmentUpdated
 } from '@/lib/webhooks/handlers'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GHL Marketplace Webhook Handler
  * Handles webhooks from GHL Marketplace app with signature verification
  * POST /api/webhooks/ghl/marketplace
  */
+
+// GET handler for diagnostics
+export async function GET(request: NextRequest) {
+  return NextResponse.json({
+    status: 'ok',
+    endpoint: '/api/webhooks/ghl/marketplace',
+    message: 'GHL Marketplace webhook endpoint - POST requests only',
+    method: 'POST',
+    timestamp: new Date().toISOString(),
+    environment: {
+      hasWebhookSecret: !!process.env.GHL_MARKETPLACE_WEBHOOK_SECRET,
+      webhookSecretLength: process.env.GHL_MARKETPLACE_WEBHOOK_SECRET?.length || 0
+    }
+  })
+}
+
 export async function POST(request: NextRequest) {
   let webhookEventId: string | null = null
 
