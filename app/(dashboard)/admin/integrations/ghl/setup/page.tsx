@@ -32,6 +32,7 @@ const withViewAs = (url: string) => {
   const [saving, setSaving] = useState(false)
   const [oauthConnected, setOauthConnected] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState(true)
+  const [locationId, setLocationId] = useState<string | null>(null) // For display purposes only
   
   // Step 2: Attribution Strategy
   const [attributionStrategy, setAttributionStrategy] = useState('ghl_fields')
@@ -88,6 +89,7 @@ const withViewAs = (url: string) => {
         if (res.ok) {
           const data = await res.json()
           setOauthConnected(data.oauthConnected || false)
+          setLocationId(data.locationId || null)
         }
       } catch (error) {
         console.error('Failed to check GHL status:', error)
