@@ -29,11 +29,8 @@ const withViewAs = (url: string) => {
 }
 
   // Step 1: GHL Credentials
-  const [apiKey, setApiKey] = useState('')
-  const [locationId, setLocationId] = useState('')
   const [saving, setSaving] = useState(false)
   const [oauthConnected, setOauthConnected] = useState(false)
-  const [connectionMethod, setConnectionMethod] = useState<'oauth' | 'api_key'>('oauth')
   const [loadingStatus, setLoadingStatus] = useState(true)
   
   // Step 2: Attribution Strategy
@@ -91,9 +88,6 @@ const withViewAs = (url: string) => {
         if (res.ok) {
           const data = await res.json()
           setOauthConnected(data.oauthConnected || false)
-          if (data.configured && !data.oauthConnected) {
-            setConnectionMethod('api_key')
-          }
         }
       } catch (error) {
         console.error('Failed to check GHL status:', error)
@@ -138,45 +132,7 @@ const withViewAs = (url: string) => {
     }
   }
   
-  const handleSaveCredentials = async () => {
-    setSaving(true)
-    try {
-      // Save API key and location ID
-      const res1 = await fetch(withViewAs('/api/admin/integrations/ghl'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey, locationId })
-      })
-      
-      if (!res1.ok) {
-        const error = await res1.json()
-        alert(error.error || 'Failed to save credentials')
-        setSaving(false)
-        return
-      }
-      
-      // Sync calendars
-      const res2 = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'), {
-        method: 'POST'
-      })
-      
-      if (!res2.ok) {
-        alert('Failed to sync calendars')
-        setSaving(false)
-        return
-      }
-      
-      const data = await res2.json()
-      console.log(`Synced ${data.count} calendars`)
-      
-      setStep(2)
-    } catch (error) {
-      console.error(error)
-      alert('Failed to save')
-    }
-    setSaving(false)
-  }
-  
+  // API key setup removed - OAuth only
   const handleSaveAttribution = async () => {
     setSaving(true)
     try {
@@ -301,126 +257,28 @@ const withViewAs = (url: string) => {
           )}
 
           {!oauthConnected && (
-            <>
-              {/* Connection Method Selection */}
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Step 1: Connect GoHighLevel</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-semibold mb-3">Choose Connection Method:</h3>
-                      <div className="space-y-3">
-                        <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                          connectionMethod === 'oauth' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                        }`}>
-                          <input
-                            type="radio"
-                            name="connectionMethod"
-                            value="oauth"
-                            checked={connectionMethod === 'oauth'}
-                            onChange={(e) => setConnectionMethod(e.target.value as 'oauth' | 'api_key')}
-                            className="mr-3"
-                          />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold">OAuth (Recommended)</span>
-                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                                Recommended
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              One-click connection via GHL Marketplace. More secure and easier to set up.
-                            </p>
-                          </div>
-                        </label>
-
-                        <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                          connectionMethod === 'api_key' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                        }`}>
-                          <input
-                            type="radio"
-                            name="connectionMethod"
-                            value="api_key"
-                            checked={connectionMethod === 'api_key'}
-                            onChange={(e) => setConnectionMethod(e.target.value as 'oauth' | 'api_key')}
-                            className="mr-3"
-                          />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold">API Key (Legacy)</span>
-                              <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded">
-                                Legacy
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">
-                              Use API key for direct integration. Requires manual setup.
-                            </p>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* OAuth Connection */}
-                    {connectionMethod === 'oauth' && (
-                      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                        <h3 className="font-semibold mb-2 text-blue-900">Connect via OAuth</h3>
-                        <p className="text-sm text-blue-800 mb-4">
-                          Click the button below to securely connect your GHL account. You'll be redirected to GHL to authorize the connection.
-                        </p>
-                        <Button
-                          onClick={handleOAuthConnect}
-                          className="w-full bg-blue-600 hover:bg-blue-700"
-                        >
-                          Connect GHL Account
-                        </Button>
-                        <p className="text-xs text-blue-600 mt-3">
-                          💡 This will open a new window to authorize the connection. After authorization, you'll be redirected back.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* API Key Connection */}
-                    {connectionMethod === 'api_key' && (
-                      <div className="mt-6 space-y-4">
-                        <div>
-                          <h3 className="font-semibold mb-2">Get Your API Key:</h3>
-                          <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 mb-4">
-                            <li>Log into your GHL account</li>
-                            <li>Go to Settings → Integrations → API Keys</li>
-                            <li>Create a new API key with "Read/Write" permissions</li>
-                            <li>Copy the API key below</li>
-                          </ol>
-                          
-                          <label className="block text-sm font-medium mb-2">API Key</label>
-                          <Input
-                            type="password"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder="ghl_live_xxxxxxxxxxxxx"
-                          />
-                        </div>
-                        
-                        <div>
-                          <h3 className="font-semibold mb-2">Get Your Location ID:</h3>
-                          <p className="text-sm text-gray-600 mb-4">
-                            Found in your GHL account URL or in Settings → Business Profile
-                          </p>
-                          
-                          <label className="block text-sm font-medium mb-2">Location ID</label>
-                          <Input
-                            value={locationId}
-                            onChange={(e) => setLocationId(e.target.value)}
-                            placeholder="abc123def456"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Step 1: Connect GoHighLevel</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <h3 className="font-semibold mb-2 text-blue-900">Connect via OAuth</h3>
+                  <p className="text-sm text-blue-800 mb-4">
+                    Click the button below to securely connect your GHL account. You'll be redirected to GHL to authorize the connection.
+                  </p>
+                  <Button
+                    onClick={handleOAuthConnect}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                  >
+                    Connect GHL Account
+                  </Button>
+                  <p className="text-xs text-blue-600 mt-3">
+                    💡 This will open a new window to authorize the connection. After authorization, you'll be redirected back.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Environment Variable Warning */}
@@ -447,8 +305,8 @@ const withViewAs = (url: string) => {
             </Card>
           )}
           
-          {/* Webhook Setup Instructions (for API key method) */}
-          {connectionMethod === 'api_key' && (
+          {/* Webhook setup instructions removed - OAuth only */}
+          {false && (
             <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook Workflow (Optional but Recommended):</h3>
                 <p className="text-sm text-blue-800 mb-3">
@@ -644,10 +502,11 @@ const withViewAs = (url: string) => {
             </div>
           )}
           
-          {!oauthConnected && connectionMethod === 'api_key' && (
+          {/* API key save button removed - OAuth only */}
+          {false && (
             <Button 
-              onClick={handleSaveCredentials} 
-              disabled={saving || !apiKey || !locationId}
+              onClick={() => {}} 
+              disabled={true}
               className="w-full"
             >
               {saving ? 'Connecting...' : 'Connect & Continue →'}

@@ -51,7 +51,7 @@ Based on your screenshot and description, you have:
 - **Location**: App Settings → Webhooks
 - **Action**: Set your webhook endpoint URL
   - Format: `https://yourdomain.com/api/webhooks/ghl/marketplace`
-  - **Important**: This should be a different endpoint than your current `/api/webhooks/ghl/route.ts` to handle Marketplace app webhooks separately
+  - **Important**: This is the only webhook endpoint - legacy API key webhooks are no longer supported
 
 #### Webhook Events Verification
 Verify these events are enabled:

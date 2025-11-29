@@ -32,50 +32,25 @@ interface GHLLocation {
 }
 
 export class GHLClient {
-  private apiKey?: string
   private accessToken?: string
-  private companyId?: string
+  private companyId: string
   private locationId?: string
-  // OAuth tokens use v2 API, API keys use v1 API
-  private baseUrl: string
-  private useOAuth: boolean
+  // OAuth only - uses v2 API
+  private baseUrl: string = 'https://services.leadconnectorhq.com'
   
   /**
-   * Create GHLClient with API key (legacy method)
+   * Create GHLClient with OAuth (only method supported)
    */
-  constructor(apiKey: string, locationId?: string)
-  /**
-   * Create GHLClient with OAuth (new method)
-   */
-  constructor(companyId: string, locationId: string | undefined, useOAuth: true)
-  constructor(apiKeyOrCompanyId: string, locationId?: string, useOAuth?: boolean) {
-    if (useOAuth) {
-      // OAuth mode - use v2 API base URL
-      this.companyId = apiKeyOrCompanyId
-      this.locationId = locationId
-      this.useOAuth = true
-      this.baseUrl = 'https://services.leadconnectorhq.com'
-    } else {
-      // API key mode (backward compatibility) - use v1 API base URL
-      this.apiKey = apiKeyOrCompanyId
-      this.locationId = locationId
-      this.useOAuth = false
-      this.baseUrl = 'https://rest.gohighlevel.com/v1'
-    }
+  constructor(companyId: string, locationId?: string) {
+    this.companyId = companyId
+    this.locationId = locationId
   }
 
   /**
-   * Get authorization token (API key or OAuth token)
+   * Get OAuth access token
    * Automatically refreshes OAuth token if needed
    */
   private async getAuthToken(): Promise<string> {
-    if (!this.useOAuth) {
-      if (!this.apiKey) {
-        throw new Error('GHL API key not provided')
-      }
-      return this.apiKey
-    }
-
     if (!this.companyId) {
       throw new Error('Company ID not provided for OAuth')
     }
@@ -103,20 +78,13 @@ export class GHLClient {
       ...(options.headers as Record<string, string> || {})
     }
 
-    // Determine API version based on endpoint and auth method
     // OAuth v2 API requires Version header, but different endpoints use different versions
-    if (this.useOAuth) {
-      // OAuth v2 API - determine version from URL
-      if (url.includes('/calendars')) {
-        headers['Version'] = '2021-04-15' // Calendars endpoint uses 2021-04-15
-      } else if (url.includes('/users')) {
-        headers['Version'] = '2021-07-28' // Users endpoint uses 2021-07-28
-      } else {
-        // Default to 2021-07-28 for other endpoints
-        headers['Version'] = '2021-07-28'
-      }
+    if (url.includes('/calendars')) {
+      headers['Version'] = '2021-04-15' // Calendars endpoint uses 2021-04-15
+    } else if (url.includes('/users')) {
+      headers['Version'] = '2021-07-28' // Users endpoint uses 2021-07-28
     } else {
-      // API key (v1 API) - always use 2021-07-28
+      // Default to 2021-07-28 for other endpoints
       headers['Version'] = '2021-07-28'
     }
 
@@ -128,19 +96,19 @@ export class GHLClient {
     return response
   }
   
-  // Validate API key or OAuth token by making a simple request
+  // Validate OAuth token by making a simple request
   async validateApiKey(): Promise<boolean> {
     try {
       // Try to fetch contacts list - this is a simpler endpoint that validates the credentials
       const url = `${this.baseUrl}/contacts`
-      console.log(`[GHL API] Validating ${this.useOAuth ? 'OAuth token' : 'API key'} with: ${url}`)
+      console.log(`[GHL API] Validating OAuth token with: ${url}`)
       
       const response = await this.makeRequest(url, { method: 'GET' })
       
       // If we get 200 or even 401/403, the endpoint exists and credentials format is valid
       // 404 means endpoint doesn't exist, 401/403 means invalid credentials
       if (response.status === 401 || response.status === 403) {
-        console.error(`[GHL API] ${this.useOAuth ? 'OAuth token' : 'API key'} validation failed: ${response.status}`)
+        console.error(`[GHL API] OAuth token validation failed: ${response.status}`)
         return false
       }
       
@@ -148,46 +116,28 @@ export class GHLClient {
       // But if we get here without an exception, the credentials format is valid
       return response.status === 200 || response.status === 404
     } catch (error: any) {
-      console.error(`[GHL API] ${this.useOAuth ? 'OAuth token' : 'API key'} validation error:`, error.message)
+      console.error(`[GHL API] OAuth token validation error:`, error.message)
       return false
     }
   }
   
-  // Fetch all calendars
-  // Note: GHL V1 API calendars endpoint may not exist - try multiple endpoint structures
+  // Fetch all calendars (OAuth v2 API only)
   async getCalendars(): Promise<GHLCalendar[]> {
     const endpoints = []
     
-    // For OAuth (v2 API), use different endpoint structure
-    if (this.useOAuth) {
-      // OAuth v2 API endpoints - locationId is required as query parameter
-      if (this.locationId) {
-        // Try with trailing slash first (documented format)
-        endpoints.push(
-          `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
-          `${this.baseUrl}/calendars?locationId=${this.locationId}`
-        )
-      } else {
-        // Try without locationId (may not work, but worth trying)
-        endpoints.push(
-          `${this.baseUrl}/calendars/`,
-          `${this.baseUrl}/calendars`
-        )
-      }
-    } else {
-      // API key (v1 API) - try multiple endpoint patterns
+    // OAuth v2 API endpoints - locationId is required as query parameter
+    if (this.locationId) {
+      // Try with trailing slash first (documented format)
       endpoints.push(
-        `${this.baseUrl}/calendars`,
-        `${this.baseUrl}/calendars/`,
+        `${this.baseUrl}/calendars/?locationId=${this.locationId}`,
+        `${this.baseUrl}/calendars?locationId=${this.locationId}`
       )
-      
-      // If locationId is provided, also try location-specific endpoints
-      if (this.locationId) {
-        endpoints.push(
-          `${this.baseUrl}/locations/${this.locationId}/calendars`,
-          `${this.baseUrl}/locations/${this.locationId}/calendars/`
-        )
-      }
+    } else {
+      // Try without locationId (may not work, but worth trying)
+      endpoints.push(
+        `${this.baseUrl}/calendars/`,
+        `${this.baseUrl}/calendars`
+      )
     }
     
     let lastError: any = null
@@ -225,46 +175,27 @@ export class GHLClient {
       }
     }
     
-    // All endpoints failed - calendars endpoint may not exist in V1 API
-    // Return empty array and log warning instead of throwing
-    console.warn(`[GHL API] Calendars endpoint not found. GHL V1 API may not support calendars endpoint.`)
-    console.warn(`[GHL API] This is acceptable - calendars can be synced later or may not be available in V1 API.`)
+    // All endpoints failed
+    console.warn(`[GHL API] Calendars endpoint not found.`)
     return []
   }
   
-  // Fetch all users from GHL
+  // Fetch all users from GHL (OAuth v2 API only)
   async getUsers(): Promise<GHLUser[]> {
     const endpoints = []
     
-    // For OAuth (v2 API), use different endpoint structure
-    if (this.useOAuth) {
-      // OAuth v2 API endpoints - locationId is required as query parameter
-      if (this.locationId) {
-        // Try with trailing slash first (documented format)
-        endpoints.push(
-          `${this.baseUrl}/users/?locationId=${this.locationId}`,
-          `${this.baseUrl}/users?locationId=${this.locationId}`
-        )
-      } else {
-        // Try without locationId (may not work, but worth trying)
-        endpoints.push(
-          `${this.baseUrl}/users/`,
-          `${this.baseUrl}/users`
-        )
-      }
-    } else {
-      // API key (v1 API) - try multiple endpoint patterns
-      if (this.locationId) {
-        endpoints.push(
-          `${this.baseUrl}/locations/${this.locationId}/users`,
-          `${this.baseUrl}/locations/${this.locationId}/users/`,
-          `${this.baseUrl}/users?locationId=${this.locationId}`
-        )
-      }
-      
+    // OAuth v2 API endpoints - locationId is required as query parameter
+    if (this.locationId) {
+      // Try with trailing slash first (documented format)
       endpoints.push(
-        `${this.baseUrl}/users`,
-        `${this.baseUrl}/users/`
+        `${this.baseUrl}/users/?locationId=${this.locationId}`,
+        `${this.baseUrl}/users?locationId=${this.locationId}`
+      )
+    } else {
+      // Try without locationId (may not work, but worth trying)
+      endpoints.push(
+        `${this.baseUrl}/users/`,
+        `${this.baseUrl}/users`
       )
     }
     
@@ -295,7 +226,7 @@ export class GHLClient {
     }
     
     // All endpoints failed - return empty array
-    console.warn(`[GHL API] Users endpoint not found. GHL V1 API may not support users endpoint.`)
+    console.warn(`[GHL API] Users endpoint not found.`)
     return []
   }
 
@@ -495,33 +426,19 @@ export class GHLClient {
 }
 
 /**
- * Factory function to create GHLClient
- * Supports both OAuth and API key methods
+ * Factory function to create GHLClient (OAuth only)
  */
 export async function createGHLClient(companyId: string): Promise<GHLClient | null> {
-  const { withPrisma } = await import('./db')
   const { isGHLOAuthConnected, getGHLLocationId } = await import('./ghl-oauth')
   
-  return await withPrisma(async (prisma) => {
-    // Check if OAuth is connected
-    const oauthConnected = await isGHLOAuthConnected(companyId)
-    
-    if (oauthConnected) {
-      // Use OAuth
-      const locationId = await getGHLLocationId(companyId)
-      return new GHLClient(companyId, locationId || undefined, true)
-    }
-    
-    // Fall back to API key (backward compatibility)
-    const company = await prisma.company.findUnique({
-      where: { id: companyId },
-      select: { ghlApiKey: true, ghlLocationId: true }
-    })
-    
-    if (company?.ghlApiKey) {
-      return new GHLClient(company.ghlApiKey, company.ghlLocationId || undefined)
-    }
-    
+  // Check if OAuth is connected
+  const oauthConnected = await isGHLOAuthConnected(companyId)
+  
+  if (!oauthConnected) {
     return null
-  })
+  }
+  
+  // Use OAuth
+  const locationId = await getGHLLocationId(companyId)
+  return new GHLClient(companyId, locationId || undefined)
 }

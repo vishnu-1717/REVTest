@@ -20,17 +20,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Clear OAuth tokens
+    // Clear OAuth tokens and uninstall timestamp
     await clearGHLOAuthTokens(companyId)
 
-    // Also clear API key credentials if they exist
+    // Clear legacy API key credentials if they exist (cleanup)
     await withPrisma(async (prisma) => {
       await prisma.company.update({
         where: { id: companyId },
         data: {
           ghlApiKey: null,
-          ghlLocationId: null,
           ghlWebhookSecret: null
+          // Note: ghlLocationId is preserved as it may be needed for reconnection
         }
       })
     })

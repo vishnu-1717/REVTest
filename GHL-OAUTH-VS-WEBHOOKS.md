@@ -1,12 +1,13 @@
-# GHL OAuth vs Webhooks: Data Flow & Audit Trail
+# GHL OAuth Webhooks: Data Flow & Audit Trail
 
 ## Overview
 
-With GHL OAuth integration, you now have **two ways** data can come into the system:
-1. **OAuth (Marketplace App)** - Real-time webhooks from GHL Marketplace
-2. **API Key (Legacy)** - Webhooks from direct GHL workflows
+GHL integration uses **OAuth (Marketplace App)** for all data intake:
+- Real-time webhooks from GHL Marketplace
+- Secure OAuth token-based authentication
+- Official GHL Marketplace webhook format
 
-Both methods use webhooks, but they come from different sources and may have slightly different payload structures.
+**Note**: Legacy API key webhooks are no longer supported. All integrations must use OAuth.
 
 ---
 
@@ -52,54 +53,20 @@ Both methods use webhooks, but they come from different sources and may have sli
 - Includes installation events (`INSTALL`, `UNINSTALL`)
 - Signature verification required
 
-### API Key (Legacy) - `/api/webhooks/ghl`
-
-**What it is**: Webhooks from GHL workflows that you manually configure in GHL.
-
-**When data comes in**:
-- When your GHL workflow triggers and sends data to the webhook URL
-- Can be configured for any GHL event
-
-**Webhook URL**: `https://app.revphlo.com/api/webhooks/ghl`
-
-**Authentication**:
-- Uses `ghlWebhookSecret` stored per company
-- Or can be unauthenticated (less secure)
-
-**Payload Structure**:
-```json
-{
-  "type": "Appointment",
-  "id": "...",
-  "startTime": "...",
-  "calendar": {
-    "id": "...",
-    "name": "..."
-  },
-  "customData": {
-    "Appointment Date": "..."
-  }
-}
-```
-
-**Key Differences**:
-- More variable payload structures (depends on workflow configuration)
-- May include custom fields in `customData`
-- Less structured, requires more parsing
-
 ---
 
 ## How We Handle the Data
 
 ### 1. Webhook Reception
 
-**Both endpoints**:
+**Marketplace webhook endpoint**:
 1. Receive HTTP POST request
-2. Log raw payload to console
-3. Parse JSON payload
-4. **Store in `WebhookEvent` table** (audit trail)
-5. Extract event type and data
-6. Route to appropriate handler
+2. Verify webhook signature (`x-ghl-signature` header)
+3. Log raw payload to console
+4. Parse JSON payload
+5. **Store in `WebhookEvent` table** (audit trail)
+6. Extract event type and data
+7. Route to appropriate handler
 
 ### 2. Event Processing
 
@@ -121,7 +88,7 @@ Both methods use webhooks, but they come from different sources and may have sli
 ### 3. Data Storage
 
 **All webhook data is stored in `WebhookEvent` table**:
-- `processor`: `'ghl'` or `'ghl_marketplace'`
+- `processor`: `'ghl_marketplace'` (OAuth only)
 - `eventType`: `'appointment.created'`, `'INSTALL'`, etc.
 - `payload`: Full JSON payload (for debugging)
 - `processed`: `true`/`false` (whether we successfully handled it)
@@ -174,7 +141,7 @@ Use `/api/super-admin/overview` to get:
 
 ## What Data You'll See
 
-### OAuth (Marketplace) Webhooks
+### Marketplace Webhooks
 
 **Installation Event** (`INSTALL`):
 ```json
@@ -207,42 +174,20 @@ Use `/api/super-admin/overview` to get:
 }
 ```
 
-### API Key (Legacy) Webhooks
-
-**Appointment Webhook**:
-```json
-{
-  "type": "Appointment",
-  "id": "...",
-  "startTime": "...",
-  "calendar": {
-    "id": "...",
-    "name": "Sales Call (META)"
-  },
-  "contact": {
-    "id": "...",
-    "email": "...",
-    "customFields": {
-      "source": "Facebook Ad"
-    }
-  }
-}
-```
-
 ---
 
-## Key Differences Summary
+## Webhook Details
 
-| Feature | OAuth (Marketplace) | API Key (Legacy) |
-|---------|---------------------|------------------|
-| **Webhook URL** | `/api/webhooks/ghl/marketplace` | `/api/webhooks/ghl` |
-| **Authentication** | Signature verification | Webhook secret (optional) |
-| **Event Types** | Structured (`appointment.created`) | Variable (workflow-dependent) |
-| **Payload Structure** | More consistent | More variable |
-| **Installation Events** | Yes (`INSTALL`, `UNINSTALL`) | No |
-| **Location ID** | Always included | May be missing |
-| **Company ID** | Included in payload | Must be inferred |
-| **Error Handling** | Better structured | More parsing needed |
+| Feature | OAuth (Marketplace) |
+|---------|---------------------|
+| **Webhook URL** | `/api/webhooks/ghl/marketplace` |
+| **Authentication** | Signature verification (`x-ghl-signature`) |
+| **Event Types** | Structured (`appointment.created`, `appointment.updated`) |
+| **Payload Structure** | Consistent Marketplace format |
+| **Installation Events** | Yes (`INSTALL`, `UNINSTALL`) |
+| **Location ID** | Always included |
+| **Company ID** | Included in payload |
+| **Error Handling** | Structured error responses |
 
 ---
 
