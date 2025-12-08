@@ -66,15 +66,58 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
       if (!contact && webhook.contactId) {
         const firstName = webhook.firstName || ''
         const lastName = webhook.lastName || ''
-        const fullName = webhook.contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
+        let fullName = webhook.contactName || `${firstName} ${lastName}`.trim() || 'Unknown'
+        let contactEmail = webhook.contactEmail
+        let contactPhone = webhook.contactPhone
+
+        // If name would be "Unknown", try to fetch from GHL API
+        if (fullName === 'Unknown') {
+          console.log('[GHL Webhook] Contact name is missing, fetching from GHL API...')
+          try {
+            const { createGHLClient } = await import('@/lib/ghl-api')
+            const ghlClient = await createGHLClient(company.id)
+            
+            if (ghlClient) {
+              const ghlContact = await ghlClient.getContact(webhook.contactId)
+              
+              if (ghlContact) {
+                // Use name from GHL API
+                const ghlName = ghlContact.name || 
+                              (ghlContact.firstName && ghlContact.lastName 
+                                ? `${ghlContact.firstName} ${ghlContact.lastName}`.trim()
+                                : ghlContact.firstName || ghlContact.lastName)
+                
+                if (ghlName && ghlName !== 'Unknown') {
+                  fullName = ghlName
+                  console.log('[GHL Webhook] ✅ Fetched contact name from GHL API:', fullName)
+                }
+                
+                // Also use email/phone from GHL if webhook doesn't have them
+                if (!contactEmail && ghlContact.email) {
+                  contactEmail = ghlContact.email
+                }
+                if (!contactPhone && ghlContact.phone) {
+                  contactPhone = ghlContact.phone
+                }
+              } else {
+                console.log('[GHL Webhook] ⚠️  Contact not found in GHL API')
+              }
+            } else {
+              console.log('[GHL Webhook] ⚠️  GHL client not available, using "Unknown"')
+            }
+          } catch (error: any) {
+            console.error('[GHL Webhook] Error fetching contact from GHL API:', error.message)
+            // Continue with "Unknown" if fetch fails
+          }
+        }
 
         contact = await prisma.contact.create({
           data: {
             companyId: company.id,
             ghlContactId: webhook.contactId,
             name: fullName,
-            email: webhook.contactEmail,
-            phone: webhook.contactPhone,
+            email: contactEmail,
+            phone: contactPhone,
             tags: [],
             customFields: JSON.parse(JSON.stringify(webhook.allCustomFields || {}))
           }
@@ -112,6 +155,7 @@ export async function handleAppointmentCancelled(webhook: GHLWebhookExtended, co
           startTime: startTimeDate,
           endTime: endTimeDate,
           calendarId: calendar?.id,
+          calendar: calendar?.name || null, // Populate old calendar field for backward compatibility
           status: 'cancelled',
           outcome: 'Cancelled',
           pcnSubmitted: true, // Cancelled appointments don't need PCNs
