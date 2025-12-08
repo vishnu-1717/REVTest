@@ -76,24 +76,24 @@ export default function WebhooksPage() {
 
   const getStatusBadge = (event: WebhookEvent) => {
     if (event.error) {
-      return <Badge className="bg-red-500/20 text-red-300 border border-red-500/30">Failed</Badge>
+      return <Badge className="bg-red-100 text-red-700 border border-red-300">Failed</Badge>
     }
     if (event.processed) {
-      return <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Processed</Badge>
+      return <Badge className="bg-emerald-100 text-emerald-700 border border-emerald-300">Processed</Badge>
     }
-    return <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30">Pending</Badge>
+    return <Badge className="bg-amber-100 text-amber-700 border border-amber-300">Pending</Badge>
   }
 
   const getProcessorBadge = (processor: string) => {
     const colors: Record<string, string> = {
-      'ghl_marketplace': 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
-      'ghl': 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
-      'whop': 'bg-green-500/20 text-green-300 border border-green-500/30',
-      'zoom': 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30',
-      'clerk': 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
+      'ghl_marketplace': 'bg-blue-100 text-blue-700 border border-blue-300',
+      'ghl': 'bg-purple-100 text-purple-700 border border-purple-300',
+      'whop': 'bg-green-100 text-green-700 border border-green-300',
+      'zoom': 'bg-indigo-100 text-indigo-700 border border-indigo-300',
+      'clerk': 'bg-gray-100 text-gray-700 border border-gray-300'
     }
     return (
-      <Badge className={colors[processor] || 'bg-slate-500/20 text-slate-300 border border-slate-500/30'}>
+      <Badge className={colors[processor] || 'bg-gray-100 text-gray-700 border border-gray-300'}>
         {processor}
       </Badge>
     )
@@ -103,21 +103,21 @@ export default function WebhooksPage() {
     <div className="container mx-auto py-10 px-4">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100 mb-2">Webhook Events</h1>
-          <p className="text-slate-400 text-sm">View and debug incoming webhook data</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Webhook Events</h1>
+          <p className="text-gray-700 text-sm">View and debug incoming webhook data</p>
         </div>
       </div>
 
       {/* Filters */}
-      <Card className="bg-slate-800/60 border border-slate-700/50 mb-6">
+      <Card className="bg-white border border-gray-200 mb-6">
         <CardContent className="p-4">
           <div className="flex flex-wrap gap-4 items-center">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Status</label>
+              <label className="text-xs text-gray-700 mb-1 block">Status</label>
               <select
                 value={filter}
                 onChange={(e) => setFilter(e.target.value as any)}
-                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200"
+                className="bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
               >
                 <option value="all">All</option>
                 <option value="processed">Processed</option>
@@ -126,11 +126,11 @@ export default function WebhooksPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Processor</label>
+              <label className="text-xs text-gray-700 mb-1 block">Processor</label>
               <select
                 value={processorFilter}
                 onChange={(e) => setProcessorFilter(e.target.value)}
-                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200"
+                className="bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
               >
                 <option value="all">All</option>
                 <option value="ghl_marketplace">GHL Marketplace</option>
@@ -141,11 +141,11 @@ export default function WebhooksPage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Time Range</label>
+              <label className="text-xs text-gray-700 mb-1 block">Time Range</label>
               <select
                 value={timeRange}
                 onChange={(e) => setTimeRange(e.target.value as any)}
-                className="bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200"
+                className="bg-white border border-gray-300 rounded-md px-3 py-1.5 text-sm text-gray-700"
               >
                 <option value="1h">Last Hour</option>
                 <option value="24h">Last 24 Hours</option>
@@ -157,7 +157,7 @@ export default function WebhooksPage() {
                 onClick={fetchWebhooks}
                 variant="outline"
                 size="sm"
-                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                className="border-gray-300 text-gray-700 hover:bg-gray-100"
               >
                 Refresh
               </Button>
@@ -168,11 +168,11 @@ export default function WebhooksPage() {
 
       {/* Events List */}
       {loading ? (
-        <p className="text-slate-400">Loading webhook events...</p>
+        <p className="text-gray-700">Loading webhook events...</p>
       ) : events.length === 0 ? (
-        <Card className="bg-slate-800/60 border border-slate-700/50">
+        <Card className="bg-white border border-gray-200">
           <CardContent className="p-8 text-center">
-            <p className="text-slate-400">No webhook events found for the selected filters.</p>
+            <p className="text-gray-700">No webhook events found for the selected filters.</p>
           </CardContent>
         </Card>
       ) : (
@@ -180,7 +180,7 @@ export default function WebhooksPage() {
           {events.map((event) => (
             <Card
               key={event.id}
-              className="bg-slate-800/60 border border-slate-700/50 hover:border-slate-600 transition cursor-pointer"
+              className="bg-white border border-gray-200 hover:border-gray-300 transition cursor-pointer"
               onClick={() => setSelectedEvent(event)}
             >
               <CardContent className="p-4">
@@ -189,9 +189,9 @@ export default function WebhooksPage() {
                     <div className="flex items-center gap-2 mb-2">
                       {getProcessorBadge(event.processor)}
                       {getStatusBadge(event)}
-                      <span className="text-sm text-slate-300 font-medium">{event.eventType}</span>
+                      <span className="text-sm text-gray-900 font-medium">{event.eventType}</span>
                     </div>
-                    <div className="text-xs text-slate-400 space-y-1">
+                    <div className="text-xs text-gray-600 space-y-1">
                       <p>Received: {formatDate(event.createdAt)}</p>
                       {event.processedAt && (
                         <p>Processed: {formatDate(event.processedAt)}</p>
@@ -200,7 +200,7 @@ export default function WebhooksPage() {
                         <p>Company: {event.Company.name}</p>
                       )}
                       {event.error && (
-                        <p className="text-red-300">Error: {event.error}</p>
+                        <p className="text-red-600">Error: {event.error}</p>
                       )}
                     </div>
                   </div>
@@ -211,7 +211,7 @@ export default function WebhooksPage() {
                       e.stopPropagation()
                       setSelectedEvent(event)
                     }}
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
                     View Payload
                   </Button>
@@ -229,17 +229,17 @@ export default function WebhooksPage() {
           onClick={() => setSelectedEvent(null)}
         >
           <Card
-            className="bg-slate-800 border border-slate-700 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white border border-gray-200 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardHeader className="border-b border-slate-700">
+            <CardHeader className="border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-slate-100">Webhook Event Details</CardTitle>
+                <CardTitle className="text-gray-900">Webhook Event Details</CardTitle>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setSelectedEvent(null)}
-                  className="text-slate-400 hover:text-slate-200"
+                  className="text-gray-600 hover:text-gray-900"
                 >
                   ✕
                 </Button>
@@ -248,39 +248,39 @@ export default function WebhooksPage() {
             <CardContent className="p-6 overflow-auto flex-1">
               <div className="space-y-4 mb-4">
                 <div>
-                  <p className="text-xs text-slate-400 mb-1">Event ID</p>
-                  <p className="text-sm text-slate-200 font-mono">{selectedEvent.id}</p>
+                  <p className="text-xs text-gray-600 mb-1">Event ID</p>
+                  <p className="text-sm text-gray-900 font-mono">{selectedEvent.id}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Processor</p>
-                    <p className="text-sm text-slate-200">{selectedEvent.processor}</p>
+                    <p className="text-xs text-gray-600 mb-1">Processor</p>
+                    <p className="text-sm text-gray-900">{selectedEvent.processor}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Event Type</p>
-                    <p className="text-sm text-slate-200">{selectedEvent.eventType}</p>
+                    <p className="text-xs text-gray-600 mb-1">Event Type</p>
+                    <p className="text-sm text-gray-900">{selectedEvent.eventType}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Status</p>
+                    <p className="text-xs text-gray-600 mb-1">Status</p>
                     {getStatusBadge(selectedEvent)}
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Received</p>
-                    <p className="text-sm text-slate-200">{formatDate(selectedEvent.createdAt)}</p>
+                    <p className="text-xs text-gray-600 mb-1">Received</p>
+                    <p className="text-sm text-gray-900">{formatDate(selectedEvent.createdAt)}</p>
                   </div>
                 </div>
                 {selectedEvent.error && (
                   <div>
-                    <p className="text-xs text-slate-400 mb-1">Error</p>
-                    <p className="text-sm text-red-300 bg-red-900/20 p-2 rounded border border-red-500/30">
+                    <p className="text-xs text-gray-600 mb-1">Error</p>
+                    <p className="text-sm text-red-700 bg-red-50 p-2 rounded border border-red-200">
                       {selectedEvent.error}
                     </p>
                   </div>
                 )}
               </div>
               <div>
-                <p className="text-xs text-slate-400 mb-2">Full Payload</p>
-                <pre className="bg-slate-900 p-4 rounded border border-slate-700 overflow-auto text-xs text-slate-300">
+                <p className="text-xs text-gray-600 mb-2">Full Payload</p>
+                <pre className="bg-gray-50 p-4 rounded border border-gray-200 overflow-auto text-xs text-gray-900">
                   {JSON.stringify(selectedEvent.payload, null, 2)}
                 </pre>
               </div>

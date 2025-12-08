@@ -30,13 +30,13 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en" className="dark">
+      <html lang="en">
         <body
-          className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-slate-900`}
+          className={`${inter.variable} ${geistMono.variable} font-sans antialiased bg-white`}
         >
           <ThemeProvider
             attribute="class"
-            defaultTheme="dark"
+            defaultTheme="light"
             enableSystem={false}
             disableTransitionOnChange
           >

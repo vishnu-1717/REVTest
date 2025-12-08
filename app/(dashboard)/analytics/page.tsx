@@ -1230,9 +1230,9 @@ export default function AnalyticsPage() {
       <div className="mx-auto max-w-6xl px-4 py-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-100">Sales Analytics</h1>
-          <p className="text-sm text-slate-400">Deep dive into your sales performance</p>
-          <p className="text-[11px] text-slate-500 mt-1">Reporting in {timezone}</p>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-900">Sales Analytics</h1>
+          <p className="text-sm text-gray-700">Deep dive into your sales performance</p>
+          <p className="text-[11px] text-gray-600 mt-1">Reporting in {timezone}</p>
         </div>
       </div>
       
@@ -1246,9 +1246,9 @@ export default function AnalyticsPage() {
       />
       
       {/* Filters */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 mb-6">
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6">
         <div className="mb-4">
-          <h2 className="text-sm font-medium text-slate-100">Filters</h2>
+          <h2 className="text-sm font-medium text-gray-900">Filters</h2>
         </div>
         <div>
           <div className="flex flex-wrap gap-2 mb-4">
@@ -1274,7 +1274,7 @@ export default function AnalyticsPage() {
             <Button onClick={handleApplyFilters} disabled={loading} className="bg-indigo-500 hover:bg-indigo-600 text-white">
               {loading ? 'Loading...' : 'Apply Filters'}
             </Button>
-            <Button variant="outline" onClick={() => window.print()} className="border-slate-700 text-slate-300 hover:bg-slate-800">
+            <Button variant="outline" onClick={() => window.print()} className="border-gray-300 text-gray-700 hover:bg-gray-100">
               Export Report
             </Button>
           </div>

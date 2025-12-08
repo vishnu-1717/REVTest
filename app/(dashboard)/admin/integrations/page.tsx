@@ -135,11 +135,11 @@ export default function IntegrationsPage() {
     <div className="container mx-auto py-10 px-4">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold mb-2 text-slate-100">Integrations</h1>
-          <p className="text-slate-400 text-sm">Connect and manage your third-party integrations</p>
+          <h1 className="text-3xl font-bold mb-2 text-gray-900">Integrations</h1>
+          <p className="text-gray-700 text-sm">Connect and manage your third-party integrations</p>
         </div>
         <Link href="/admin/integrations/webhooks">
-          <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+          <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-100">
             View Webhook Events
           </Button>
         </Link>
@@ -147,31 +147,31 @@ export default function IntegrationsPage() {
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* GoHighLevel */}
-        <Card className="bg-slate-800/60 border border-slate-700/50 hover:shadow-lg hover:shadow-indigo-500/20 transition">
+        <Card className="bg-white border border-gray-200 hover:shadow-lg transition">
           <CardHeader>
-            <CardTitle className="text-slate-100">GoHighLevel</CardTitle>
+            <CardTitle className="text-gray-900">GoHighLevel</CardTitle>
           </CardHeader>
           <CardContent>
             {status.ghl.connected ? (
               <div>
-                <p className="text-emerald-300 font-medium mb-1">Connected</p>
+                <p className="text-emerald-600 font-medium mb-1">Connected</p>
                 {status.ghl.method && (
-                  <p className="text-xs text-slate-400 mb-2">
+                  <p className="text-xs text-gray-600 mb-2">
                     {status.ghl.method === 'oauth' ? 'OAuth' : 'API Key'}
                     {status.ghl.locationId && ` • ${status.ghl.locationId.substring(0, 8)}...`}
                   </p>
                 )}
-                <p className="text-slate-300 mb-3 text-sm">Calendar and appointment syncing active</p>
+                <p className="text-gray-700 mb-3 text-sm">Calendar and appointment syncing active</p>
                 <div className="flex gap-2">
                   <Link href="/admin/integrations/ghl/setup">
-                    <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700">Manage</Button>
+                    <Button variant="outline" size="sm" className="border-gray-300 text-gray-700 hover:bg-gray-100">Manage</Button>
                   </Link>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDisconnect('ghl')}
                     disabled={disconnecting === 'ghl'}
-                    className="border-red-500/60 text-red-300 hover:bg-red-900/40"
+                    className="border-red-300 text-red-600 hover:bg-red-50"
                   >
                     {disconnecting === 'ghl' ? 'Disconnecting...' : 'Disconnect'}
                   </Button>
@@ -179,7 +179,7 @@ export default function IntegrationsPage() {
               </div>
             ) : (
               <div>
-                <p className="text-slate-300 mb-3 text-sm">Connect your GHL account for calendar and appointment syncing</p>
+                <p className="text-gray-700 mb-3 text-sm">Connect your GHL account for calendar and appointment syncing</p>
                 <Link href="/admin/integrations/ghl/setup">
                   <Button className="bg-indigo-600 hover:bg-indigo-700">Connect</Button>
                 </Link>
@@ -189,28 +189,28 @@ export default function IntegrationsPage() {
         </Card>
 
         {/* Slack */}
-        <Card className="bg-slate-800/60 border border-slate-700/50 hover:shadow-lg hover:shadow-indigo-500/20 transition">
+        <Card className="bg-white border border-gray-200 hover:shadow-lg transition">
           <CardHeader>
-            <CardTitle className="text-slate-100">Slack</CardTitle>
+            <CardTitle className="text-gray-900">Slack</CardTitle>
           </CardHeader>
           <CardContent>
             {status.slack.connected ? (
               <div>
-                <p className="text-emerald-300 font-medium mb-1">Connected</p>
+                <p className="text-emerald-600 font-medium mb-1">Connected</p>
                 {status.slack.workspaceName && (
-                  <p className="text-xs text-slate-400 mb-2">{status.slack.workspaceName}</p>
+                  <p className="text-xs text-gray-600 mb-2">{status.slack.workspaceName}</p>
                 )}
-                <p className="text-slate-300 mb-3 text-sm">Manage Slack PCN notifications</p>
+                <p className="text-gray-700 mb-3 text-sm">Manage Slack PCN notifications</p>
                 <div className="flex gap-2">
                   <Link href="/admin/integrations/slack/settings">
-                    <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700">Manage</Button>
+                    <Button variant="outline" size="sm" className="border-gray-300 text-gray-700 hover:bg-gray-100">Manage</Button>
                   </Link>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDisconnect('slack')}
                     disabled={disconnecting === 'slack'}
-                    className="border-red-500/60 text-red-300 hover:bg-red-900/40"
+                    className="border-red-300 text-red-600 hover:bg-red-50"
                   >
                     {disconnecting === 'slack' ? 'Disconnecting...' : 'Disconnect'}
                   </Button>
@@ -218,7 +218,7 @@ export default function IntegrationsPage() {
               </div>
             ) : (
               <div>
-                <p className="text-slate-300 mb-3 text-sm">Connect Slack to send PCN notifications to your team</p>
+                <p className="text-gray-700 mb-3 text-sm">Connect Slack to send PCN notifications to your team</p>
                 <Link href="/admin/integrations/slack/setup">
                   <Button className="bg-indigo-600 hover:bg-indigo-700">Connect</Button>
                 </Link>
@@ -228,25 +228,25 @@ export default function IntegrationsPage() {
         </Card>
 
         {/* Zoom */}
-        <Card className="bg-slate-800/60 border border-slate-700/50 hover:shadow-lg hover:shadow-indigo-500/20 transition">
+        <Card className="bg-white border border-gray-200 hover:shadow-lg transition">
           <CardHeader>
-            <CardTitle className="text-slate-100">Zoom</CardTitle>
+            <CardTitle className="text-gray-900">Zoom</CardTitle>
           </CardHeader>
           <CardContent>
             {status.zoom.connected ? (
               <div>
-                <p className="text-emerald-300 font-medium mb-1">Connected</p>
-                <p className="text-slate-300 mb-3 text-sm">Automatically track show rates and generate PCNs from call transcripts</p>
+                <p className="text-emerald-600 font-medium mb-1">Connected</p>
+                <p className="text-gray-700 mb-3 text-sm">Automatically track show rates and generate PCNs from call transcripts</p>
                 <div className="flex gap-2">
                   <Link href="/admin/integrations/zoom/setup">
-                    <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-700">Manage</Button>
+                    <Button variant="outline" size="sm" className="border-gray-300 text-gray-700 hover:bg-gray-100">Manage</Button>
                   </Link>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleDisconnect('zoom')}
                     disabled={disconnecting === 'zoom'}
-                    className="border-red-500/60 text-red-300 hover:bg-red-900/40"
+                    className="border-red-300 text-red-600 hover:bg-red-50"
                   >
                     {disconnecting === 'zoom' ? 'Disconnecting...' : 'Disconnect'}
                   </Button>
@@ -254,7 +254,7 @@ export default function IntegrationsPage() {
               </div>
             ) : (
               <div>
-                <p className="text-slate-300 mb-3 text-sm">Connect Zoom to automate show rate tracking and AI-powered PCN generation</p>
+                <p className="text-gray-700 mb-3 text-sm">Connect Zoom to automate show rate tracking and AI-powered PCN generation</p>
                 <Link href="/admin/integrations/zoom/setup">
                   <Button className="bg-indigo-600 hover:bg-indigo-700">Connect</Button>
                 </Link>
