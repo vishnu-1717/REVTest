@@ -24,13 +24,16 @@ export async function POST(request: NextRequest) {
     await clearGHLOAuthTokens(companyId)
 
     // Clear legacy API key credentials if they exist (cleanup)
+    // NOTE: We preserve ghlWebhookSecret and ghlMarketplaceWebhookSecret because
+    // they're used for PCN survey webhooks, which are separate from OAuth
     await withPrisma(async (prisma) => {
       await prisma.company.update({
         where: { id: companyId },
         data: {
-          ghlApiKey: null,
-          ghlWebhookSecret: null
+          ghlApiKey: null
           // Note: ghlLocationId is preserved as it may be needed for reconnection
+          // Note: ghlWebhookSecret and ghlMarketplaceWebhookSecret are preserved
+          // because they're used for PCN survey webhooks, not OAuth
         }
       })
     })

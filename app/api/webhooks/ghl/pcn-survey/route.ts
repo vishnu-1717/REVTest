@@ -281,7 +281,8 @@ export async function POST(request: NextRequest) {
         select: {
           id: true,
           name: true,
-          ghlWebhookSecret: true
+          ghlWebhookSecret: true,
+          ghlMarketplaceWebhookSecret: true
         }
       })
 
@@ -319,8 +320,35 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: message, ...extra }, { status })
       }
 
-      if (!company.ghlWebhookSecret || company.ghlWebhookSecret !== secret) {
-        return logFailure(403, 'Invalid secret')
+      // Check both old and new webhook secret fields for backward compatibility
+      // Try both fields and check if either matches
+      const oldSecret = company.ghlWebhookSecret
+      const newSecret = company.ghlMarketplaceWebhookSecret
+      const validSecret = oldSecret || newSecret
+      
+      // Check if the provided secret matches either stored secret
+      const secretMatches = (oldSecret && oldSecret === secret) || (newSecret && newSecret === secret)
+      
+      if (!validSecret || !secretMatches) {
+        console.error('[PCN Survey] Secret validation failed:', {
+          companyId,
+          companyName: company.name,
+          hasGhlWebhookSecret: !!oldSecret,
+          hasGhlMarketplaceWebhookSecret: !!newSecret,
+          secretProvided: secret ? 'yes' : 'no',
+          secretLength: secret?.length || 0,
+          oldSecretMatches: oldSecret === secret,
+          newSecretMatches: newSecret === secret,
+          oldSecretPreview: oldSecret ? oldSecret.substring(0, 16) + '...' : 'null',
+          newSecretPreview: newSecret ? newSecret.substring(0, 16) + '...' : 'null',
+          providedSecretPreview: secret ? secret.substring(0, 16) + '...' : 'null'
+        })
+        return logFailure(403, 'Invalid secret', {
+          hint: 'Webhook secret may need to be regenerated. Check GHL webhook configuration.',
+          companyId,
+          hasOldSecret: !!oldSecret,
+          hasNewSecret: !!newSecret
+        })
       }
 
       // Try multiple ways to extract appointment ID
