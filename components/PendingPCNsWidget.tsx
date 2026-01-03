@@ -104,9 +104,14 @@ export function PendingPCNsWidget() {
         {loading ? (
           <p className="text-gray-700 text-sm">Loading...</p>
         ) : !hasPending ? (
-          <div className="text-center py-4">
-            <p className="text-emerald-600 font-semibold">Everything is up to date! 🎉</p>
-            <p className="text-gray-600 text-sm mt-1">No pending post-call notes.</p>
+          <div className="text-center py-6">
+            <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-emerald-50 mb-3">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-900">All caught up</p>
+            <p className="text-xs text-muted-foreground mt-1">No pending post-call notes</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -132,7 +137,6 @@ export function PendingPCNsWidget() {
                     <div>
                       <p className="text-sm font-semibold">
                         {summary.closerName}
-                        {summary.pendingCount === 0 && ' ✅'}
                       </p>
                       <p className="text-xs text-gray-600 mt-1">
                         {summary.pendingCount === 0

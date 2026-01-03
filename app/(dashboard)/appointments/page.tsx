@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import { PartyPopper } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -656,7 +657,7 @@ export default function AppointmentsPage() {
                 </>
               ) : (
                 <>
-                  <p className="text-green-600 font-semibold">All caught up! 🎉</p>
+                  <p className="text-green-600 font-semibold flex items-center justify-center gap-2">All caught up! <PartyPopper className="h-5 w-5" /></p>
                   <p className="text-gray-500 text-sm mt-1">No appointments need PCNs</p>
                 </>
               )}

@@ -8,20 +8,20 @@ type MetricStatus = 'neutral' | 'success' | 'warning' | 'danger'
 
 const statusClasses: Record<MetricStatus, string> = {
   neutral:
-    'border border-border bg-card text-card-foreground shadow-sm hover:border-border/80',
+    'border-border/60 bg-card hover:border-border',
   success:
-    'border border-green-400 bg-green-50 text-green-900 shadow-sm hover:border-green-500',
+    'border-emerald-500/30 bg-gradient-to-br from-emerald-50/80 to-card dark:from-emerald-950/30 dark:to-card hover:border-emerald-500/50',
   warning:
-    'border border-amber-400 bg-amber-50 text-amber-900 shadow-sm hover:border-amber-500',
+    'border-amber-500/30 bg-gradient-to-br from-amber-50/80 to-card dark:from-amber-950/30 dark:to-card hover:border-amber-500/50',
   danger:
-    'border border-red-400 bg-red-50 text-red-900 shadow-sm hover:border-red-500'
+    'border-red-500/30 bg-gradient-to-br from-red-50/80 to-card dark:from-red-950/30 dark:to-card hover:border-red-500/50'
 }
 
 const valueClasses: Record<MetricStatus, string> = {
   neutral: 'text-foreground',
-  success: 'text-green-800',
-  warning: 'text-amber-800',
-  danger: 'text-red-800'
+  success: 'text-emerald-600 dark:text-emerald-400',
+  warning: 'text-amber-600 dark:text-amber-400',
+  danger: 'text-red-600 dark:text-red-400'
 }
 
 interface ClickableMetricCardProps {
@@ -62,26 +62,28 @@ export function ClickableMetricCard({
       onClick={onClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'h-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
-        onClick ? 'cursor-pointer hover:shadow-lg' : '',
+        'h-full transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+        onClick ? 'cursor-pointer hover:scale-[1.02] active:scale-[0.99]' : '',
         statusClasses[status]
       )}
     >
-      <CardHeader>
-        <CardTitle className="text-sm font-semibold text-muted-foreground">{title}</CardTitle>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm text-muted-foreground">
-        <div className={cn('text-3xl font-semibold', valueClasses[status], valueClassName)}>
+      <CardContent className="space-y-1">
+        <div className={cn('text-2xl font-bold tracking-tight', valueClasses[status], valueClassName)}>
           {value}
         </div>
-        {description ? <p>{description}</p> : null}
+        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
         {filterKey ? (
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground/80">
-            Click to add filter {filterValue ? `· ${filterValue}` : ''}
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60 pt-1">
+            Click to filter {filterValue ? `· ${filterValue}` : ''}
           </p>
         ) : null}
         {footer}
       </CardContent>
     </Card>
-  )}
+  )
+}
+
 

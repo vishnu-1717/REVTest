@@ -24,6 +24,8 @@ import { TimeSeriesLineChart } from '@/components/analytics/charts/TimeSeriesLin
 import { DayOfWeekBarChart } from '@/components/analytics/charts/DayOfWeekBarChart'
 import { CalendarStackedBarChart } from '@/components/analytics/charts/CalendarStackedBarChart'
 
+const EMPTY_ARRAY: any[] = []
+
 interface FilterState {
   dateFrom: string
   dateTo: string
@@ -381,7 +383,7 @@ export default function AnalyticsPage() {
   const [comparisonInsights, setComparisonInsights] = useState<Insight[]>([])
   const [comparisonLoading, setComparisonLoading] = useState(false)
   const [comparisonError, setComparisonError] = useState<string | null>(null)
-  
+
   const [analytics, setAnalytics] = useState<any>(null)
   const [closers, setClosers] = useState<any[]>([])
   const [calendars, setCalendars] = useState<string[]>([])
@@ -488,13 +490,13 @@ export default function AnalyticsPage() {
     const nextFilters = createDefaultFilters()
     let hasFilters = false
 
-    ;(Object.keys(nextFilters) as Array<keyof FilterState>).forEach((key) => {
-      const value = params.get(key)
-      if (value) {
-        nextFilters[key] = value
-        hasFilters = true
-      }
-    })
+      ; (Object.keys(nextFilters) as Array<keyof FilterState>).forEach((key) => {
+        const value = params.get(key)
+        if (value) {
+          nextFilters[key] = value
+          hasFilters = true
+        }
+      })
 
     return hasFilters ? nextFilters : null
   }, [])
@@ -502,11 +504,11 @@ export default function AnalyticsPage() {
   const updateUrlFromFilters = useCallback((state: FilterState) => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams()
-    ;(Object.entries(state) as Array<[keyof FilterState, string]>).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, value)
-      }
-    })
+      ; (Object.entries(state) as Array<[keyof FilterState, string]>).forEach(([key, value]) => {
+        if (value) {
+          params.set(key, value)
+        }
+      })
 
     const currentUrl = new URL(window.location.href)
     const viewAs = currentUrl.searchParams.get('viewAs')
@@ -527,7 +529,7 @@ export default function AnalyticsPage() {
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}viewAs=${viewAs}`
   }, [])
-  
+
   useEffect(() => {
     fetchClosers()
     const urlFilters = parseFiltersFromUrl()
@@ -536,10 +538,10 @@ export default function AnalyticsPage() {
       setDraftFilters(urlFilters)
       fetchAnalytics(urlFilters)
     } else {
-    fetchAnalytics()
+      fetchAnalytics()
     }
   }, [parseFiltersFromUrl])
-  
+
   const fetchClosers = async () => {
     try {
       const res = await fetch('/api/admin/users', {
@@ -547,14 +549,14 @@ export default function AnalyticsPage() {
       })
       const data = await res.json()
       setClosers(data)
-      
+
       // Extract unique calendars from appointments (you'd want a dedicated endpoint)
       // For now, we'll populate this when we get analytics data
     } catch (error) {
       console.error('Failed to fetch closers:', error)
     }
   }
-  
+
   const fetchAnalytics = async (overrideFilters?: FilterState, comparisonOverride?: ComparisonTarget | null) => {
     setLoading(true)
     try {
@@ -612,7 +614,7 @@ export default function AnalyticsPage() {
     },
     [comparisonTarget]
   )
-  
+
   const handleApplyFilters = () => {
     setActiveQuickView(null)
     const appliedFilters = { ...draftFilters }
@@ -704,7 +706,7 @@ export default function AnalyticsPage() {
       fetchComparisonData(filters, analytics, comparisonTarget)
     }
   }
-  
+
   const quickViews: Array<{ id: QuickViewRange; label: string }> = [
     { id: 'today', label: 'Today' },
     { id: 'yesterday', label: 'Yesterday' },
@@ -765,9 +767,8 @@ export default function AnalyticsPage() {
         })
 
         const query = params.toString()
-        const baseUrl = `/api/analytics?detail=${encodeURIComponent(metricKey)}${
-          query ? `&${query}` : ''
-        }`
+        const baseUrl = `/api/analytics?detail=${encodeURIComponent(metricKey)}${query ? `&${query}` : ''
+          }`
         const response = await fetch(appendViewAs(baseUrl), {
           credentials: 'include'
         })
@@ -973,44 +974,44 @@ export default function AnalyticsPage() {
   const generateId = () => Math.random().toString(36).slice(2, 10)
 
   const dayOfWeekTable = useTableState({
-    data: analytics?.byDayOfWeek ?? [],
+    data: analytics?.byDayOfWeek ?? EMPTY_ARRAY,
     columns: dayOfWeekColumns,
     getId: (row) => String(row.dayOfWeek ?? row.dayName ?? generateId())
   })
 
   const timeOfDayTable = useTableState({
-    data: analytics?.byTimeOfDay ?? [],
+    data: analytics?.byTimeOfDay ?? EMPTY_ARRAY,
     columns: timeOfDayColumns,
     getId: (row) => String(row.period ?? generateId())
   })
 
   const appointmentTypeTable = useTableState({
-    data: analytics?.byAppointmentType ?? [],
+    data: analytics?.byAppointmentType ?? EMPTY_ARRAY,
     columns: appointmentTypeColumns,
     getId: (row) => String(row.type ?? generateId())
   })
 
   const closerTable = useTableState({
-    data: analytics?.byCloser ?? [],
+    data: analytics?.byCloser ?? EMPTY_ARRAY,
     columns: closerColumns,
     getId: (row) => String(row.closerEmail ?? row.closerId ?? row.closerName ?? generateId())
   })
 
   const calendarTable = useTableState({
-    data: analytics?.byCalendar ?? [],
+    data: analytics?.byCalendar ?? EMPTY_ARRAY,
     columns: calendarColumns,
     getId: (row) => String(row.calendar ?? generateId())
   })
 
   const objectionTable = useTableState({
-    data: analytics?.byObjection ?? [],
+    data: analytics?.byObjection ?? EMPTY_ARRAY,
     columns: objectionColumns,
     getId: (row) => String(row.type ?? generateId())
   })
 
-  const timeSeriesData = analytics?.byDate ?? []
-  const dayOfWeekData = analytics?.byDayOfWeek ?? []
-  const calendarChartData = analytics?.byCalendar ?? []
+  const timeSeriesData = analytics?.byDate ?? EMPTY_ARRAY
+  const dayOfWeekData = analytics?.byDayOfWeek ?? EMPTY_ARRAY
+  const calendarChartData = analytics?.byCalendar ?? EMPTY_ARRAY
 
   const handleSetDateRange = (date: string) => {
     const updatedFilters: FilterState = {
@@ -1228,375 +1229,375 @@ export default function AnalyticsPage() {
   return (
     <>
       <div className="mx-auto max-w-6xl px-4 py-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-6">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-900">Sales Analytics</h1>
-          <p className="text-sm text-gray-700">Deep dive into your sales performance</p>
-          <p className="text-[11px] text-gray-600 mt-1">Reporting in {timezone}</p>
-        </div>
-      </div>
-      
-      <FilterContextBar
-        filters={filterChips}
-        onRemoveFilter={(key) => handleRemoveFilter(key as keyof FilterState)}
-        onClearAll={handleClearAllFilters}
-        compareMode={compareMode}
-        onToggleCompare={handleToggleCompareMode}
-        appointmentCount={analytics?.scheduledCallsToDate ?? 0}
-      />
-      
-      {/* Filters */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-6">
-        <div className="mb-4">
-          <h2 className="text-sm font-medium text-gray-900">Filters</h2>
-        </div>
-        <div>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {quickViews.map((view) => (
-              <Button
-                key={view.id}
-                variant={activeQuickView === view.id ? 'default' : 'outline'}
-                onClick={() => handleQuickView(view.id)}
-                className={activeQuickView === view.id ? '' : 'text-black'}
-              >
-                {view.label}
-              </Button>
-            ))}
-          </div>
-          <AdvancedFilters
-            filters={draftFilters}
-            onFilterChange={handleFilterChange}
-            closers={closers}
-            calendars={calendars}
-          />
-          
-          <div className="mt-4 flex gap-2">
-            <Button onClick={handleApplyFilters} disabled={loading} className="bg-indigo-500 hover:bg-indigo-600 text-white">
-              {loading ? 'Loading...' : 'Apply Filters'}
-            </Button>
-            <Button variant="outline" onClick={() => window.print()} className="border-gray-300 text-gray-700 hover:bg-gray-100">
-              Export Report
-            </Button>
+        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between mb-8">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">Sales Analytics</h1>
+            <p className="text-sm text-muted-foreground mt-1">Deep dive into your sales performance</p>
+            <p className="text-[11px] text-muted-foreground/70 mt-0.5">Reporting in {timezone}</p>
           </div>
         </div>
-      </div>
-      
-      {compareMode && analytics ? (
-        <div className="mb-8">
-          <ComparisonView
-            primaryData={analytics}
-            comparisonData={comparisonData}
-            comparisonLabel={comparisonLabel}
-            comparisonTarget={comparisonTarget}
-            onTargetChange={handleComparisonTargetChange}
-            loading={comparisonLoading}
-            error={comparisonError}
-            onRetry={handleComparisonRetry}
-            insights={comparisonInsights}
-            canUseAllOtherDays={hasDayOfWeekFilter}
-          />
-        </div>
-      ) : null}
 
-      {!compareMode && analytics ? (
-        <>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-6 mb-8">
-            <ClickableMetricCard
-              title="Calls Created"
-              value={(analytics.callsCreated || 0).toLocaleString()}
-              description="Appointments created in time frame"
-              onClick={createMetricCardHandler('callsCreated', 'Calls Created')}
-            />
-            <ClickableMetricCard
-              title="Scheduled Calls to Date"
-              value={(analytics.scheduledCallsToDate || 0).toLocaleString()}
-              description="Scheduled in time frame"
-              onClick={createMetricCardHandler('scheduledCallsToDate', 'Scheduled Calls to Date')}
-            />
-            <ClickableMetricCard
-              title="Cancellation Rate"
-              value={renderWithBadge(cancellationRateFormatted, cancellationRateBadge)}
-              description="Percent of scheduled calls canceled"
-              status={kpi?.cancellationRate.status ?? 'neutral'}
-            />
-            <ClickableMetricCard
-              title="No Show Rate"
-              value={renderWithBadge(noShowRateFormatted, noShowRateBadge)}
-              description="Percent of expected calls that no-showed"
-              status={kpi?.noShowRate.status ?? 'neutral'}
-            />
-            <ClickableMetricCard
-              title="Avg Sales Cycle"
-              value={
-                <>
-                  {formatSalesCycle(analytics.averageSalesCycleDays)}{' '}
-                  {typeof analytics.averageSalesCycleDays === 'number' ? 'days' : ''}
-                </>
-              }
-              description={`Avg days from first call to close (${analytics.salesCycleCount || 0} deals)`}
-              onClick={createMetricCardHandler('salesCycle', 'Average Sales Cycle')}
-            />
-            <ClickableMetricCard
-              title="Avg Lead Time"
-              value={
-                <>
-                  {formatLeadTime(analytics.averageAppointmentLeadTimeDays)}{' '}
-                  {typeof analytics.averageAppointmentLeadTimeDays === 'number' ? 'days' : ''}
-                </>
-              }
-              description={`Avg days from creation to actual start (${analytics.appointmentLeadTimeCount || 0} appts)`}
-              onClick={createMetricCardHandler('appointmentLeadTime', 'Average Appointment Lead Time')}
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <ClickableMetricCard
-              title="Show Rate"
-              value={renderWithBadge(showRateFormatted, showRateBadge)}
-              description={`${analytics.callsShown || 0} calls shown`}
-              status={kpi?.showRate.status ?? 'neutral'}
-            />
-            <ClickableMetricCard
-              title="Qualified Calls"
-              value={(analytics.qualifiedCalls || 0).toLocaleString()}
-              description={
-                <>
-                  Qualified Rate: {renderWithBadge(qualifiedRateFormatted, qualifiedRateBadge)}
-                </>
-              }
-              status={kpi?.qualifiedRate.status ?? 'neutral'}
-              onClick={createMetricCardHandler('qualifiedCalls', 'Qualified Calls')}
-            />
-            <ClickableMetricCard
-              title="Total Units Closed"
-              value={(analytics.totalUnitsClosed || 0).toLocaleString()}
-              description={
-                <>
-                  Close Rate: {renderWithBadge(closeRateFormatted, closeRateBadge)}
-                </>
-              }
-              status={kpi?.closeRate.status ?? 'neutral'}
-              onClick={createMetricCardHandler('totalUnitsClosed', 'Total Units Closed')}
-            />
-            <ClickableMetricCard
-              title="Scheduled Calls to Closed"
-              value={`${(analytics.scheduledCallsToClosed || 0).toFixed(1)}%`}
-              description="Closed ÷ Scheduled"
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-            <ClickableMetricCard
-              title="Cash Collected"
-              value={`$${(analytics.cashCollected || 0).toLocaleString()}`}
-              description="Total cash collected"
-              onClick={createMetricCardHandler('cashCollected', 'Cash Collected')}
-            />
-            <ClickableMetricCard
-              title="$ per Scheduled Call"
-              value={renderWithBadge(revenuePerScheduledFormatted, revenuePerScheduledBadge)}
-              description="Cash ÷ Scheduled Calls"
-              status={kpi?.revenuePerScheduled.status ?? 'neutral'}
-            />
-            <ClickableMetricCard
-              title="$ per Showed Call"
-              value={renderWithBadge(revenuePerShowFormatted, revenuePerShowBadge)}
-              description="Cash ÷ Calls Shown"
-              status={kpi?.revenuePerShow.status ?? 'neutral'}
-            />
-            <ClickableMetricCard
-              title="Missing PCNs"
-              value={<span className="text-red-600">{(analytics.missingPCNs || 0).toLocaleString()}</span>}
-              description="Overdue PCN submissions"
-              status="danger"
-              onClick={createMetricCardHandler('missingPCNs', 'Missing PCNs')}
-            />
-                </div>
-        </>
-      ) : null}
+        <FilterContextBar
+          filters={filterChips}
+          onRemoveFilter={(key) => handleRemoveFilter(key as keyof FilterState)}
+          onClearAll={handleClearAllFilters}
+          compareMode={compareMode}
+          onToggleCompare={handleToggleCompareMode}
+          appointmentCount={analytics?.scheduledCallsToDate ?? 0}
+        />
 
-      {analytics && (
-        <>
-          <div className="mb-6 flex gap-2">
-            <Button
-              variant={activeView === 'overview' ? 'default' : 'outline'}
-              onClick={() => setActiveView('overview')}
-              className={activeView !== 'overview' ? 'text-black' : ''}
-            >
-              Overview
-            </Button>
-            <Button
-              variant={activeView === 'closers' ? 'default' : 'outline'}
-              onClick={() => setActiveView('closers')}
-              className={activeView !== 'closers' ? 'text-black' : ''}
-            >
-              By Closer
-            </Button>
-            <Button
-              variant={activeView === 'calendars' ? 'default' : 'outline'}
-              onClick={() => setActiveView('calendars')}
-              className={activeView !== 'calendars' ? 'text-black' : ''}
-            >
-              By Calendar/Source
-            </Button>
-            <Button
-              variant={activeView === 'objections' ? 'default' : 'outline'}
-              onClick={() => setActiveView('objections')}
-              className={activeView !== 'objections' ? 'text-black' : ''}
-            >
-              By Objection
-            </Button>
+        {/* Filters */}
+        <div className="bg-card border border-border/60 rounded-xl p-5 mb-8 shadow-card">
+          <div className="mb-4">
+            <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Filters</h2>
           </div>
-          
-          {/* Content based on active view */}
-          {activeView === 'overview' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
+          <div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {quickViews.map((view) => (
                 <Button
-                  variant={overviewMode === 'charts' ? 'default' : 'outline'}
-                  onClick={() => setOverviewMode('charts')}
+                  key={view.id}
+                  variant={activeQuickView === view.id ? 'default' : 'outline'}
+                  onClick={() => handleQuickView(view.id)}
+                  className={activeQuickView === view.id ? '' : 'text-black'}
                 >
-                  Charts
+                  {view.label}
                 </Button>
-                <Button
-                  variant={overviewMode === 'tables' ? 'default' : 'outline'}
-                  onClick={() => setOverviewMode('tables')}
-                >
-                  Tables
-                </Button>
-              </div>
-
-              {overviewMode === 'charts' ? (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                  <TimeSeriesLineChart
-                    data={timeSeriesData}
-                    onPointClick={(date) => handleSetDateRange(date)}
-                  />
-                  <DayOfWeekBarChart
-                    data={dayOfWeekData}
-                    onBarClick={(dayOfWeek) => handleAddFilter('dayOfWeek', String(dayOfWeek))}
-                  />
-                  <CalendarStackedBarChart
-                    data={calendarChartData}
-                    onBarClick={(calendar) => handleAddFilter('calendar', calendar)}
-                  />
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-                  {renderBreakdownTable(
-                    'By Day of Week',
-                    dayOfWeekTable,
-                    dayOfWeekColumns,
-                    dayOfWeekComparisonMetrics,
-                    (row) => row.dayName ?? DAY_NAMES[row.dayOfWeek as number] ?? 'Unknown day',
-                    'analytics-by-day-of-week.csv',
-                    (row) => {
-                      if (row.dayOfWeek !== undefined) {
-                        handleAddFilter('dayOfWeek', String(row.dayOfWeek))
-                      }
-                    },
-                    'Search day…'
-                  )}
-
-                  {renderBreakdownTable(
-                    'By Time of Day',
-                    timeOfDayTable,
-                    timeOfDayColumns,
-                    timeOfDayComparisonMetrics,
-                    (row) => row.period ?? 'Unknown period',
-                    'analytics-by-time-of-day.csv',
-                    (row) => {
-                      const filterValue = row.period?.toLowerCase?.()
-                      if (filterValue) {
-                        handleAddFilter('timeOfDay', filterValue)
-                      }
-                    },
-                    'Search period…'
-                  )}
-
-                  {renderBreakdownTable(
-                    'First Call vs Follow Up',
-                    appointmentTypeTable,
-                    appointmentTypeColumns,
-                    appointmentTypeComparisonMetrics,
-                    (row) => row.type ?? 'Unknown type',
-                    'analytics-by-appointment-type.csv',
-                    (row) => {
-                      const value =
-                        row.type === 'First Call'
-                          ? 'first_call'
-                          : row.type === 'Follow Up'
-                            ? 'follow_up'
-                            : row.type
-                      if (value) {
-                        handleAddFilter('appointmentType', value)
-                      }
-                    },
-                    'Search appointment type…'
-                  )}
-                </div>
-              )}
+              ))}
             </div>
-          )}
-          
-          {activeView === 'closers' && (
-            <div>
-              {renderBreakdownTable(
-                'Performance by Closer',
-                closerTable,
-                closerColumns,
-                closerComparisonMetrics,
-                (row) => row.closerName ?? row.closerEmail ?? 'Unknown closer',
-                'analytics-by-closer.csv',
-                (row) => {
-                  if (row.closerId) {
-                    handleAddFilter('closer', row.closerId)
-                  }
-                },
-                'Search closer…'
-              )}
+            <AdvancedFilters
+              filters={draftFilters}
+              onFilterChange={handleFilterChange}
+              closers={closers}
+              calendars={calendars}
+            />
+
+            <div className="mt-5 flex gap-2 pt-4 border-t border-border/40">
+              <Button onClick={handleApplyFilters} disabled={loading}>
+                {loading ? 'Loading...' : 'Apply Filters'}
+              </Button>
+              <Button variant="outline" onClick={() => window.print()}>
+                Export Report
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {compareMode && analytics ? (
+          <div className="mb-8">
+            <ComparisonView
+              primaryData={analytics}
+              comparisonData={comparisonData}
+              comparisonLabel={comparisonLabel}
+              comparisonTarget={comparisonTarget}
+              onTargetChange={handleComparisonTargetChange}
+              loading={comparisonLoading}
+              error={comparisonError}
+              onRetry={handleComparisonRetry}
+              insights={comparisonInsights}
+              canUseAllOtherDays={hasDayOfWeekFilter}
+            />
+          </div>
+        ) : null}
+
+        {!compareMode && analytics ? (
+          <>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-6 mb-8">
+              <ClickableMetricCard
+                title="Calls Created"
+                value={(analytics.callsCreated || 0).toLocaleString()}
+                description="Appointments created in time frame"
+                onClick={createMetricCardHandler('callsCreated', 'Calls Created')}
+              />
+              <ClickableMetricCard
+                title="Scheduled Calls to Date"
+                value={(analytics.scheduledCallsToDate || 0).toLocaleString()}
+                description="Scheduled in time frame"
+                onClick={createMetricCardHandler('scheduledCallsToDate', 'Scheduled Calls to Date')}
+              />
+              <ClickableMetricCard
+                title="Cancellation Rate"
+                value={renderWithBadge(cancellationRateFormatted, cancellationRateBadge)}
+                description="Percent of scheduled calls canceled"
+                status={kpi?.cancellationRate.status ?? 'neutral'}
+              />
+              <ClickableMetricCard
+                title="No Show Rate"
+                value={renderWithBadge(noShowRateFormatted, noShowRateBadge)}
+                description="Percent of expected calls that no-showed"
+                status={kpi?.noShowRate.status ?? 'neutral'}
+              />
+              <ClickableMetricCard
+                title="Avg Sales Cycle"
+                value={
+                  <>
+                    {formatSalesCycle(analytics.averageSalesCycleDays)}{' '}
+                    {typeof analytics.averageSalesCycleDays === 'number' ? 'days' : ''}
+                  </>
+                }
+                description={`Avg days from first call to close (${analytics.salesCycleCount || 0} deals)`}
+                onClick={createMetricCardHandler('salesCycle', 'Average Sales Cycle')}
+              />
+              <ClickableMetricCard
+                title="Avg Lead Time"
+                value={
+                  <>
+                    {formatLeadTime(analytics.averageAppointmentLeadTimeDays)}{' '}
+                    {typeof analytics.averageAppointmentLeadTimeDays === 'number' ? 'days' : ''}
+                  </>
+                }
+                description={`Avg days from creation to actual start (${analytics.appointmentLeadTimeCount || 0} appts)`}
+                onClick={createMetricCardHandler('appointmentLeadTime', 'Average Appointment Lead Time')}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+              <ClickableMetricCard
+                title="Show Rate"
+                value={renderWithBadge(showRateFormatted, showRateBadge)}
+                description={`${analytics.callsShown || 0} calls shown`}
+                status={kpi?.showRate.status ?? 'neutral'}
+              />
+              <ClickableMetricCard
+                title="Qualified Calls"
+                value={(analytics.qualifiedCalls || 0).toLocaleString()}
+                description={
+                  <>
+                    Qualified Rate: {renderWithBadge(qualifiedRateFormatted, qualifiedRateBadge)}
+                  </>
+                }
+                status={kpi?.qualifiedRate.status ?? 'neutral'}
+                onClick={createMetricCardHandler('qualifiedCalls', 'Qualified Calls')}
+              />
+              <ClickableMetricCard
+                title="Total Units Closed"
+                value={(analytics.totalUnitsClosed || 0).toLocaleString()}
+                description={
+                  <>
+                    Close Rate: {renderWithBadge(closeRateFormatted, closeRateBadge)}
+                  </>
+                }
+                status={kpi?.closeRate.status ?? 'neutral'}
+                onClick={createMetricCardHandler('totalUnitsClosed', 'Total Units Closed')}
+              />
+              <ClickableMetricCard
+                title="Scheduled Calls to Closed"
+                value={`${(analytics.scheduledCallsToClosed || 0).toFixed(1)}%`}
+                description="Closed ÷ Scheduled"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+              <ClickableMetricCard
+                title="Cash Collected"
+                value={`$${(analytics.cashCollected || 0).toLocaleString()}`}
+                description="Total cash collected"
+                onClick={createMetricCardHandler('cashCollected', 'Cash Collected')}
+              />
+              <ClickableMetricCard
+                title="$ per Scheduled Call"
+                value={renderWithBadge(revenuePerScheduledFormatted, revenuePerScheduledBadge)}
+                description="Cash ÷ Scheduled Calls"
+                status={kpi?.revenuePerScheduled.status ?? 'neutral'}
+              />
+              <ClickableMetricCard
+                title="$ per Showed Call"
+                value={renderWithBadge(revenuePerShowFormatted, revenuePerShowBadge)}
+                description="Cash ÷ Calls Shown"
+                status={kpi?.revenuePerShow.status ?? 'neutral'}
+              />
+              <ClickableMetricCard
+                title="Missing PCNs"
+                value={<span className="text-red-600">{(analytics.missingPCNs || 0).toLocaleString()}</span>}
+                description="Overdue PCN submissions"
+                status="danger"
+                onClick={createMetricCardHandler('missingPCNs', 'Missing PCNs')}
+              />
+            </div>
+          </>
+        ) : null}
+
+        {analytics && (
+          <>
+            <div className="mb-6 flex gap-2">
+              <Button
+                variant={activeView === 'overview' ? 'default' : 'outline'}
+                onClick={() => setActiveView('overview')}
+                className={activeView !== 'overview' ? 'text-black' : ''}
+              >
+                Overview
+              </Button>
+              <Button
+                variant={activeView === 'closers' ? 'default' : 'outline'}
+                onClick={() => setActiveView('closers')}
+                className={activeView !== 'closers' ? 'text-black' : ''}
+              >
+                By Closer
+              </Button>
+              <Button
+                variant={activeView === 'calendars' ? 'default' : 'outline'}
+                onClick={() => setActiveView('calendars')}
+                className={activeView !== 'calendars' ? 'text-black' : ''}
+              >
+                By Calendar/Source
+              </Button>
+              <Button
+                variant={activeView === 'objections' ? 'default' : 'outline'}
+                onClick={() => setActiveView('objections')}
+                className={activeView !== 'objections' ? 'text-black' : ''}
+              >
+                By Objection
+              </Button>
+            </div>
+
+            {/* Content based on active view */}
+            {activeView === 'overview' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={overviewMode === 'charts' ? 'default' : 'outline'}
+                    onClick={() => setOverviewMode('charts')}
+                  >
+                    Charts
+                  </Button>
+                  <Button
+                    variant={overviewMode === 'tables' ? 'default' : 'outline'}
+                    onClick={() => setOverviewMode('tables')}
+                  >
+                    Tables
+                  </Button>
                 </div>
-          )}
-          
-          {activeView === 'calendars' && (
-            <div>
-              {renderBreakdownTable(
-                'Performance by Calendar/Traffic Source',
-                calendarTable,
-                calendarColumns,
-                calendarComparisonMetrics,
-                (row) => row.calendar ?? 'Unknown calendar',
-                'analytics-by-calendar.csv',
-                (row) => {
-                  if (row.calendar) {
-                    handleAddFilter('calendar', row.calendar)
-                  }
-                },
-                'Search calendar…'
-              )}
-                </div>
-          )}
-          
-          {activeView === 'objections' && (
-            <div>
-              {renderBreakdownTable(
-                'Objection Analysis',
-                objectionTable,
-                objectionColumns,
-                objectionComparisonMetrics,
-                (row) => row.type ?? 'Unknown objection',
-                'analytics-by-objection.csv',
-                (row) => {
-                  if (row.type) {
-                    handleAddFilter('objectionType', row.type)
-                  }
-                },
-                'Search objection…'
-              )}
-                </div>
-          )}
-        </>
-      )}
+
+                {overviewMode === 'charts' ? (
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                    <TimeSeriesLineChart
+                      data={timeSeriesData}
+                      onPointClick={(date) => handleSetDateRange(date)}
+                    />
+                    <DayOfWeekBarChart
+                      data={dayOfWeekData}
+                      onBarClick={(dayOfWeek) => handleAddFilter('dayOfWeek', String(dayOfWeek))}
+                    />
+                    <CalendarStackedBarChart
+                      data={calendarChartData}
+                      onBarClick={(calendar) => handleAddFilter('calendar', calendar)}
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+                    {renderBreakdownTable(
+                      'By Day of Week',
+                      dayOfWeekTable,
+                      dayOfWeekColumns,
+                      dayOfWeekComparisonMetrics,
+                      (row) => row.dayName ?? DAY_NAMES[row.dayOfWeek as number] ?? 'Unknown day',
+                      'analytics-by-day-of-week.csv',
+                      (row) => {
+                        if (row.dayOfWeek !== undefined) {
+                          handleAddFilter('dayOfWeek', String(row.dayOfWeek))
+                        }
+                      },
+                      'Search day…'
+                    )}
+
+                    {renderBreakdownTable(
+                      'By Time of Day',
+                      timeOfDayTable,
+                      timeOfDayColumns,
+                      timeOfDayComparisonMetrics,
+                      (row) => row.period ?? 'Unknown period',
+                      'analytics-by-time-of-day.csv',
+                      (row) => {
+                        const filterValue = row.period?.toLowerCase?.()
+                        if (filterValue) {
+                          handleAddFilter('timeOfDay', filterValue)
+                        }
+                      },
+                      'Search period…'
+                    )}
+
+                    {renderBreakdownTable(
+                      'First Call vs Follow Up',
+                      appointmentTypeTable,
+                      appointmentTypeColumns,
+                      appointmentTypeComparisonMetrics,
+                      (row) => row.type ?? 'Unknown type',
+                      'analytics-by-appointment-type.csv',
+                      (row) => {
+                        const value =
+                          row.type === 'First Call'
+                            ? 'first_call'
+                            : row.type === 'Follow Up'
+                              ? 'follow_up'
+                              : row.type
+                        if (value) {
+                          handleAddFilter('appointmentType', value)
+                        }
+                      },
+                      'Search appointment type…'
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeView === 'closers' && (
+              <div>
+                {renderBreakdownTable(
+                  'Performance by Closer',
+                  closerTable,
+                  closerColumns,
+                  closerComparisonMetrics,
+                  (row) => row.closerName ?? row.closerEmail ?? 'Unknown closer',
+                  'analytics-by-closer.csv',
+                  (row) => {
+                    if (row.closerId) {
+                      handleAddFilter('closer', row.closerId)
+                    }
+                  },
+                  'Search closer…'
+                )}
+              </div>
+            )}
+
+            {activeView === 'calendars' && (
+              <div>
+                {renderBreakdownTable(
+                  'Performance by Calendar/Traffic Source',
+                  calendarTable,
+                  calendarColumns,
+                  calendarComparisonMetrics,
+                  (row) => row.calendar ?? 'Unknown calendar',
+                  'analytics-by-calendar.csv',
+                  (row) => {
+                    if (row.calendar) {
+                      handleAddFilter('calendar', row.calendar)
+                    }
+                  },
+                  'Search calendar…'
+                )}
+              </div>
+            )}
+
+            {activeView === 'objections' && (
+              <div>
+                {renderBreakdownTable(
+                  'Objection Analysis',
+                  objectionTable,
+                  objectionColumns,
+                  objectionComparisonMetrics,
+                  (row) => row.type ?? 'Unknown objection',
+                  'analytics-by-objection.csv',
+                  (row) => {
+                    if (row.type) {
+                      handleAddFilter('objectionType', row.type)
+                    }
+                  },
+                  'Search objection…'
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
       {detailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8">

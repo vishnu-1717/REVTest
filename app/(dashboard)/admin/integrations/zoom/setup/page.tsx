@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Check, XCircle } from 'lucide-react'
 
 export default function ZoomSetupPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
-  
+
   const [accountId, setAccountId] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
@@ -65,14 +66,14 @@ export default function ZoomSetupPage() {
   const handleTestConnection = async () => {
     setTesting(true)
     setTestResult(null)
-    
+
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/zoom/test'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accountId, clientId, clientSecret })
       })
-      
+
       const data = await res.json()
       setTestResult({
         success: data.success || false,
@@ -101,15 +102,15 @@ export default function ZoomSetupPage() {
           autoSubmitPCN
         })
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error || 'Failed to save Zoom credentials')
         return
       }
-      
+
       setConnected(true)
-      alert('✅ Zoom integration saved successfully!')
+      alert('Zoom integration saved successfully!')
     } catch (error) {
       console.error(error)
       alert('Failed to save')
@@ -130,7 +131,7 @@ export default function ZoomSetupPage() {
       {connected && (
         <Card className="mb-6 border-green-500 bg-green-50">
           <CardHeader>
-            <CardTitle className="text-green-900">✅ Zoom Connected</CardTitle>
+            <CardTitle className="text-green-900 flex items-center gap-2"><Check className="h-5 w-5" /> Zoom Connected</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-green-800 mb-4">
@@ -213,10 +214,9 @@ export default function ZoomSetupPage() {
             )}
 
             {testResult && (
-              <div className={`p-3 rounded-lg ${
-                testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-              }`}>
-                {testResult.success ? '✅' : '❌'} {testResult.message}
+              <div className={`p-3 rounded-lg ${testResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+                }`}>
+                {testResult.success ? <Check className="h-5 w-5" /> : <XCircle className="h-5 w-5" />} {testResult.message}
               </div>
             )}
           </CardContent>

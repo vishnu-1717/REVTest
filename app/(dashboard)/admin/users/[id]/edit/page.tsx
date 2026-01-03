@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Check, AlertTriangle, XCircle } from 'lucide-react'
 
 interface User {
   id: string
@@ -39,7 +40,7 @@ export default function EditUserPage() {
   const [roles, setRoles] = useState<CommissionRole[]>([])
   const [ghlUsers, setGhlUsers] = useState<GHLUser[]>([])
   const [loadingGhlUsers, setLoadingGhlUsers] = useState(false)
-  
+
   const [formData, setFormData] = useState({
     name: '',
     role: 'rep',
@@ -49,24 +50,24 @@ export default function EditUserPage() {
     isActive: true,
     ghlUserId: ''
   })
-  
+
   useEffect(() => {
     if (params.id) {
       fetchUser()
       fetchRoles()
     }
   }, [params.id])
-  
+
   const fetchUser = async () => {
     try {
       const res = await fetch(withViewAs(`/api/admin/users/${params.id}`))
       const user: User = await res.json()
-      
+
       setFormData({
         name: user.name,
         role: user.role,
         commissionRoleId: user.commissionRoleId || '',
-        customCommissionRate: user.customCommissionRate 
+        customCommissionRate: user.customCommissionRate
           ? (user.customCommissionRate * 100).toString()
           : '',
         canViewTeamMetrics: user.canViewTeamMetrics,
@@ -79,7 +80,7 @@ export default function EditUserPage() {
       setLoading(false)
     }
   }
-  
+
   const fetchRoles = async () => {
     try {
       const res = await fetch('/api/admin/commission-roles')
@@ -90,23 +91,23 @@ export default function EditUserPage() {
     }
   }
 
-const getViewAsCompany = () => {
-  if (typeof window === 'undefined') return null
-  const params = new URLSearchParams(window.location.search)
-  const viewAsParam = params.get('viewAs')
-  if (viewAsParam) return viewAsParam
-  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
-  const value = match ? decodeURIComponent(match[1]) : null
-  if (value === 'none') return null
-  return value
-}
+  const getViewAsCompany = () => {
+    if (typeof window === 'undefined') return null
+    const params = new URLSearchParams(window.location.search)
+    const viewAsParam = params.get('viewAs')
+    if (viewAsParam) return viewAsParam
+    const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+    const value = match ? decodeURIComponent(match[1]) : null
+    if (value === 'none') return null
+    return value
+  }
 
-const withViewAs = (url: string) => {
-  const viewAs = getViewAsCompany()
-  if (!viewAs) return url
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}viewAs=${viewAs}`
-}
+  const withViewAs = (url: string) => {
+    const viewAs = getViewAsCompany()
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
 
   const fetchGhlUsers = async () => {
     setLoadingGhlUsers(true)
@@ -116,44 +117,44 @@ const withViewAs = (url: string) => {
       if (data.success) {
         if (data.users && data.users.length > 0) {
           setGhlUsers(data.users || [])
-          alert(`✅ Found ${data.users.length} GHL users`)
+          alert(`Found ${data.users.length} GHL users`)
         } else {
-          alert(data.message || '⚠️ No GHL users found. This may indicate an API issue. Check server logs for details.')
+          alert(data.message || 'No GHL users found. This may indicate an API issue. Check server logs for details.')
           setGhlUsers([])
         }
       } else {
         const errorMsg = data.error || 'Failed to fetch GHL users'
         const details = data.details ? `\n\nDetails: ${data.details}` : ''
-        alert(`❌ ${errorMsg}${details}`)
+        alert(`${errorMsg}${details}`)
       }
     } catch (error: any) {
       console.error('Failed to fetch GHL users:', error)
-      alert(`❌ Failed to fetch GHL users: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
+      alert(`Failed to fetch GHL users: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
     } finally {
       setLoadingGhlUsers(false)
     }
   }
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    
+
     try {
       const res = await fetch(withViewAs(`/api/admin/users/${params.id}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error)
         return
       }
-      
+
       // Redirect back to user detail
       router.push(`/admin/users/${params.id}`)
-      
+
     } catch (error) {
       console.error('Failed to update user:', error)
       alert('Failed to update user')
@@ -161,39 +162,39 @@ const withViewAs = (url: string) => {
       setSaving(false)
     }
   }
-  
+
   const handleDelete = async () => {
     if (!confirm('Are you sure you want to delete this user?')) return
-    
+
     try {
       const res = await fetch(withViewAs(`/api/admin/users/${params.id}`), {
         method: 'DELETE'
       })
-      
+
       const result = await res.json()
-      
+
       if (!res.ok) {
         alert(result.error)
         return
       }
-      
+
       alert(result.message || 'User deleted')
       router.push('/admin/users')
-      
+
     } catch (error) {
       console.error('Failed to delete user:', error)
       alert('Failed to delete user')
     }
   }
-  
+
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>
   }
-  
+
   return (
     <div className="container mx-auto py-10 max-w-2xl">
       <h1 className="text-3xl font-bold mb-8">Edit User</h1>
-      
+
       <Card>
         <CardHeader>
           <CardTitle>User Details</CardTitle>
@@ -206,18 +207,18 @@ const withViewAs = (url: string) => {
               </label>
               <Input
                 value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 Role *
               </label>
               <select
                 value={formData.role}
-                onChange={(e) => setFormData({...formData, role: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                 className="w-full border rounded-md p-2"
               >
                 <option value="rep">Rep</option>
@@ -226,14 +227,14 @@ const withViewAs = (url: string) => {
                 <option value="admin">Admin</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 Commission Role
               </label>
               <select
                 value={formData.commissionRoleId}
-                onChange={(e) => setFormData({...formData, commissionRoleId: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, commissionRoleId: e.target.value })}
                 className="w-full border rounded-md p-2"
               >
                 <option value="">-- No Role Assigned --</option>
@@ -244,7 +245,7 @@ const withViewAs = (url: string) => {
                 ))}
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 Custom Commission Rate (%)
@@ -255,14 +256,14 @@ const withViewAs = (url: string) => {
                 min="0"
                 max="100"
                 value={formData.customCommissionRate}
-                onChange={(e) => setFormData({...formData, customCommissionRate: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, customCommissionRate: e.target.value })}
                 placeholder="Leave blank to use role default"
               />
               <p className="text-sm text-gray-500 mt-1">
                 This overrides the commission role's default rate
               </p>
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 GHL User ID
@@ -270,7 +271,7 @@ const withViewAs = (url: string) => {
               <div className="flex gap-2">
                 <select
                   value={formData.ghlUserId}
-                  onChange={(e) => setFormData({...formData, ghlUserId: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, ghlUserId: e.target.value })}
                   className="flex-1 border rounded-md p-2"
                   disabled={ghlUsers.length === 0}
                 >
@@ -294,32 +295,32 @@ const withViewAs = (url: string) => {
                 Map this user to a GHL user so appointments sync correctly. Required for appointment assignment.
               </p>
               {formData.ghlUserId && (
-                <p className="text-sm text-green-600 mt-1">
-                  ✓ Mapped to GHL User ID: {formData.ghlUserId}
+                <p className="text-sm text-green-600 mt-1 flex items-center gap-1">
+                  <Check className="h-3 w-3" /> Mapped to GHL User ID: {formData.ghlUserId}
                 </p>
               )}
             </div>
-            
+
             <div className="space-y-3">
               <div className="flex items-center">
                 <input
                   type="checkbox"
                   id="canViewTeamMetrics"
                   checked={formData.canViewTeamMetrics}
-                  onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
+                  onChange={(e) => setFormData({ ...formData, canViewTeamMetrics: e.target.checked })}
                   className="mr-2"
                 />
                 <label htmlFor="canViewTeamMetrics" className="text-sm">
                   Can view team-wide metrics
                 </label>
               </div>
-              
+
               <div className="flex items-center">
                 <input
                   type="checkbox"
                   id="isActive"
                   checked={formData.isActive}
-                  onChange={(e) => setFormData({...formData, isActive: e.target.checked})}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                   className="mr-2"
                 />
                 <label htmlFor="isActive" className="text-sm">
@@ -327,7 +328,7 @@ const withViewAs = (url: string) => {
                 </label>
               </div>
             </div>
-            
+
             <div className="flex gap-2 pt-4 border-t">
               <Button type="submit" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}

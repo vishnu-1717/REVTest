@@ -12,6 +12,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import Link from 'next/link'
+import { Eye, Check, AlertTriangle } from 'lucide-react'
 
 interface User {
   id: string
@@ -52,7 +53,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -62,20 +63,20 @@ export default function UsersPage() {
     canViewTeamMetrics: false,
     companyId: ''
   })
-  
+
   useEffect(() => {
     fetchUsers()
     fetchRoles()
     fetchCompanies()
   }, [])
-  
+
   useEffect(() => {
     // Detect if user is viewing as super admin (multiple companies visible)
     const hasMultipleCompanies = new Set(users.map(u => u.Company?.id).filter(Boolean)).size > 1
     const hasCompanyColumn = users.some(u => u.Company !== null && u.Company !== undefined)
     setIsSuperAdmin(hasMultipleCompanies || hasCompanyColumn)
   }, [users])
-  
+
   const fetchUsers = async () => {
     try {
       const res = await fetch(withViewAs('/api/admin/users'))
@@ -86,7 +87,7 @@ export default function UsersPage() {
     }
     setLoading(false)
   }
-  
+
   const fetchRoles = async () => {
     try {
       const res = await fetch('/api/admin/commission-roles')
@@ -97,23 +98,23 @@ export default function UsersPage() {
     }
   }
 
-const getViewAsCompany = () => {
-  if (typeof window === 'undefined') return null
-  const params = new URLSearchParams(window.location.search)
-  const viewAsParam = params.get('viewAs')
-  if (viewAsParam) return viewAsParam
-  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
-  const value = match ? decodeURIComponent(match[1]) : null
-  if (value === 'none') return null
-  return value
-}
+  const getViewAsCompany = () => {
+    if (typeof window === 'undefined') return null
+    const params = new URLSearchParams(window.location.search)
+    const viewAsParam = params.get('viewAs')
+    if (viewAsParam) return viewAsParam
+    const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+    const value = match ? decodeURIComponent(match[1]) : null
+    if (value === 'none') return null
+    return value
+  }
 
-const withViewAs = (url: string) => {
-  const viewAs = getViewAsCompany()
-  if (!viewAs) return url
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}viewAs=${viewAs}`
-}
+  const withViewAs = (url: string) => {
+    const viewAs = getViewAsCompany()
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
 
   const fetchCompanies = async () => {
     try {
@@ -134,23 +135,23 @@ const withViewAs = (url: string) => {
       setCompaniesLoading(false)
     }
   }
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     try {
       const res = await fetch(withViewAs('/api/admin/users'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error)
         return
       }
-      
+
       // Reset form
       setFormData({
         name: '',
@@ -162,29 +163,29 @@ const withViewAs = (url: string) => {
         companyId: companies?.[0]?.id || ''
       })
       setShowForm(false)
-      
+
       // Refresh list
       fetchUsers()
-      
+
       alert('User created! They can now sign up with this email.')
-      
+
     } catch (error) {
       console.error('Failed to create user:', error)
       alert('Failed to create user')
     }
   }
-  
+
   const handleDeleteUser = async (userId: string, userName: string) => {
     if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
       return
     }
-    
+
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: 'DELETE',
         credentials: 'include'
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         if (res.status === 403) {
@@ -195,7 +196,7 @@ const withViewAs = (url: string) => {
         }
         return
       }
-      
+
       // Refresh the users list
       fetchUsers()
       alert('User deleted successfully')
@@ -213,22 +214,22 @@ const withViewAs = (url: string) => {
         credentials: 'include',
         body: JSON.stringify({ userId })
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error || 'Failed to impersonate user')
         return
       }
-      
+
       // Refresh page to show impersonation state
       window.location.href = '/dashboard'
-      
+
     } catch (error) {
       console.error('Failed to impersonate user:', error)
       alert('Failed to impersonate user')
     }
   }
-  
+
   const getCommissionRate = (user: User) => {
     if (user.customCommissionRate !== null) {
       return `${(user.customCommissionRate * 100).toFixed(1)}% (custom)`
@@ -238,11 +239,11 @@ const withViewAs = (url: string) => {
     }
     return 'Not set'
   }
-  
+
   if (loading) {
     return <div className="container mx-auto py-10">Loading...</div>
   }
-  
+
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex justify-between items-center mb-8">
@@ -259,7 +260,7 @@ const withViewAs = (url: string) => {
           + Add User
         </Button>
       </div>
-      
+
       {/* Create Form */}
       {showForm && (
         <Card className="mb-8">
@@ -275,12 +276,12 @@ const withViewAs = (url: string) => {
                   </label>
                   <Input
                     value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="John Doe"
                     required
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Email *
@@ -288,13 +289,13 @@ const withViewAs = (url: string) => {
                   <Input
                     type="email"
                     value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="john@example.com"
                     required
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Assign to Company *
@@ -331,7 +332,7 @@ const withViewAs = (url: string) => {
                   </label>
                   <select
                     value={formData.role}
-                    onChange={(e) => setFormData({...formData, role: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                     className="w-full border rounded-md p-2"
                   >
                     <option value="rep">Rep</option>
@@ -340,14 +341,14 @@ const withViewAs = (url: string) => {
                     <option value="admin">Admin</option>
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Commission Role
                   </label>
                   <select
                     value={formData.commissionRoleId}
-                    onChange={(e) => setFormData({...formData, commissionRoleId: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, commissionRoleId: e.target.value })}
                     className="w-full border rounded-md p-2"
                   >
                     <option value="">-- Select Role --</option>
@@ -359,7 +360,7 @@ const withViewAs = (url: string) => {
                   </select>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Custom Commission Rate (%)
@@ -370,27 +371,27 @@ const withViewAs = (url: string) => {
                   min="0"
                   max="100"
                   value={formData.customCommissionRate}
-                  onChange={(e) => setFormData({...formData, customCommissionRate: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, customCommissionRate: e.target.value })}
                   placeholder="Leave blank to use role default"
                 />
                 <p className="text-sm text-gray-500 mt-1">
                   Optional: Override the commission role's default rate for this user
                 </p>
               </div>
-              
+
               <div className="flex items-center">
                 <input
                   type="checkbox"
                   id="canViewTeamMetrics"
                   checked={formData.canViewTeamMetrics}
-                  onChange={(e) => setFormData({...formData, canViewTeamMetrics: e.target.checked})}
+                  onChange={(e) => setFormData({ ...formData, canViewTeamMetrics: e.target.checked })}
                   className="mr-2"
                 />
                 <label htmlFor="canViewTeamMetrics" className="text-sm">
                   Can view team-wide metrics
                 </label>
               </div>
-              
+
               <div className="flex gap-2">
                 <Button
                   type="submit"
@@ -421,7 +422,7 @@ const withViewAs = (url: string) => {
           </CardContent>
         </Card>
       )}
-      
+
       {/* Users List */}
       <div className="space-y-4">
         {users.length === 0 ? (
@@ -490,17 +491,17 @@ const withViewAs = (url: string) => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {user.ghlUserId ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          ✓ Mapped
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex items-center w-fit gap-1">
+                          <Check className="h-3 w-3" /> Mapped
                         </span>
                       ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                          ⚠ Not Mapped
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 flex items-center w-fit gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Not Mapped
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user._count.AppointmentsAsCloser} appts<br/>
+                      {user._count.AppointmentsAsCloser} appts<br />
                       {user._count.Commission} commissions
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -519,7 +520,7 @@ const withViewAs = (url: string) => {
                         onClick={() => handleImpersonate(user.id)}
                         className="text-blue-600 hover:text-blue-800 mr-3 flex items-center gap-1"
                       >
-                        👁️ View As
+                        <Eye className="h-4 w-4" /> View As
                       </button>
                       <Link
                         href={`/admin/users/${user.id}`}

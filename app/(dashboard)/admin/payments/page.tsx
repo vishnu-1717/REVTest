@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PartyPopper, Check, AlertTriangle } from 'lucide-react'
 
 interface UnmatchedPayment {
   id: string
@@ -44,11 +45,11 @@ export default function UnmatchedPaymentsPage() {
   const [bulkMatches, setBulkMatches] = useState<Record<string, string>>({}) // paymentId -> appointmentId
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkMatching, setBulkMatching] = useState(false)
-  
+
   useEffect(() => {
     fetchPayments()
   }, [])
-  
+
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -78,15 +79,15 @@ export default function UnmatchedPaymentsPage() {
 
   const getSelectedAppointmentData = () => {
     if (!selectedAppointment || !selectedPayment) return null
-    
+
     // Check if it's in suggested matches
     const suggestedMatch = selectedPayment.suggestedMatches?.find(
       (m: any) => (m.id || m.appointmentId) === selectedAppointment
     )
-    
+
     // Check if it's in search results
     const searchMatch = searchResults.find(apt => apt.id === selectedAppointment)
-    
+
     return suggestedMatch || searchMatch || null
   }
 
@@ -103,7 +104,7 @@ export default function UnmatchedPaymentsPage() {
     }
     setLoading(false)
   }
-  
+
   const searchAppointments = useCallback(async (query: string) => {
     if (!query || query.trim().length < 2) {
       setSearchResults([])
@@ -122,7 +123,7 @@ export default function UnmatchedPaymentsPage() {
       if (paymentDate) {
         params.append('paymentDate', paymentDate)
       }
-      
+
       const res = await fetch(`/api/admin/appointments/search?${params.toString()}`)
       if (!res.ok) {
         throw new Error('Search failed')
@@ -211,7 +212,7 @@ export default function UnmatchedPaymentsPage() {
 
       const result = await res.json()
       alert(`Successfully matched ${result.successful} of ${result.total} payments${result.failed > 0 ? ` (${result.failed} failed)` : ''}`)
-      
+
       // Reset selections
       setSelectedPayments(new Set())
       setBulkMatches({})
@@ -227,20 +228,20 @@ export default function UnmatchedPaymentsPage() {
 
   const handleMatch = async () => {
     if (!selectedPayment || !selectedAppointment) return
-    
+
     try {
       const res = await fetch(`/api/admin/unmatched-payments/${selectedPayment.id}/match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ appointmentId: selectedAppointment })
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error)
         return
       }
-      
+
       alert('Payment matched successfully!')
       setSelectedPayment(null)
       setSelectedAppointment('')
@@ -248,13 +249,13 @@ export default function UnmatchedPaymentsPage() {
       setSearchResults([])
       setShowDropdown(false)
       fetchPayments()
-      
+
     } catch (error) {
       console.error('Failed to match payment:', error)
       alert('Failed to match payment')
     }
   }
-  
+
   if (loading) {
     return (
       <div className="container mx-auto py-10">
@@ -262,7 +263,7 @@ export default function UnmatchedPaymentsPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="flex justify-between items-center mb-8">
@@ -290,11 +291,11 @@ export default function UnmatchedPaymentsPage() {
           </div>
         )}
       </div>
-      
+
       {payments.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-gray-500">
-            <p className="text-lg mb-2">🎉 All payments matched!</p>
+            <p className="text-lg mb-2 flex items-center justify-center gap-2"><PartyPopper className="h-6 w-6 text-yellow-500" /> All payments matched!</p>
             <p className="text-sm">No payments need manual review</p>
           </CardContent>
         </Card>
@@ -311,77 +312,77 @@ export default function UnmatchedPaymentsPage() {
                       onChange={() => handleTogglePaymentSelection(payment.id)}
                       className="mt-1 rounded"
                     />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-4 mb-4">
-                      {selectedPayments.has(payment.id) && bulkMatches[payment.id] && (
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                          Appointment selected for bulk match
-                        </span>
-                      )}
-                      <div>
-                        <h3 className="font-semibold text-lg">
-                          ${payment.sale.amount.toLocaleString()}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          {payment.sale.processor} · {payment.sale.externalId}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-500">Customer:</span>
-                        <p className="font-medium">{payment.sale.customerName || 'Unknown'}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Email:</span>
-                        <p className="font-medium">{payment.sale.customerEmail || 'Unknown'}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Date:</span>
-                        <p className="font-medium">
-                          {payment.sale.paidAt 
-                            ? new Date(payment.sale.paidAt).toLocaleDateString()
-                            : 'Unknown'
-                          }
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Suggested Matches:</span>
-                        <p className="font-medium">
-                          {Array.isArray(payment.suggestedMatches) 
-                            ? payment.suggestedMatches.length 
-                            : 0
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {Array.isArray(payment.suggestedMatches) && payment.suggestedMatches.length > 0 && (
-                      <div className="mt-4 p-4 bg-yellow-50 rounded">
-                        <p className="text-sm font-medium text-yellow-800 mb-2">
-                          Suggested matches ({payment.suggestedMatches.length}):
-                        </p>
-                        <div className="space-y-2">
-                          {payment.suggestedMatches.map((match: any, idx: number) => (
-                            <div key={idx} className="text-sm">
-                              <span className="font-medium">{match.contactName || match.contact?.name}</span>
-                              {' · '}
-                              <span className="text-gray-600">
-                                ${(match.cashCollected || 0).toLocaleString()}
-                              </span>
-                              {' · '}
-                              <span className="text-gray-600">
-                                {match.scheduledAt ? formatDate(match.scheduledAt) : 'Unknown date'}
-                              </span>
-                            </div>
-                          ))}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4 mb-4">
+                        {selectedPayments.has(payment.id) && bulkMatches[payment.id] && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
+                            Appointment selected for bulk match
+                          </span>
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-lg">
+                            ${payment.sale.amount.toLocaleString()}
+                          </h3>
+                          <p className="text-sm text-gray-500">
+                            {payment.sale.processor} · {payment.sale.externalId}
+                          </p>
                         </div>
                       </div>
-                    )}
+
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-500">Customer:</span>
+                          <p className="font-medium">{payment.sale.customerName || 'Unknown'}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Email:</span>
+                          <p className="font-medium">{payment.sale.customerEmail || 'Unknown'}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Date:</span>
+                          <p className="font-medium">
+                            {payment.sale.paidAt
+                              ? new Date(payment.sale.paidAt).toLocaleDateString()
+                              : 'Unknown'
+                            }
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Suggested Matches:</span>
+                          <p className="font-medium">
+                            {Array.isArray(payment.suggestedMatches)
+                              ? payment.suggestedMatches.length
+                              : 0
+                            }
+                          </p>
+                        </div>
+                      </div>
+
+                      {Array.isArray(payment.suggestedMatches) && payment.suggestedMatches.length > 0 && (
+                        <div className="mt-4 p-4 bg-yellow-50 rounded">
+                          <p className="text-sm font-medium text-yellow-800 mb-2">
+                            Suggested matches ({payment.suggestedMatches.length}):
+                          </p>
+                          <div className="space-y-2">
+                            {payment.suggestedMatches.map((match: any, idx: number) => (
+                              <div key={idx} className="text-sm">
+                                <span className="font-medium">{match.contactName || match.contact?.name}</span>
+                                {' · '}
+                                <span className="text-gray-600">
+                                  ${(match.cashCollected || 0).toLocaleString()}
+                                </span>
+                                {' · '}
+                                <span className="text-gray-600">
+                                  {match.scheduledAt ? formatDate(match.scheduledAt) : 'Unknown date'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  </div>
-                  
+
                   <Button onClick={() => setSelectedPayment(payment)}>
                     Match Manually
                   </Button>
@@ -391,16 +392,16 @@ export default function UnmatchedPaymentsPage() {
           ))}
         </div>
       )}
-      
+
       {/* Match Modal */}
       {selectedPayment && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={() => {
             setShowDropdown(false)
           }}
         >
-          <Card 
+          <Card
             className="max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -435,11 +436,10 @@ export default function UnmatchedPaymentsPage() {
                           <div
                             key={idx}
                             onClick={() => handleSelectAppointment(matchId)}
-                            className={`p-3 rounded-md border cursor-pointer transition-colors ${
-                              isSelected
+                            className={`p-3 rounded-md border cursor-pointer transition-colors ${isSelected
                                 ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
                                 : 'bg-white border-gray-200 hover:bg-gray-50'
-                            }`}
+                              }`}
                           >
                             <div className="flex justify-between items-start gap-3">
                               <div className="flex-1 min-w-0">
@@ -466,7 +466,7 @@ export default function UnmatchedPaymentsPage() {
                                 </div>
                               </div>
                               {isSelected && (
-                                <span className="text-blue-600 text-sm font-medium flex-shrink-0">✓ Selected</span>
+                                <span className="text-blue-600 text-sm font-medium flex-shrink-0 flex items-center gap-1"><Check className="h-4 w-4" /> Selected</span>
                               )}
                             </div>
                           </div>
@@ -475,7 +475,7 @@ export default function UnmatchedPaymentsPage() {
                   </div>
                 </div>
               )}
-              
+
               {/* Searchable Dropdown */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
@@ -516,7 +516,7 @@ export default function UnmatchedPaymentsPage() {
                     placeholder="Search by name, email, or appointment ID..."
                     className="w-full"
                   />
-                  
+
                   {/* Dropdown Results */}
                   {showDropdown && (searchResults.length > 0 || searchLoading) && (
                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-64 overflow-y-auto">
@@ -529,11 +529,10 @@ export default function UnmatchedPaymentsPage() {
                             <div
                               key={apt.id}
                               onClick={() => handleSelectAppointment(apt.id)}
-                              className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${
-                                isSelected
+                              className={`p-3 border-b border-gray-100 cursor-pointer transition-colors ${isSelected
                                   ? 'bg-blue-50'
                                   : 'hover:bg-gray-50'
-                              }`}
+                                }`}
                             >
                               <div className="flex justify-between items-start">
                                 <div className="flex-1">
@@ -550,7 +549,7 @@ export default function UnmatchedPaymentsPage() {
                                   </div>
                                 </div>
                                 {isSelected && (
-                                  <span className="text-blue-600 text-sm font-medium">✓</span>
+                                  <Check className="h-4 w-4 text-blue-600" />
                                 )}
                               </div>
                             </div>
@@ -561,8 +560,8 @@ export default function UnmatchedPaymentsPage() {
                   )}
                 </div>
                 {selectedAppointment && (
-                  <p className="text-xs text-green-600 mt-1">
-                    ✓ Appointment selected: {selectedAppointment}
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <Check className="h-3 w-3" /> Appointment selected: {selectedAppointment}
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
@@ -574,7 +573,7 @@ export default function UnmatchedPaymentsPage() {
               {selectedAppointment && selectedPayment && (() => {
                 const appointmentData = getSelectedAppointmentData()
                 if (!appointmentData) return null
-                
+
                 const paymentAmount = selectedPayment.sale.amount
                 const appointmentAmount = appointmentData.cashCollected || 0
                 const amountMatch = Math.abs(paymentAmount - appointmentAmount) / paymentAmount <= 0.1
@@ -584,7 +583,7 @@ export default function UnmatchedPaymentsPage() {
                 const emailMatch = selectedPayment.sale.customerEmail && appointmentData.contactEmail
                   ? selectedPayment.sale.customerEmail.toLowerCase().trim() === appointmentData.contactEmail.toLowerCase().trim()
                   : false
-                
+
                 return (
                   <div className="mb-6 border-2 border-blue-200 rounded-lg bg-blue-50/30 p-4">
                     <h3 className="text-sm font-semibold mb-3 text-gray-700">Comparison</h3>
@@ -614,14 +613,14 @@ export default function UnmatchedPaymentsPage() {
                           <div>
                             <span className="text-gray-500">Date:</span>
                             <p className="text-gray-900">
-                              {selectedPayment.sale.paidAt 
+                              {selectedPayment.sale.paidAt
                                 ? formatDate(selectedPayment.sale.paidAt)
                                 : 'Unknown'}
                             </p>
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Appointment Side */}
                       <div className="bg-white rounded-md p-3 border border-gray-200">
                         <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Appointment</h4>
@@ -629,7 +628,7 @@ export default function UnmatchedPaymentsPage() {
                           <div>
                             <span className="text-gray-500">Amount:</span>
                             <p className={`font-semibold ${amountMatch ? 'text-green-600' : 'text-gray-900'}`}>
-                              {appointmentAmount > 0 
+                              {appointmentAmount > 0
                                 ? `$${appointmentAmount.toLocaleString()}`
                                 : 'Not set'}
                             </p>
@@ -649,7 +648,7 @@ export default function UnmatchedPaymentsPage() {
                           <div>
                             <span className="text-gray-500">Scheduled:</span>
                             <p className="text-gray-900">
-                              {appointmentData.scheduledAt 
+                              {appointmentData.scheduledAt
                                 ? formatDate(appointmentData.scheduledAt)
                                 : 'Unknown'}
                             </p>
@@ -663,36 +662,36 @@ export default function UnmatchedPaymentsPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     {/* Match Indicators */}
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <div className="flex flex-wrap gap-3 text-xs">
                         {amountMatch && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded">✓ Amount matches</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded flex items-center gap-1"><Check className="h-3 w-3" /> Amount matches</span>
                         )}
                         {nameMatch && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded">✓ Name matches</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded flex items-center gap-1"><Check className="h-3 w-3" /> Name matches</span>
                         )}
                         {emailMatch && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded">✓ Email matches</span>
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded flex items-center gap-1"><Check className="h-3 w-3" /> Email matches</span>
                         )}
                         {!amountMatch && appointmentAmount > 0 && (
-                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">
-                            ⚠ Amount differs by ${Math.abs(paymentAmount - appointmentAmount).toLocaleString()}
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" /> Amount differs by ${Math.abs(paymentAmount - appointmentAmount).toLocaleString()}
                           </span>
                         )}
                         {!nameMatch && (
-                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">⚠ Name differs</span>
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Name differs</span>
                         )}
                         {!emailMatch && selectedPayment.sale.customerEmail && appointmentData.contactEmail && (
-                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded">⚠ Email differs</span>
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Email differs</span>
                         )}
                       </div>
                     </div>
                   </div>
                 )
               })()}
-              
+
               <div className="flex gap-2">
                 <Button onClick={handleMatch} disabled={!selectedAppointment}>
                   Match Payment
@@ -717,11 +716,11 @@ export default function UnmatchedPaymentsPage() {
 
       {/* Bulk Match Modal */}
       {showBulkModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={() => !bulkMatching && setShowBulkModal(false)}
         >
-          <Card 
+          <Card
             className="max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -736,9 +735,9 @@ export default function UnmatchedPaymentsPage() {
                 {Array.from(selectedPayments).map((paymentId) => {
                   const payment = payments.find(p => p.id === paymentId)
                   if (!payment) return null
-                  
+
                   const selectedAppointmentId = bulkMatches[paymentId]
-                  
+
                   return (
                     <div key={paymentId} className="border rounded-lg p-4 bg-gray-50">
                       <div className="mb-3">
@@ -749,12 +748,12 @@ export default function UnmatchedPaymentsPage() {
                             <p className="text-xs text-gray-500">{payment.sale.customerEmail || 'No email'}</p>
                           </div>
                           {selectedAppointmentId && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                              ✓ Matched
+                            <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs flex items-center gap-1">
+                              <Check className="h-3 w-3" /> Matched
                             </span>
                           )}
                         </div>
-                        
+
                         {/* Quick match from suggestions */}
                         {Array.isArray(payment.suggestedMatches) && payment.suggestedMatches.length > 0 && (
                           <div className="mb-3">
@@ -767,11 +766,10 @@ export default function UnmatchedPaymentsPage() {
                                   <button
                                     key={idx}
                                     onClick={() => handleBulkMatchSelect(paymentId, matchId)}
-                                    className={`px-2 py-1 rounded text-xs border transition-colors ${
-                                      isSelected
+                                    className={`px-2 py-1 rounded text-xs border transition-colors ${isSelected
                                         ? 'bg-blue-100 border-blue-300 text-blue-700'
                                         : 'bg-white border-gray-200 hover:bg-gray-50'
-                                    }`}
+                                      }`}
                                   >
                                     {match.contactName || 'Unknown'} · {match.cashCollected ? `$${match.cashCollected.toLocaleString()}` : 'No amount'}
                                   </button>
@@ -780,7 +778,7 @@ export default function UnmatchedPaymentsPage() {
                             </div>
                           </div>
                         )}
-                        
+
                         {/* Manual appointment ID input */}
                         <div className="mt-2">
                           <Input
@@ -807,10 +805,10 @@ export default function UnmatchedPaymentsPage() {
                   )
                 })}
               </div>
-              
+
               <div className="flex gap-2 mt-6 pt-4 border-t">
-                <Button 
-                  onClick={handleBulkMatch} 
+                <Button
+                  onClick={handleBulkMatch}
                   disabled={bulkMatching || Object.keys(bulkMatches).length === 0}
                 >
                   {bulkMatching ? 'Matching...' : `Match ${Object.keys(bulkMatches).length} Payment${Object.keys(bulkMatches).length !== 1 ? 's' : ''}`}

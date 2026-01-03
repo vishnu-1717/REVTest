@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Check, XCircle } from 'lucide-react'
 // Alert component - inline since it may not exist
 const Alert = ({ className, children }: { className?: string; children: React.ReactNode }) => (
   <div className={className}>{children}</div>
@@ -114,16 +115,16 @@ export default function SlackSetupPage() {
         <CardContent className="space-y-6">
           {success && (
             <Alert className="bg-green-50 border-green-200">
-              <AlertDescription className="text-green-800">
-                ✅ Slack workspace connected successfully!
+              <AlertDescription className="text-green-800 flex items-center gap-2">
+                <Check className="h-4 w-4" /> Slack workspace connected successfully!
               </AlertDescription>
             </Alert>
           )}
 
           {error && (
             <Alert className="bg-red-50 border-red-200">
-              <AlertDescription className="text-red-800">
-                ❌ Error: {error === 'oauth_cancelled' ? 'OAuth was cancelled' : error === 'invalid_state' ? 'Invalid state - please try again' : error}
+              <AlertDescription className="text-red-800 flex items-center gap-2">
+                <XCircle className="h-4 w-4" /> Error: {error === 'oauth_cancelled' ? 'OAuth was cancelled' : error === 'invalid_state' ? 'Invalid state - please try again' : error}
               </AlertDescription>
             </Alert>
           )}
@@ -131,7 +132,7 @@ export default function SlackSetupPage() {
           {slackStatus?.connected ? (
             <div className="space-y-4">
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="font-medium text-green-800">✅ Connected</p>
+                <p className="font-medium text-green-800 flex items-center gap-2"><Check className="h-4 w-4" /> Connected</p>
                 {slackStatus.workspaceName && (
                   <p className="text-sm text-green-700 mt-1">
                     Workspace: {slackStatus.workspaceName}

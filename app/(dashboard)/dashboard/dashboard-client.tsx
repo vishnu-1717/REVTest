@@ -7,6 +7,7 @@ import Link from 'next/link'
 import Leaderboard from '@/components/Leaderboard'
 import { PendingPCNsWidget } from '@/components/PendingPCNsWidget'
 import { PCNStatus } from '@/components/PCNStatus'
+import { Zap, DollarSign, BarChart2 } from 'lucide-react'
 
 interface Stats {
   totalAppointments: number
@@ -53,23 +54,23 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState('30') // days
-  
+
   const withViewAs = useCallback((url: string) => {
     const viewAs = getViewAsCompany()
     if (!viewAs) return url
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}viewAs=${viewAs}`
   }, [])
-  
+
   const fetchStats = useCallback(async () => {
     try {
       const dateFrom = new Date()
       dateFrom.setDate(dateFrom.getDate() - parseInt(dateRange))
-      
+
       const params = new URLSearchParams({
         dateFrom: dateFrom.toISOString()
       })
-      
+
       // Use different endpoint based on role
       const endpoint = isCompanyAdmin ? '/api/admin/company-stats' : '/api/rep/stats'
       const url = `${endpoint}?${params}`
@@ -83,15 +84,15 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
     }
     setLoading(false)
   }, [dateRange, isCompanyAdmin, withViewAs])
-  
+
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
-  
+
   if (loading || !stats) {
     return <div className="mx-auto max-w-6xl px-4 py-6"><div className="text-gray-700">Loading...</div></div>
   }
-  
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
@@ -104,7 +105,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
             {isCompanyAdmin ? 'Your team\'s performance overview' : 'Your personal performance overview'}
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <select
             value={dateRange}
@@ -118,16 +119,17 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
           </select>
         </div>
       </div>
-      
+
       {/* Action Items */}
       {stats.followUpsNeeded && stats.followUpsNeeded > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-6 py-4 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-amber-800">
-                ⚡ You have {stats.followUpsNeeded} follow-ups needed
+              <p className="font-semibold text-amber-800 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-amber-600" />
+                You have {stats.followUpsNeeded} follow-ups needed
               </p>
-              <p className="text-sm text-amber-700 mt-1">
+              <p className="text-sm text-amber-700 mt-1 pl-6">
                 {stats.redzoneFollowUps} in the redzone (within 7 days)
               </p>
             </div>
@@ -137,107 +139,115 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
           </div>
         </div>
       )}
-      
+
       {/* Performance Metrics */}
-      <section className="grid gap-4 md:grid-cols-4 mb-8">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-          <p className="text-sm font-medium text-gray-700 mb-2">
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="card-premium group">
+          <p className="metric-label mb-3">
             {isCompanyAdmin ? 'Team Appointments' : 'My Appointments'}
           </p>
-          <p className="text-3xl font-bold text-gray-900 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <p className="metric-value text-foreground mb-3">
             {stats.totalAppointments.toLocaleString()}
           </p>
-          <p className="text-xs text-gray-600">
-            <span className="text-emerald-600">{stats.signed} closed</span>
-            {' · '}
-            <span className="text-red-600">{stats.noShows} no-shows</span>
-          </p>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="inline-flex items-center gap-1 text-emerald-600">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              {stats.signed} closed
+            </span>
+            <span className="inline-flex items-center gap-1 text-red-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+              {stats.noShows} no-shows
+            </span>
+          </div>
         </div>
-        
-        <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-          <p className="text-sm font-medium text-gray-700 mb-2">
+
+        <div className="card-premium group">
+          <p className="metric-label mb-3">
             {isCompanyAdmin ? 'Team Show Rate' : 'My Show Rate'}
           </p>
-          <p className="text-3xl font-bold text-gray-900 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <p className={`metric-value mb-3 ${stats.showRate >= 70 ? 'text-emerald-600' : stats.showRate >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
             {stats.showRate}%
           </p>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-muted-foreground">
             {stats.showed} / {stats.scheduled} showed
           </p>
         </div>
-        
-        <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-          <p className="text-sm font-medium text-gray-700 mb-2">
+
+        <div className="card-premium group">
+          <p className="metric-label mb-3">
             {isCompanyAdmin ? 'Team Close Rate' : 'My Close Rate'}
           </p>
-          <p className="text-3xl font-bold text-gray-900 mb-2" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <p className={`metric-value mb-3 ${stats.closeRate >= 30 ? 'text-emerald-600' : stats.closeRate >= 15 ? 'text-amber-600' : 'text-foreground'}`}>
             {stats.closeRate}%
           </p>
-          <p className="text-xs text-gray-600">
+          <p className="text-xs text-muted-foreground">
             {stats.signed} / {stats.showed} closed
           </p>
         </div>
-        
-        <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-          <p className="text-sm font-medium text-gray-700 mb-2">
+
+        <div className="card-premium group">
+          <p className="metric-label mb-3">
             {isCompanyAdmin ? 'Company Revenue' : 'My Revenue'}
           </p>
-          <p className="text-3xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <p className="metric-value text-foreground">
             ${stats.totalRevenue.toLocaleString()}
           </p>
         </div>
       </section>
-      
+
       {/* Pending PCNs Widget */}
       <div className="mb-6">
         <PendingPCNsWidget />
       </div>
-      
+
       {/* Commission Tracker - Only for Sales Reps */}
       {!isCompanyAdmin && stats.totalCommissions !== undefined && (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">💰 Commission Tracker</h2>
+        <div className="card-premium mb-8">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-amber-600" />
+              </div>
+              <h2 className="section-title">Commission Tracker</h2>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Total Earned</p>
-              <p className="text-2xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <p className="metric-label mb-2">Total Earned</p>
+              <p className="text-2xl font-bold text-foreground tracking-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 ${stats.totalCommissions.toLocaleString()}
               </p>
             </div>
-            
+
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Pending</p>
-              <p className="text-2xl font-bold text-amber-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <p className="metric-label mb-2">Pending</p>
+              <p className="text-2xl font-bold text-amber-600 tracking-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 ${stats.pendingCommissions?.toLocaleString() || 0}
               </p>
-              <p className="text-xs text-gray-600 mt-1">Waiting on payments</p>
+              <p className="text-xs text-muted-foreground mt-1">Waiting on payments</p>
             </div>
-            
+
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Released</p>
-              <p className="text-2xl font-bold text-blue-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <p className="metric-label mb-2">Released</p>
+              <p className="text-2xl font-bold text-blue-600 tracking-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 ${stats.releasedCommissions?.toLocaleString() || 0}
               </p>
-              <p className="text-xs text-gray-600 mt-1">Ready for payout</p>
+              <p className="text-xs text-muted-foreground mt-1">Ready for payout</p>
             </div>
-            
+
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Paid</p>
-              <p className="text-2xl font-bold text-emerald-600" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              <p className="metric-label mb-2">Paid</p>
+              <p className="text-2xl font-bold text-emerald-600 tracking-tight" style={{ fontVariantNumeric: 'tabular-nums' }}>
                 ${stats.paidCommissions?.toLocaleString() || 0}
               </p>
-              <p className="text-xs text-gray-600 mt-1">In your account</p>
+              <p className="text-xs text-muted-foreground mt-1">In your account</p>
             </div>
           </div>
-          
-          <div className="mt-6">
+
+          <div className="mt-6 pt-4 border-t border-border/40">
             <Link
               href="/commissions"
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+              className="text-primary hover:text-primary/80 text-sm font-medium transition-colors"
             >
               View detailed commission breakdown →
             </Link>
@@ -248,91 +258,78 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
       {/* Company Admin: Team Stats */}
       {isCompanyAdmin && stats.activeRepsCount !== undefined && (
         <section className="grid gap-4 md:grid-cols-3 mb-8">
-          <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-            <p className="text-sm font-medium text-gray-700 mb-2">Active Reps</p>
-            <p className="text-3xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <div className="card-premium">
+            <p className="metric-label mb-3">Active Reps</p>
+            <p className="metric-value text-foreground">
               {stats.activeRepsCount}
             </p>
           </div>
-          
+
           {stats.averageDealSize !== undefined && (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-              <p className="text-sm font-medium text-gray-700 mb-2">Average Deal Size</p>
-              <p className="text-3xl font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <div className="card-premium">
+              <p className="metric-label mb-3">Average Deal Size</p>
+              <p className="metric-value text-foreground">
                 ${stats.averageDealSize.toLocaleString()}
               </p>
             </div>
           )}
-          
+
           {stats.topPerformer && (
-            <div className="bg-white border border-gray-200 rounded-xl p-6 transition-shadow duration-200 hover:shadow-lg">
-              <p className="text-sm font-medium text-gray-700 mb-2">Top Performer This Month</p>
-              <p className="text-xl font-bold text-gray-900 mb-1">{stats.topPerformer.name}</p>
-              <p className="text-xs text-gray-600">
+            <div className="card-premium">
+              <p className="metric-label mb-3">Top Performer This Month</p>
+              <p className="text-lg font-semibold text-foreground mb-1">{stats.topPerformer.name}</p>
+              <p className="text-xs text-muted-foreground">
                 ${stats.topPerformer.revenue.toLocaleString()} in {stats.topPerformer.appointments} appointments
               </p>
             </div>
           )}
         </section>
       )}
-      
+
       <section className="grid gap-6 md:grid-cols-2 mb-8">
         {/* Recent Appointments */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">Recent Appointments</h2>
-            </div>
+        <div className="card-premium">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="section-title">Recent Appointments</h2>
           </div>
           <div className="overflow-x-auto">
             {stats.recentAppointments.length === 0 ? (
-              <p className="text-gray-600 text-sm">No appointments yet</p>
+              <p className="text-muted-foreground text-sm">No appointments yet</p>
             ) : (
-              <div className="space-y-3">
-                {stats.recentAppointments.map((apt: any, index: number) => (
-                  <div key={apt.id} className={`flex justify-between items-start py-3 px-2 rounded-lg ${index % 2 === 0 ? 'bg-gray-50' : ''} border-b border-gray-200 last:border-0`}>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900 mb-1">{apt.contact?.name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-600 mb-2">
+              <div className="space-y-2">
+                {stats.recentAppointments.map((apt: any) => (
+                  <div key={apt.id} className="flex justify-between items-start py-3 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground text-sm truncate">{apt.contact?.name || 'Unknown'}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {new Date(apt.scheduledAt).toLocaleDateString()}
                       </p>
-                      <div className="flex flex-wrap gap-2">
-                        {apt.setter && (
-                          <span className="text-xs text-blue-600">
-                            Setter: {apt.setter.name}
-                          </span>
-                        )}
+                      <div className="flex flex-wrap gap-2 mt-2">
                         {apt.closer && (
-                          <span className="text-xs text-emerald-600">
-                            Closer: {apt.closer.name}
+                          <span className="text-xs text-muted-foreground">
+                            {apt.closer.name}
                           </span>
                         )}
                         {apt.calendarRelation && (
-                          <span className="text-xs text-purple-600">
+                          <span className="text-xs text-primary/70">
                             {apt.calendarRelation.name}
-                          </span>
-                        )}
-                        {apt.attributionSource && (
-                          <span className="text-xs text-amber-600">
-                            📊 {apt.attributionSource}
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="text-right space-y-2 ml-4">
-                      <span className={`px-2.5 py-1 text-xs rounded-md font-medium ${
-                        apt.status === 'signed' 
-                          ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                          : apt.status === 'showed'
-                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                    <div className="text-right space-y-2 ml-3 flex-shrink-0">
+                      <span className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${apt.status === 'signed'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : apt.status === 'showed'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                           : apt.status === 'no_show'
-                          ? 'bg-red-100 text-red-700 border border-red-300'
-                          : 'bg-gray-100 text-gray-700 border border-gray-300'
-                      }`}>
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            : 'bg-muted text-muted-foreground'
+                        }`}>
                         {apt.status.replace('_', ' ')}
                       </span>
                       {apt.cashCollected && (
-                        <p className="text-sm font-bold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        <p className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           ${apt.cashCollected.toLocaleString()}
                         </p>
                       )}
@@ -353,43 +350,40 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
             )}
           </div>
         </div>
-        
+
         {/* Recent Commissions - Only for Sales Reps */}
         {!isCompanyAdmin && stats.recentCommissions && (
-          <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">Recent Commissions</h2>
-              </div>
+          <div className="card-premium">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="section-title">Recent Commissions</h2>
             </div>
             <div className="overflow-x-auto">
               {stats.recentCommissions.length === 0 ? (
-                <p className="text-gray-600 text-sm">No commissions yet</p>
+                <p className="text-muted-foreground text-sm">No commissions yet</p>
               ) : (
-                <div className="space-y-3">
-                  {stats.recentCommissions.map((com: any, index: number) => (
-                    <div key={com.id} className={`flex justify-between items-center py-3 px-2 rounded-lg ${index % 2 === 0 ? 'bg-gray-50' : ''} border-b border-gray-200 last:border-0`}>
+                <div className="space-y-2">
+                  {stats.recentCommissions.map((com: any) => (
+                    <div key={com.id} className="flex justify-between items-center py-3 px-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 mb-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        <p className="font-medium text-foreground text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           ${com.totalAmount.toLocaleString()}
                         </p>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {new Date(com.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                      <div className="text-right ml-4">
-                        <span className={`px-2.5 py-1 text-xs rounded-md font-medium ${
-                          com.releaseStatus === 'paid'
-                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                            : com.releaseStatus === 'released'
-                            ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                      <div className="text-right ml-3">
+                        <span className={`inline-block px-2 py-0.5 text-xs rounded font-medium ${com.releaseStatus === 'paid'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          : com.releaseStatus === 'released'
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                             : com.releaseStatus === 'partial'
-                            ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                            : 'bg-gray-100 text-gray-700 border border-gray-300'
-                        }`}>
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
                           {com.releaseStatus}
                         </span>
-                        <p className="text-xs text-gray-600 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {(com.percentage * 100).toFixed(1)}%
                         </p>
                       </div>
@@ -401,7 +395,7 @@ export default function DashboardClient({ userRole, isCompanyAdmin, isSuperAdmin
           </div>
         )}
       </section>
-      
+
       {/* Leaderboard */}
       <div className="mt-6">
         <Leaderboard />

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Check, RefreshCw, AlertTriangle, XCircle } from 'lucide-react'
 
 interface Calendar {
   id: string
@@ -37,11 +38,11 @@ export default function CategorizeCalendarsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  
+
   useEffect(() => {
     fetchCalendars()
   }, [])
-  
+
   const fetchCalendars = async () => {
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'))
@@ -52,41 +53,41 @@ export default function CategorizeCalendarsPage() {
     }
     setLoading(false)
   }
-  
+
   const handleSyncCalendars = async () => {
     setSyncing(true)
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'), {
         method: 'POST'
       })
-      
+
       const data = await res.json()
-      
+
       if (!res.ok) {
         const errorMsg = data.error || 'Failed to sync calendars'
         const details = data.details ? `\n\nDetails: ${data.details}` : ''
-        alert(`❌ ${errorMsg}${details}`)
+        alert(`${errorMsg}${details}`)
         return
       }
-      
+
       console.log(`Synced ${data.count} calendars`)
-      
+
       // Refresh the list
       await fetchCalendars()
-      
+
       if (data.count === 0) {
-        alert(data.message || '⚠️ No calendars synced. This may indicate an API issue. Check server logs for details.')
+        alert(data.message || 'No calendars synced. This may indicate an API issue. Check server logs for details.')
       } else {
-        alert(`✅ Synced ${data.count} calendars successfully!`)
+        alert(`Synced ${data.count} calendars successfully!`)
       }
     } catch (error: any) {
       console.error('Failed to sync calendars:', error)
-      alert(`❌ Failed to sync calendars: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
+      alert(`Failed to sync calendars: ${error.message || 'Unknown error'}\n\nCheck browser console and server logs for details.`)
     } finally {
       setSyncing(false)
     }
   }
-  
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -103,25 +104,25 @@ export default function CategorizeCalendarsPage() {
           })
         )
       )
-      
-      alert('✅ Calendars configured!')
+
+      alert('Calendars configured!')
       router.push('/dashboard')
     } catch (error) {
       alert('Failed to save calendars')
     }
     setSaving(false)
   }
-  
+
   const autoExtractSource = (name: string): string => {
     // Try to extract from patterns like "Name (SOURCE)"
     const match = name.match(/\(([^)]+)\)$/)
     return match ? match[1] : ''
   }
-  
+
   if (loading) {
     return <div className="container mx-auto py-10">Loading calendars...</div>
   }
-  
+
   return (
     <div className="container mx-auto py-10 max-w-4xl">
       <div className="mb-8">
@@ -132,16 +133,16 @@ export default function CategorizeCalendarsPage() {
               Tell us which traffic source each calendar represents
             </p>
           </div>
-          <Button 
+          <Button
             onClick={handleSyncCalendars}
             disabled={syncing}
             variant="outline"
           >
-            {syncing ? 'Syncing...' : '🔄 Sync Calendars'}
+            {syncing ? 'Syncing...' : <><RefreshCw className="mr-2 h-4 w-4" /> Sync Calendars</>}
           </Button>
         </div>
       </div>
-      
+
       <div className="space-y-4 mb-8">
         {calendars.map((cal, index) => (
           <Card key={cal.id}>
@@ -159,7 +160,7 @@ export default function CategorizeCalendarsPage() {
                     }}
                   />
                 </div>
-                
+
                 {!cal.trafficSource && (
                   <Button
                     variant="outline"
@@ -181,13 +182,13 @@ export default function CategorizeCalendarsPage() {
           </Card>
         ))}
       </div>
-      
+
       <div className="flex gap-2">
         <Button onClick={handleSave} disabled={saving} className="flex-1">
-          {saving ? 'Saving...' : 'Save & Finish ✓'}
+          {saving ? 'Saving...' : <><Check className="mr-2 h-4 w-4" /> Save & Finish</>}
         </Button>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={() => router.push('/dashboard')}
         >
           Skip for Now

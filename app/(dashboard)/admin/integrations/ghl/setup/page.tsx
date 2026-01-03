@@ -5,35 +5,36 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Check, XCircle, AlertTriangle, Info, HelpCircle, Clipboard } from 'lucide-react'
 
 export default function GHLSetupPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
-  
-const getViewAsCompany = () => {
-  if (typeof window === 'undefined') return null
-  const params = new URLSearchParams(window.location.search)
-  const viewAsParam = params.get('viewAs')
-  if (viewAsParam) return viewAsParam
-  const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
-  const value = match ? decodeURIComponent(match[1]) : null
-  if (value === 'none') return null
-  return value
-}
 
-const withViewAs = (url: string) => {
-  const viewAs = getViewAsCompany()
-  if (!viewAs) return url
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}viewAs=${viewAs}`
-}
+  const getViewAsCompany = () => {
+    if (typeof window === 'undefined') return null
+    const params = new URLSearchParams(window.location.search)
+    const viewAsParam = params.get('viewAs')
+    if (viewAsParam) return viewAsParam
+    const match = document.cookie.match(/(?:^|;)\s*view_as_company=([^;]+)/)
+    const value = match ? decodeURIComponent(match[1]) : null
+    if (value === 'none') return null
+    return value
+  }
+
+  const withViewAs = (url: string) => {
+    const viewAs = getViewAsCompany()
+    if (!viewAs) return url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}viewAs=${viewAs}`
+  }
 
   // Step 1: GHL Credentials
   const [saving, setSaving] = useState(false)
   const [oauthConnected, setOauthConnected] = useState(false)
   const [loadingStatus, setLoadingStatus] = useState(true)
   const [locationId, setLocationId] = useState<string | null>(null) // For display purposes only
-  
+
   // Step 2: Attribution Strategy
   const [attributionStrategy, setAttributionStrategy] = useState('ghl_fields')
   const [attributionField, setAttributionField] = useState('contact.source')
@@ -47,20 +48,20 @@ const withViewAs = (url: string) => {
         const success = params.get('success')
         const error = params.get('error')
         const details = params.get('details')
-        
+
         if (success === 'true') {
-          alert('✅ GHL connected successfully!')
+          alert('GHL connected successfully!')
           // Clean URL
           window.history.replaceState({}, '', window.location.pathname)
         } else if (error) {
           const decodedError = decodeURIComponent(error)
-          let errorMessage = `❌ GHL connection failed: ${decodedError}`
-          
+          let errorMessage = `GHL connection failed: ${decodedError}`
+
           // Provide helpful guidance for common errors
           if (decodedError === 'redirect_uri_mismatch' || decodedError.includes('redirect_uri')) {
             const baseUrl = window.location.origin
             const expectedUri = `${baseUrl}/api/integrations/crm/callback`
-            errorMessage = `❌ Redirect URI Mismatch\n\n` +
+            errorMessage = `Redirect URI Mismatch\n\n` +
               `The redirect URI in your GHL Marketplace app settings must EXACTLY match:\n\n` +
               `${expectedUri}\n\n` +
               `Please check:\n` +
@@ -69,7 +70,7 @@ const withViewAs = (url: string) => {
               `3. Make sure it matches EXACTLY (including https/http, no trailing slash)\n` +
               `4. Save and try again`
           } else if (decodedError === 'token_exchange_failed') {
-            errorMessage = `❌ Token Exchange Failed\n\n` +
+            errorMessage = `Token Exchange Failed\n\n` +
               `The OAuth token exchange failed. Common causes:\n\n` +
               `1. Redirect URI mismatch (most common)\n` +
               `2. Authorization code expired (try again)\n` +
@@ -79,7 +80,7 @@ const withViewAs = (url: string) => {
               errorMessage += `\n\nError details: ${decodeURIComponent(details).substring(0, 200)}`
             }
           }
-          
+
           alert(errorMessage)
           // Clean URL
           window.history.replaceState({}, '', window.location.pathname)
@@ -111,19 +112,19 @@ const withViewAs = (url: string) => {
     if (!confirm('Are you sure you want to disconnect GHL? This will stop syncing appointments.')) {
       return
     }
-    
+
     setSaving(true)
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/disconnect'), {
         method: 'POST'
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         alert(error.error || 'Failed to disconnect')
         return
       }
-      
+
       setOauthConnected(false)
       alert('GHL disconnected successfully')
     } catch (error) {
@@ -133,7 +134,7 @@ const withViewAs = (url: string) => {
       setSaving(false)
     }
   }
-  
+
   // API key setup removed - OAuth only
   const handleSaveAttribution = async () => {
     setSaving(true)
@@ -147,7 +148,7 @@ const withViewAs = (url: string) => {
           useCalendarsForAttribution: attributionStrategy === 'calendars'
         })
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }))
         const errorMessage = errorData.error || 'Failed to save attribution settings'
@@ -156,13 +157,13 @@ const withViewAs = (url: string) => {
         setSaving(false)
         return
       }
-      
+
       // If using calendars for attribution, go to calendar setup
       if (attributionStrategy === 'calendars') {
         router.push('/admin/integrations/ghl/calendars/categorize')
       } else {
         // Done!
-        alert('✅ GHL integration complete!')
+        alert('GHL integration complete!')
         router.push('/dashboard')
       }
     } catch (error) {
@@ -171,11 +172,11 @@ const withViewAs = (url: string) => {
     }
     setSaving(false)
   }
-  
+
   // Use production domain for webhook URL (prioritize env var over current domain)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [isUsingVercelUrl, setIsUsingVercelUrl] = useState(false)
-  
+
   // Set webhook URL - prioritize NEXT_PUBLIC_APP_URL (production domain) over current domain
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -183,19 +184,19 @@ const withViewAs = (url: string) => {
       // They're static replacements, so we can access them directly
       const productionUrl = process.env.NEXT_PUBLIC_APP_URL || ''
       const currentOrigin = window.location.origin
-      
+
       // Check if we're on a Vercel deployment URL
       const isVercelDomain = currentOrigin.includes('vercel.app')
       setIsUsingVercelUrl(isVercelDomain && (!productionUrl || productionUrl === 'http://localhost:3000'))
-      
+
       // Use production URL if set and valid, otherwise use current domain
       // This ensures webhooks always use the stable production domain when configured
-      const baseUrl = productionUrl && productionUrl !== 'http://localhost:3000' 
-        ? productionUrl 
+      const baseUrl = productionUrl && productionUrl !== 'http://localhost:3000'
+        ? productionUrl
         : currentOrigin
       const webhook = `${baseUrl}/api/webhooks/ghl`
       setWebhookUrl(webhook)
-      
+
       // Warn if using non-production domain
       if (!productionUrl && isVercelDomain) {
         console.warn('⚠️ Using Vercel deployment URL for webhook. Set NEXT_PUBLIC_APP_URL in Vercel to use production domain.')
@@ -205,27 +206,25 @@ const withViewAs = (url: string) => {
       setWebhookUrl(`${process.env.NEXT_PUBLIC_APP_URL || 'https://yourapp.com'}/api/webhooks/ghl`)
     }
   }, [])
-  
+
   return (
     <div className="container mx-auto py-10 max-w-3xl">
       <h1 className="text-3xl font-bold mb-2">GoHighLevel Setup</h1>
       <p className="text-gray-600 mb-8">Connect your GHL account to start tracking appointments</p>
-      
+
       {/* Progress Indicator */}
       <div className="flex items-center gap-2 mb-8">
-        <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-          step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'
-        }`}>
+        <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+          }`}>
           1
         </div>
         <div className={`flex-1 h-1 ${step >= 2 ? 'bg-blue-600' : 'bg-gray-200'}`} />
-        <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-          step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'
-        }`}>
+        <div className={`flex items-center justify-center w-8 h-8 rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'
+          }`}>
           2
         </div>
       </div>
-      
+
       {/* Step 1: GHL Credentials */}
       {step === 1 && (
         <>
@@ -233,7 +232,7 @@ const withViewAs = (url: string) => {
           {oauthConnected && (
             <Card className="mb-6 border-green-500 bg-green-50">
               <CardHeader>
-                <CardTitle className="text-green-900">✅ GHL Connected via OAuth</CardTitle>
+                <CardTitle className="text-green-900 flex items-center gap-2"><Check className="h-5 w-5" /> GHL Connected via OAuth</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-green-800 mb-4">
@@ -276,7 +275,7 @@ const withViewAs = (url: string) => {
                     Connect GHL Account
                   </Button>
                   <p className="text-xs text-blue-600 mt-3">
-                    💡 This will open a new window to authorize the connection. After authorization, you'll be redirected back.
+                    <span className="flex items-center gap-1"><Info className="h-3 w-3 inline" /> This will open a new window to authorize the connection. After authorization, you'll be redirected back.</span>
                   </p>
                 </div>
               </CardContent>
@@ -287,7 +286,7 @@ const withViewAs = (url: string) => {
           {isUsingVercelUrl && !oauthConnected && (
             <Card className="mb-6 border-yellow-500 bg-yellow-50">
               <CardHeader>
-                <CardTitle className="text-yellow-900">⚠️ Setup Required: Production Domain</CardTitle>
+                <CardTitle className="text-yellow-900 flex items-center gap-2"><AlertTriangle className="h-5 w-5" /> Setup Required: Production Domain</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-yellow-800 mb-3">
@@ -306,129 +305,129 @@ const withViewAs = (url: string) => {
               </CardContent>
             </Card>
           )}
-          
+
           {/* Webhook setup instructions removed - OAuth only */}
           {false && (
             <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook Workflow (Optional but Recommended):</h3>
-                <p className="text-sm text-blue-800 mb-3">
-                  Create a workflow in GHL to send appointment data in real-time. This is optional - you can also sync appointments manually.
-                </p>
-                
-                <details className="mt-3">
-                  <summary className="cursor-pointer font-medium text-blue-900 hover:text-blue-700">
-                    📋 Click to see step-by-step instructions
-                  </summary>
-                  <div className="mt-3 space-y-3 text-sm text-blue-800">
-                    <div>
-                      <p className="font-semibold mb-1">Step 1: Create Workflow</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-2">
-                        <li>Go to <strong>Automation → Workflows</strong> in GHL</li>
-                        <li>Click <strong>"Create Workflow"</strong> or <strong>"+"</strong> button</li>
-                        <li>Name it: <strong>"Appointment Sync to [Your App Name]"</strong></li>
-                      </ol>
-                    </div>
-                    
-                    <div>
-                      <p className="font-semibold mb-1">Step 2: Add Trigger</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-2">
-                        <li>Click the <strong>"+"</strong> icon on the workflow canvas</li>
-                        <li>Search for and select <strong>"Appointment"</strong> trigger</li>
-                        <li>Choose events: <strong>Created</strong>, <strong>Updated</strong>, and <strong>Cancelled</strong></li>
-                        <li><strong>Important:</strong> Make sure you select the <strong>Appointment</strong> trigger (not Contact trigger), so appointment merge fields are available</li>
-                      </ol>
-                      <p className="text-xs text-red-600 mt-2 bg-red-50 p-2 rounded">
-                        ⚠️ <strong>Common Mistake:</strong> If you use a Contact trigger, appointment merge fields won't work. 
-                        You must use an <strong>Appointment trigger</strong> to access appointment data.
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <p className="font-semibold mb-1">Step 3: Add Custom Webhook Action</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-2">
-                        <li>After the trigger, click <strong>"+"</strong> again</li>
-                        <li>Search for <strong>"Webhook"</strong> and select <strong>"Custom Webhook"</strong></li>
-                        <li>Configure the webhook:</li>
-                      </ol>
-                      <div className="ml-6 mt-2 space-y-2">
-                        <div>
-                          <strong>Method:</strong> <code className="bg-white px-1 rounded">POST</code>
+              <h3 className="font-semibold mb-2 text-blue-900">Set Up Webhook Workflow (Optional but Recommended):</h3>
+              <p className="text-sm text-blue-800 mb-3">
+                Create a workflow in GHL to send appointment data in real-time. This is optional - you can also sync appointments manually.
+              </p>
+
+              <details className="mt-3">
+                <summary className="cursor-pointer font-medium text-blue-900 hover:text-blue-700">
+                  <span className="flex items-center gap-1"><Clipboard className="h-4 w-4" /> Click to see step-by-step instructions</span>
+                </summary>
+                <div className="mt-3 space-y-3 text-sm text-blue-800">
+                  <div>
+                    <p className="font-semibold mb-1">Step 1: Create Workflow</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                      <li>Go to <strong>Automation → Workflows</strong> in GHL</li>
+                      <li>Click <strong>"Create Workflow"</strong> or <strong>"+"</strong> button</li>
+                      <li>Name it: <strong>"Appointment Sync to [Your App Name]"</strong></li>
+                    </ol>
+                  </div>
+
+                  <div>
+                    <p className="font-semibold mb-1">Step 2: Add Trigger</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                      <li>Click the <strong>"+"</strong> icon on the workflow canvas</li>
+                      <li>Search for and select <strong>"Appointment"</strong> trigger</li>
+                      <li>Choose events: <strong>Created</strong>, <strong>Updated</strong>, and <strong>Cancelled</strong></li>
+                      <li><strong>Important:</strong> Make sure you select the <strong>Appointment</strong> trigger (not Contact trigger), so appointment merge fields are available</li>
+                    </ol>
+                    <p className="text-xs text-red-600 mt-2 bg-red-50 p-2 rounded">
+                      <span className="flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> <strong>Common Mistake:</strong> If you use a Contact trigger, appointment merge fields won't work.</span>
+                      You must use an <strong>Appointment trigger</strong> to access appointment data.
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="font-semibold mb-1">Step 3: Add Custom Webhook Action</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                      <li>After the trigger, click <strong>"+"</strong> again</li>
+                      <li>Search for <strong>"Webhook"</strong> and select <strong>"Custom Webhook"</strong></li>
+                      <li>Configure the webhook:</li>
+                    </ol>
+                    <div className="ml-6 mt-2 space-y-2">
+                      <div>
+                        <strong>Method:</strong> <code className="bg-white px-1 rounded">POST</code>
+                      </div>
+                      <div>
+                        <strong>URL:</strong>
+                        <code className="block bg-white p-2 rounded mt-1 break-all text-xs">
+                          {webhookUrl || 'Loading...'}
+                        </code>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-blue-600">
+                            <span className="flex items-center gap-1"><Info className="h-3 w-3" /> <strong>Important:</strong> This URL should use your production domain (<code className="bg-blue-50 px-1 rounded">www.cleansalesdata.com</code>), not a Vercel deployment URL.</span>
+                          </p>
+                          {isUsingVercelUrl && (
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs text-yellow-800">
+                              <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> <strong>Warning:</strong> This webhook URL is using a Vercel deployment URL that will change with each deployment.</span>
+                              <br />
+                              <strong>Fix:</strong> Set <code className="bg-white px-1 rounded">NEXT_PUBLIC_APP_URL=https://www.cleansalesdata.com</code> in your Vercel environment variables and redeploy.
+                            </div>
+                          )}
+                          {!isUsingVercelUrl && webhookUrl && (webhookUrl.includes('cleansalesdata.com') || !webhookUrl.includes('vercel.app')) && (
+                            <div className="bg-green-50 border border-green-200 rounded p-2 text-xs text-green-800">
+                              <span className="flex items-center gap-1"><Check className="h-3 w-3" /> Using production domain: <code>{webhookUrl}</code></span>
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <strong>URL:</strong> 
-                          <code className="block bg-white p-2 rounded mt-1 break-all text-xs">
-                            {webhookUrl || 'Loading...'}
+                      </div>
+                      <div>
+                        <strong>Headers:</strong>
+                        <div className="bg-white p-2 rounded mt-1 text-xs">
+                          <p className="mb-1 text-gray-600 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> <strong>IMPORTANT:</strong> Only put HTTP headers here (like Content-Type). <strong>Do NOT</strong> put appointment data in Headers!</p>
+                          <code className="block mt-2">
+                            Content-Type: application/json
                           </code>
-                          <div className="mt-1 space-y-1">
-                            <p className="text-xs text-blue-600">
-                              💡 <strong>Important:</strong> This URL should use your production domain (<code className="bg-blue-50 px-1 rounded">www.cleansalesdata.com</code>), not a Vercel deployment URL.
-                            </p>
-                            {isUsingVercelUrl && (
-                              <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs text-yellow-800">
-                                ⚠️ <strong>Warning:</strong> This webhook URL is using a Vercel deployment URL that will change with each deployment.
-                                <br />
-                                <strong>Fix:</strong> Set <code className="bg-white px-1 rounded">NEXT_PUBLIC_APP_URL=https://www.cleansalesdata.com</code> in your Vercel environment variables and redeploy.
-                              </div>
-                            )}
-                            {!isUsingVercelUrl && webhookUrl && (webhookUrl.includes('cleansalesdata.com') || !webhookUrl.includes('vercel.app')) && (
-                              <div className="bg-green-50 border border-green-200 rounded p-2 text-xs text-green-800">
-                                ✅ Using production domain: <code>{webhookUrl}</code>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <strong>Headers:</strong> 
-                          <div className="bg-white p-2 rounded mt-1 text-xs">
-                            <p className="mb-1 text-gray-600">⚠️ <strong>IMPORTANT:</strong> Only put HTTP headers here (like Content-Type). <strong>Do NOT</strong> put appointment data in Headers!</p>
-                            <code className="block mt-2">
-                              Content-Type: application/json
-                            </code>
-                            <p className="mt-2 text-gray-600">You can add this header, but it's usually optional as GHL sends JSON by default.</p>
-                          </div>
+                          <p className="mt-2 text-gray-600">You can add this header, but it's usually optional as GHL sends JSON by default.</p>
                         </div>
                       </div>
                     </div>
-                    
-                    <div>
-                      <p className="font-semibold mb-1">Step 4: Configure Payload (Body)</p>
-                      <p className="mb-2">
-                        <strong>⚠️ CRITICAL:</strong> In the <strong>"Payload"</strong> or <strong>"Request Body"</strong> section (NOT Headers!), paste this JSON structure.
-                        <br />
-                        <strong>All appointment data goes in the Payload section, not Headers!</strong>
-                      </p>
-                      <p className="mb-2 text-sm text-gray-600">
-                        Look for a section labeled "Payload", "Body", "Request Body", or "Custom Data" in your GHL webhook configuration.
-                      </p>
-                      <div className="bg-white p-3 rounded text-xs overflow-x-auto border-2 border-blue-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-600">Click to copy payload template:</span>
-                          <button
-                            onClick={() => {
-                              const payload = JSON.stringify({
-                                type: "Appointment",
-                                id: "{{appointment.id}}",
-                                locationId: locationId || "YOUR_LOCATION_ID",
-                                appointmentId: "{{appointment.id}}",
-                                contactId: "{{contact.id}}",
-                                calendarId: "{{appointment.calendar_id}}",
-                                assignedUserId: "{{appointment.assigned_user_id}}",
-                                appointmentStatus: "{{appointment.status}}",
-                                startTime: "{{appointment.start_time}}",
-                                endTime: "{{appointment.end_time}}",
-                                title: "{{appointment.title}}",
-                                notes: "{{appointment.notes}}"
-                              }, null, 2).replace('YOUR_LOCATION_ID', locationId || 'YOUR_LOCATION_ID');
-                              navigator.clipboard.writeText(payload);
-                              alert('Payload copied to clipboard!');
-                            }}
-                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                          >
-                            📋 Copy
-                          </button>
-                        </div>
-                        <pre className="text-xs">
-{`{
+                  </div>
+
+                  <div>
+                    <p className="font-semibold mb-1">Step 4: Configure Payload (Body)</p>
+                    <p className="mb-2">
+                      <strong><AlertTriangle className="h-4 w-4 inline mr-1" /> CRITICAL:</strong> In the <strong>"Payload"</strong> or <strong>"Request Body"</strong> section (NOT Headers!), paste this JSON structure.
+                      <br />
+                      <strong>All appointment data goes in the Payload section, not Headers!</strong>
+                    </p>
+                    <p className="mb-2 text-sm text-gray-600">
+                      Look for a section labeled "Payload", "Body", "Request Body", or "Custom Data" in your GHL webhook configuration.
+                    </p>
+                    <div className="bg-white p-3 rounded text-xs overflow-x-auto border-2 border-blue-200">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-gray-600">Click to copy payload template:</span>
+                        <button
+                          onClick={() => {
+                            const payload = JSON.stringify({
+                              type: "Appointment",
+                              id: "{{appointment.id}}",
+                              locationId: locationId || "YOUR_LOCATION_ID",
+                              appointmentId: "{{appointment.id}}",
+                              contactId: "{{contact.id}}",
+                              calendarId: "{{appointment.calendar_id}}",
+                              assignedUserId: "{{appointment.assigned_user_id}}",
+                              appointmentStatus: "{{appointment.status}}",
+                              startTime: "{{appointment.start_time}}",
+                              endTime: "{{appointment.end_time}}",
+                              title: "{{appointment.title}}",
+                              notes: "{{appointment.notes}}"
+                            }, null, 2).replace('YOUR_LOCATION_ID', locationId || 'YOUR_LOCATION_ID');
+                            navigator.clipboard.writeText(payload);
+                            alert('Payload copied to clipboard!');
+                          }}
+                          className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          📋 Copy
+                        </button>
+                      </div>
+                      <pre className="text-xs">
+                        {`{
   "type": "Appointment",
   "id": "{{appointment.id}}",
   "locationId": "${locationId || 'YOUR_LOCATION_ID'}",
@@ -442,72 +441,72 @@ const withViewAs = (url: string) => {
   "title": "{{appointment.title}}",
   "notes": "{{appointment.notes}}"
 }`}
-                        </pre>
-                      </div>
-                      <div className="mt-2 space-y-1 text-xs">
-                        <p className="text-blue-700">
-                          ⚠️ <strong>Note:</strong> GHL merge field names may vary. If the fields above don't work, check available merge fields in your workflow builder and adjust accordingly.
-                        </p>
-                        <p className="text-blue-600">
-                          💡 <strong>Tip:</strong> If Location ID is not filled in above, manually replace <code>YOUR_LOCATION_ID</code> with your actual Location ID in the payload.
-                        </p>
-                      </div>
+                      </pre>
                     </div>
-                    
-                    <div>
-                      <p className="font-semibold mb-1">Step 5: Activate Workflow</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-2">
-                        <li>Click <strong>"Save"</strong> to save your workflow</li>
-                        <li>Toggle the workflow to <strong>"Active"</strong> (top right switch)</li>
-                      </ol>
+                    <div className="mt-2 space-y-1 text-xs">
+                      <p className="text-blue-700">
+                        <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> <strong>Note:</strong> GHL merge field names may vary. If the fields above don't work, check available merge fields in your workflow builder and adjust accordingly.</span>
+                      </p>
+                      <p className="text-blue-600">
+                        <span className="flex items-center gap-1"><Info className="h-3 w-3" /> <strong>Tip:</strong> If Location ID is not filled in above, manually replace <code>YOUR_LOCATION_ID</code> with your actual Location ID in the payload.</span>
+                      </p>
                     </div>
                   </div>
-                </details>
-                
-                <p className="text-xs text-blue-600 mt-3">
-                  💡 <strong>Note:</strong> You can complete the API setup below without configuring the webhook. 
-                  Webhooks enable real-time sync, but you can also manually sync appointments later.
-                </p>
-                
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-xs font-medium text-blue-900 hover:text-blue-700">
-                    ❓ Troubleshooting Webhook Errors
-                  </summary>
-                  <div className="mt-2 space-y-2 text-xs text-blue-800 bg-blue-100 p-3 rounded">
-                    <div>
-                      <p className="font-semibold">404 Error: "The deployment could not be found on Vercel"</p>
-                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
-                        <li>You're using a preview deployment URL that expired</li>
-                        <li><strong>Solution:</strong> Use your production domain URL instead</li>
-                        <li>Check Vercel dashboard for your production URL</li>
-                        <li>Update the webhook URL in your GHL workflow</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold">500 Error or Timeout</p>
-                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
-                        <li>Check that your Vercel deployment is active and healthy</li>
-                        <li>Verify database connection in Vercel environment variables</li>
-                        <li>Check Vercel function logs for detailed error messages</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="font-semibold">Webhook not receiving events</p>
-                      <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
-                        <li>Verify workflow is active in GHL</li>
-                        <li>Check that trigger events match (Created, Updated, Cancelled)</li>
-                        <li>Test the webhook URL manually with a tool like Postman</li>
-                      </ul>
-                    </div>
+
+                  <div>
+                    <p className="font-semibold mb-1">Step 5: Activate Workflow</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-2">
+                      <li>Click <strong>"Save"</strong> to save your workflow</li>
+                      <li>Toggle the workflow to <strong>"Active"</strong> (top right switch)</li>
+                    </ol>
                   </div>
-                </details>
+                </div>
+              </details>
+
+              <p className="text-xs text-blue-600 mt-3">
+                <span className="flex items-center gap-1"><Info className="h-3 w-3" /> <strong>Note:</strong> You can complete the API setup below without configuring the webhook. </span>
+                Webhooks enable real-time sync, but you can also manually sync appointments later.
+              </p>
+
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-medium text-blue-900 hover:text-blue-700">
+                  <span className="flex items-center gap-1"><HelpCircle className="h-3 w-3" /> Troubleshooting Webhook Errors</span>
+                </summary>
+                <div className="mt-2 space-y-2 text-xs text-blue-800 bg-blue-100 p-3 rounded">
+                  <div>
+                    <p className="font-semibold">404 Error: "The deployment could not be found on Vercel"</p>
+                    <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                      <li>You're using a preview deployment URL that expired</li>
+                      <li><strong>Solution:</strong> Use your production domain URL instead</li>
+                      <li>Check Vercel dashboard for your production URL</li>
+                      <li>Update the webhook URL in your GHL workflow</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">500 Error or Timeout</p>
+                    <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                      <li>Check that your Vercel deployment is active and healthy</li>
+                      <li>Verify database connection in Vercel environment variables</li>
+                      <li>Check Vercel function logs for detailed error messages</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold">Webhook not receiving events</p>
+                    <ul className="list-disc list-inside ml-2 space-y-1 mt-1">
+                      <li>Verify workflow is active in GHL</li>
+                      <li>Check that trigger events match (Created, Updated, Cancelled)</li>
+                      <li>Test the webhook URL manually with a tool like Postman</li>
+                    </ul>
+                  </div>
+                </div>
+              </details>
             </div>
           )}
-          
+
           {/* API key save button removed - OAuth only */}
           {false && (
-            <Button 
-              onClick={() => {}} 
+            <Button
+              onClick={() => { }}
               disabled={true}
               className="w-full"
             >
@@ -516,7 +515,7 @@ const withViewAs = (url: string) => {
           )}
         </>
       )}
-      
+
       {/* Step 2: Attribution Strategy */}
       {step === 2 && (
         <>
@@ -528,12 +527,11 @@ const withViewAs = (url: string) => {
               <p className="text-sm text-gray-600 mb-6">
                 Where do you store traffic source information? (e.g. "Meta Ad", "Google", "Organic")
               </p>
-              
+
               <div className="space-y-3">
                 {/* Option 1: GHL Custom Fields */}
-                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                  attributionStrategy === 'ghl_fields' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                }`}>
+                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${attributionStrategy === 'ghl_fields' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
                   <input
                     type="radio"
                     name="attribution"
@@ -554,7 +552,7 @@ const withViewAs = (url: string) => {
                     </p>
                   </div>
                 </label>
-                
+
                 {attributionStrategy === 'ghl_fields' && (
                   <div className="ml-8 p-4 bg-gray-50 rounded-lg">
                     <label className="block text-sm font-medium mb-2">
@@ -575,11 +573,10 @@ const withViewAs = (url: string) => {
                     </p>
                   </div>
                 )}
-                
+
                 {/* Option 2: Calendar Names */}
-                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                  attributionStrategy === 'calendars' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                }`}>
+                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${attributionStrategy === 'calendars' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
                   <input
                     type="radio"
                     name="attribution"
@@ -600,11 +597,10 @@ const withViewAs = (url: string) => {
                     </p>
                   </div>
                 </label>
-                
+
                 {/* Option 3: Tags */}
-                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                  attributionStrategy === 'tags' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                }`}>
+                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${attributionStrategy === 'tags' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
                   <input
                     type="radio"
                     name="attribution"
@@ -620,11 +616,10 @@ const withViewAs = (url: string) => {
                     </p>
                   </div>
                 </label>
-                
+
                 {/* Option 4: Don't Track */}
-                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${
-                  attributionStrategy === 'none' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                }`}>
+                <label className={`block p-4 border-2 rounded-lg cursor-pointer transition ${attributionStrategy === 'none' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}>
                   <input
                     type="radio"
                     name="attribution"
@@ -643,15 +638,15 @@ const withViewAs = (url: string) => {
               </div>
             </CardContent>
           </Card>
-          
-          <Button 
-            onClick={handleSaveAttribution} 
+
+          <Button
+            onClick={handleSaveAttribution}
             disabled={saving}
             className="w-full"
           >
-            {saving ? 'Saving...' : 
-             attributionStrategy === 'calendars' ? 'Continue to Calendar Setup →' : 
-             'Complete Setup ✓'}
+            {saving ? 'Saving...' :
+              attributionStrategy === 'calendars' ? 'Continue to Calendar Setup →' :
+                <><Check className="mr-2 h-4 w-4 inline" /> Complete Setup</>}
           </Button>
         </>
       )}

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Check, RefreshCw } from 'lucide-react'
 
 interface Calendar {
   id: string
@@ -63,12 +64,12 @@ export default function CalendarsPage() {
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'approved' | 'unapproved'>('all')
-  
+
   useEffect(() => {
     fetchCalendars()
     fetchUsers()
   }, [])
-  
+
   const fetchCalendars = async () => {
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'))
@@ -82,14 +83,14 @@ export default function CalendarsPage() {
       setLoading(false)
     }
   }
-  
+
   const fetchUsers = async () => {
     try {
       const res = await fetch(withViewAs('/api/admin/users'))
       if (!res.ok) throw new Error('Failed to fetch users')
       const data = await res.json()
       // Filter to active closers/reps
-      const activeClosers = data.filter((u: User) => 
+      const activeClosers = data.filter((u: User) =>
         u.isActive && (u.role === 'closer' || u.role === 'rep' || u.role === 'admin')
       )
       setUsers(activeClosers)
@@ -97,22 +98,22 @@ export default function CalendarsPage() {
       console.error('Failed to fetch users:', error)
     }
   }
-  
+
   const handleSyncCalendars = async () => {
     setSyncing(true)
     try {
       const res = await fetch(withViewAs('/api/admin/integrations/ghl/calendars'), {
         method: 'POST'
       })
-      
+
       if (!res.ok) {
         const error = await res.json()
         throw new Error(error.error || 'Failed to sync calendars')
       }
-      
+
       const data = await res.json()
       await fetchCalendars()
-      alert(`✅ Synced ${data.count} calendars successfully!`)
+      alert(`Synced ${data.count} calendars successfully!`)
     } catch (error: any) {
       console.error('Failed to sync calendars:', error)
       alert(`Failed to sync calendars: ${error.message}`)
@@ -120,7 +121,7 @@ export default function CalendarsPage() {
       setSyncing(false)
     }
   }
-  
+
   const handleUpdateCalendar = async (calendarId: string, updates: Partial<Calendar>) => {
     try {
       const res = await fetch(withViewAs(`/api/admin/integrations/ghl/calendars/${calendarId}`), {
@@ -128,7 +129,7 @@ export default function CalendarsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       })
-      
+
       // Read response body once
       let data: any
       try {
@@ -146,14 +147,14 @@ export default function CalendarsPage() {
         // If we can't read the response at all
         throw new Error(error.message || 'Failed to update calendar: Could not read server response')
       }
-      
+
       if (!res.ok) {
         // API returned an error response
         throw new Error(data.error || 'Failed to update calendar')
       }
-      
+
       // Update local state
-      setCalendars(prev => prev.map(cal => 
+      setCalendars(prev => prev.map(cal =>
         cal.id === calendarId ? { ...cal, ...updates } : cal
       ))
     } catch (error: any) {
@@ -162,7 +163,7 @@ export default function CalendarsPage() {
       throw error
     }
   }
-  
+
   const handleSaveAll = async () => {
     setSaving(true)
     try {
@@ -179,24 +180,24 @@ export default function CalendarsPage() {
           return handleUpdateCalendar(cal.id, updates)
         })
       )
-      
-      alert('✅ All calendars saved successfully!')
+
+      alert('All calendars saved successfully!')
     } catch (error) {
       // Error already shown in handleUpdateCalendar
     } finally {
       setSaving(false)
     }
   }
-  
+
   const filteredCalendars = calendars.filter(cal => {
     if (filter === 'approved') return cal.isCloserCalendar
     if (filter === 'unapproved') return !cal.isCloserCalendar
     return true
   })
-  
+
   const approvedCount = calendars.filter(cal => cal.isCloserCalendar).length
   const unapprovedCount = calendars.filter(cal => !cal.isCloserCalendar).length
-  
+
   if (loading) {
     return (
       <div className="container mx-auto py-10">
@@ -204,7 +205,7 @@ export default function CalendarsPage() {
       </div>
     )
   }
-  
+
   return (
     <div className="container mx-auto py-10 max-w-6xl">
       <div className="mb-8">
@@ -215,15 +216,15 @@ export default function CalendarsPage() {
               Manage which calendars create appointments and assign default closers
             </p>
           </div>
-          <Button 
+          <Button
             onClick={handleSyncCalendars}
             disabled={syncing}
             variant="outline"
           >
-            {syncing ? 'Syncing...' : '🔄 Sync from GHL'}
+            {syncing ? 'Syncing...' : <><RefreshCw className="mr-2 h-4 w-4" /> Sync from GHL</>}
           </Button>
         </div>
-        
+
         {/* Filter Tabs */}
         <div className="flex gap-2 mb-4">
           <Button
@@ -249,15 +250,15 @@ export default function CalendarsPage() {
           </Button>
         </div>
       </div>
-      
+
       {filteredCalendars.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-gray-500">
-            {filter === 'all' 
+            {filter === 'all'
               ? 'No calendars found. Sync calendars from GHL to get started.'
               : filter === 'approved'
-              ? 'No approved calendars. Approve calendars to allow them to create appointments.'
-              : 'All calendars are approved.'}
+                ? 'No approved calendars. Approve calendars to allow them to create appointments.'
+                : 'All calendars are approved.'}
           </CardContent>
         </Card>
       ) : (
@@ -270,8 +271,8 @@ export default function CalendarsPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <CardTitle className="text-lg">{cal.name}</CardTitle>
                       {cal.isCloserCalendar && (
-                        <Badge variant="default" className="bg-green-600">
-                          ✓ Approved
+                        <Badge variant="default" className="bg-green-600 flex items-center gap-1">
+                          <Check className="h-3 w-3" /> Approved
                         </Badge>
                       )}
                       {!cal.isCloserCalendar && (
@@ -316,13 +317,13 @@ export default function CalendarsPage() {
                       className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                     />
                     <span className="text-sm text-gray-600">
-                      {cal.isCloserCalendar 
+                      {cal.isCloserCalendar
                         ? 'Appointments from this calendar will be created'
                         : 'Appointments from this calendar will be rejected'}
                     </span>
                   </div>
                 </div>
-                
+
                 {/* Default Closer */}
                 <div className="flex items-center gap-4">
                   <Label htmlFor={`closer-${cal.id}`} className="font-medium min-w-[140px]">
@@ -366,7 +367,7 @@ export default function CalendarsPage() {
                     Note: Default closer is not automatically assigned. Appointments remain unassigned if no closer is matched.
                   </span>
                 </div>
-                
+
                 {/* Traffic Source */}
                 <div className="flex items-center gap-4">
                   <Label htmlFor={`traffic-${cal.id}`} className="font-medium min-w-[140px]">
@@ -387,7 +388,7 @@ export default function CalendarsPage() {
                     className="w-64"
                   />
                 </div>
-                
+
                 {/* Calendar Type */}
                 <div className="flex items-center gap-4">
                   <Label htmlFor={`type-${cal.id}`} className="font-medium min-w-[140px]">
@@ -413,13 +414,13 @@ export default function CalendarsPage() {
           ))}
         </div>
       )}
-      
+
       <div className="flex gap-2">
         <Button onClick={handleSaveAll} disabled={saving} className="flex-1">
           {saving ? 'Saving...' : 'Save All Changes'}
         </Button>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={() => router.push('/dashboard')}
         >
           Back to Dashboard

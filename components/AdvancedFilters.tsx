@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ChevronDown, ChevronRight, X } from 'lucide-react'
 
 interface FilterState {
   dateFrom: string
@@ -27,18 +28,22 @@ interface AdvancedFiltersProps {
   calendars?: string[]
 }
 
-export default function AdvancedFilters({ 
-  filters, 
+const selectStyles = "w-full h-9 px-3 py-1.5 text-sm bg-background border border-border/60 rounded-lg shadow-xs transition-all duration-200 outline-none hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 appearance-none cursor-pointer"
+
+const labelStyles = "text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5 block"
+
+export default function AdvancedFilters({
+  filters,
   onFilterChange,
   closers = [],
   calendars = []
 }: AdvancedFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
-  
+
   const handleChange = (key: keyof FilterState, value: string) => {
     onFilterChange({ ...filters, [key]: value })
   }
-  
+
   const clearFilters = () => {
     onFilterChange({
       dateFrom: '',
@@ -56,14 +61,14 @@ export default function AdvancedFilters({
       timeOfDay: ''
     })
   }
-  
+
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length
-  
+
   return (
     <div className="space-y-4">
       {/* Basic Filters - Always Visible */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div 
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
           className="cursor-pointer"
           onClick={(e) => {
             const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
@@ -76,7 +81,7 @@ export default function AdvancedFilters({
             }
           }}
         >
-          <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateFrom">
+          <label className={labelStyles} htmlFor="dateFrom">
             From Date
           </label>
           <Input
@@ -96,8 +101,8 @@ export default function AdvancedFilters({
             }}
           />
         </div>
-        
-        <div 
+
+        <div
           className="cursor-pointer"
           onClick={(e) => {
             const input = (e.currentTarget as HTMLElement).querySelector('input[type="date"]') as HTMLInputElement
@@ -110,7 +115,7 @@ export default function AdvancedFilters({
             }
           }}
         >
-          <label className="text-sm font-medium mb-2 block cursor-pointer" htmlFor="dateTo">
+          <label className={labelStyles} htmlFor="dateTo">
             To Date
           </label>
           <Input
@@ -130,13 +135,13 @@ export default function AdvancedFilters({
             }}
           />
         </div>
-        
+
         <div>
-          <label className="text-sm font-medium mb-2 block">Closer</label>
+          <label className={labelStyles}>Closer</label>
           <select
             value={filters.closer}
             onChange={(e) => handleChange('closer', e.target.value)}
-            className="w-full border rounded-md p-2"
+            className={selectStyles}
           >
             <option value="">All Closers</option>
             {closers.map(closer => (
@@ -146,13 +151,13 @@ export default function AdvancedFilters({
             ))}
           </select>
         </div>
-        
+
         <div>
-          <label className="text-sm font-medium mb-2 block">Status</label>
+          <label className={labelStyles}>Status</label>
           <select
             value={filters.status}
             onChange={(e) => handleChange('status', e.target.value)}
-            className="w-full border rounded-md p-2"
+            className={selectStyles}
           >
             <option value="">All Statuses</option>
             <option value="signed">Signed</option>
@@ -163,44 +168,48 @@ export default function AdvancedFilters({
           </select>
         </div>
       </div>
-      
+
       {/* Advanced Filters Toggle */}
       <div className="flex items-center gap-2">
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
+          size="sm"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm"
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          {showAdvanced ? '▼' : '▶'} Advanced Filters
+          {showAdvanced ? <ChevronDown className="h-3.5 w-3.5 mr-1" /> : <ChevronRight className="h-3.5 w-3.5 mr-1" />}
+          Advanced Filters
           {activeFilterCount > 4 && (
-            <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white rounded-full text-xs">
+            <span className="ml-1.5 px-1.5 py-0.5 bg-primary text-primary-foreground rounded-full text-[10px] font-medium">
               {activeFilterCount - 4}
             </span>
           )}
         </Button>
-        
+
         {activeFilterCount > 0 && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
+            size="sm"
             onClick={clearFilters}
-            className="text-sm text-red-600 hover:text-red-700"
+            className="text-xs font-medium text-muted-foreground hover:text-destructive"
           >
-            Clear All Filters
+            <X className="h-3 w-3 mr-1" />
+            Clear All
           </Button>
         )}
       </div>
-      
+
       {/* Advanced Filters - Collapsible */}
       {showAdvanced && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-4 bg-muted/30 rounded-lg border border-border/40">
           <div>
-            <label className="text-sm font-medium mb-2 block">Day of Week</label>
+            <label className={labelStyles}>Day of Week</label>
             <select
               value={filters.dayOfWeek}
               onChange={(e) => handleChange('dayOfWeek', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Days</option>
               <option value="0">Sunday</option>
@@ -212,13 +221,13 @@ export default function AdvancedFilters({
               <option value="6">Saturday</option>
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Time of Day</label>
+            <label className={labelStyles}>Time of Day</label>
             <select
               value={filters.timeOfDay}
               onChange={(e) => handleChange('timeOfDay', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Times</option>
               <option value="morning">Morning (6am-12pm)</option>
@@ -227,26 +236,26 @@ export default function AdvancedFilters({
               <option value="night">Night (9pm-6am)</option>
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Appointment Type</label>
+            <label className={labelStyles}>Appointment Type</label>
             <select
               value={filters.appointmentType}
               onChange={(e) => handleChange('appointmentType', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Types</option>
               <option value="first_call">First Call</option>
               <option value="follow_up">Follow Up</option>
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Calendar</label>
+            <label className={labelStyles}>Calendar</label>
             <select
               value={filters.calendar}
               onChange={(e) => handleChange('calendar', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Calendars</option>
               {calendars.map(cal => (
@@ -254,13 +263,13 @@ export default function AdvancedFilters({
               ))}
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Objection Type</label>
+            <label className={labelStyles}>Objection Type</label>
             <select
               value={filters.objectionType}
               onChange={(e) => handleChange('objectionType', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Objections</option>
               <option value="Price">Price</option>
@@ -270,13 +279,13 @@ export default function AdvancedFilters({
               <option value="Cash on hand">Cash on Hand</option>
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Nurture Type</label>
+            <label className={labelStyles}>Nurture Type</label>
             <select
               value={filters.nurtureType}
               onChange={(e) => handleChange('nurtureType', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All Nurture Types</option>
               <option value="Redzone">Redzone (Within 7 Days)</option>
@@ -284,9 +293,9 @@ export default function AdvancedFilters({
               <option value="Long Term">Long Term (30+ days)</option>
             </select>
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Min Deal Size</label>
+            <label className={labelStyles}>Min Deal Size</label>
             <Input
               type="number"
               placeholder="$0"
@@ -294,9 +303,9 @@ export default function AdvancedFilters({
               onChange={(e) => handleChange('minDealSize', e.target.value)}
             />
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Max Deal Size</label>
+            <label className={labelStyles}>Max Deal Size</label>
             <Input
               type="number"
               placeholder="$10,000"
@@ -304,13 +313,13 @@ export default function AdvancedFilters({
               onChange={(e) => handleChange('maxDealSize', e.target.value)}
             />
           </div>
-          
+
           <div>
-            <label className="text-sm font-medium mb-2 block">Follow-ups Needed</label>
+            <label className={labelStyles}>Follow-ups Needed</label>
             <select
               value={filters.followUpNeeded}
               onChange={(e) => handleChange('followUpNeeded', e.target.value)}
-              className="w-full border rounded-md p-2"
+              className={selectStyles}
             >
               <option value="">All</option>
               <option value="true">Only Follow-ups Needed</option>
@@ -322,4 +331,5 @@ export default function AdvancedFilters({
     </div>
   )
 }
+
 
