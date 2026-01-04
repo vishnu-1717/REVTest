@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Buildings, CaretDown, Check, X } from '@phosphor-icons/react'
 
 interface Company {
   id: string
@@ -48,7 +49,7 @@ export default function CompanySwitcher({
 
   useEffect(() => {
     setViewingCompanyId(getViewAsCompany() || currentCompanyId)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, currentCompanyId])
 
   useEffect(() => {
@@ -120,15 +121,18 @@ export default function CompanySwitcher({
       <Button
         onClick={() => setIsOpen(!isOpen)}
         variant="outline"
-        className="text-sm text-gray-900 border-gray-300 hover:bg-gray-50 hover:text-gray-900"
+        className="text-xs h-8 border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium shadow-sm transition-all"
       >
+        <Buildings className="w-4 h-4 mr-1.5 opacity-60" />
         {viewingCompanyId !== currentCompanyId ? (
-          <>
-            <span className="text-purple-600">Viewing:</span> {viewingCompanyName}
-          </>
+          <span className="flex items-center">
+            <span className="text-indigo-600 font-semibold mr-1">Perspective:</span>
+            {viewingCompanyName}
+          </span>
         ) : (
           'Switch Company'
         )}
+        <CaretDown className={`ml-1.5 h-3 w-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </Button>
 
       {isOpen && (
@@ -153,16 +157,16 @@ export default function CompanySwitcher({
               {viewingCompanyId !== currentCompanyId && (
                 <div
                   onClick={handleClear}
-                  className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-purple-100 bg-purple-50"
+                  className="px-4 py-3 hover:bg-indigo-50/50 cursor-pointer border-b border-indigo-100 bg-indigo-50/30 group"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-900">
-                        My Company
+                      <p className="font-medium text-gray-900 group-hover:text-indigo-700 transition-colors">
+                        Primary View
                       </p>
-                      <p className="text-xs text-gray-500">Return to your view</p>
+                      <p className="text-[10px] text-gray-500">Reset to your original perspective</p>
                     </div>
-                    <span className="text-xs text-purple-600 font-medium">Click to switch</span>
+                    <X className="w-4 h-4 text-indigo-400 group-hover:text-indigo-600" />
                   </div>
                 </div>
               )}
@@ -176,19 +180,18 @@ export default function CompanySwitcher({
                   <div
                     key={company.id}
                     onClick={() => handleSwitch(company.id, company.name)}
-                    className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b ${
-                      company.id === viewingCompanyId ? 'bg-purple-50 border-purple-100' : ''
-                    }`}
+                    className={`px-4 py-3 hover:bg-gray-50 cursor-pointer border-b transition-colors group ${company.id === viewingCompanyId ? 'bg-indigo-50/30 border-indigo-100' : ''
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-gray-900">{company.name}</p>
-                        <p className="text-xs text-gray-500">
+                        <p className={`font-medium text-sm transition-colors ${company.id === viewingCompanyId ? 'text-indigo-700' : 'text-gray-900 group-hover:text-indigo-600'}`}>{company.name}</p>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-tight">
                           {company._count.User} users · {company._count.Appointment} appointments
                         </p>
                       </div>
                       {company.id === viewingCompanyId && (
-                        <span className="text-xs text-purple-600 font-medium">Viewing</span>
+                        <Check className="w-4 h-4 text-indigo-600" />
                       )}
                     </div>
                   </div>
